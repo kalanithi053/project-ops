@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ProjectMode } from '@prisma/client';
 import {
   IsDateString,
+  IsEnum,
   IsOptional,
   IsString,
   MaxLength,
@@ -13,6 +15,15 @@ export class CreateProjectDto {
   @MinLength(2)
   @MaxLength(120)
   name: string;
+
+  @ApiProperty({
+    enum: ProjectMode,
+    example: ProjectMode.HubSpot,
+    description:
+      'Is this project about HubSpot or Dev? HubSpot projects auto-provision default modules + seed tasks.',
+  })
+  @IsEnum(ProjectMode)
+  mode: ProjectMode;
 
   @ApiProperty({ required: false })
   @IsOptional()

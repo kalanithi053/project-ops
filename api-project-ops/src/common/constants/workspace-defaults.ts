@@ -24,7 +24,13 @@ export const DEFAULT_TICKET_STATUSES: Array<{
   isDefault: boolean;
   category: StatusCategory;
 }> = [
-  { name: 'Backlog', color: '#94a3b8', order: 0, isDefault: true, category: 'todo' },
+  {
+    name: 'Backlog',
+    color: '#94a3b8',
+    order: 0,
+    isDefault: true,
+    category: 'todo',
+  },
   {
     name: 'In Progress',
     color: '#3b82f6',
@@ -32,7 +38,27 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     isDefault: false,
     category: 'in_progress',
   },
-  { name: 'Done', color: '#22c55e', order: 2, isDefault: false, category: 'done' },
+  {
+    name: 'Ready for QA',
+    color: '#f59e0b',
+    order: 2,
+    isDefault: false,
+    category: 'ready_qa',
+  },
+  {
+    name: 'Review',
+    color: '#3b82f6',
+    order: 3,
+    isDefault: false,
+    category: 'review',
+  },
+  {
+    name: 'Done',
+    color: '#22c55e',
+    order: 4,
+    isDefault: false,
+    category: 'done',
+  },
 ];
 
 /** Default "Free" plan provisioned for a new workspace. */

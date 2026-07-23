@@ -203,15 +203,18 @@ Enforced at the service layer before create actions:
 
 ## Project creation side effects
 
-`POST /projects` runs in a single transaction and:
+`POST /projects` requires a **`mode`** (`HubSpot` | `Dev`) and runs in a single
+transaction:
 
 1. checks the plan `maxProjects` quota,
 2. creates the project,
-3. attaches every default (`isDefault`) workspace module as a `ModuleInstance`
-   (carrying over `defaultTaskLimit`),
-4. seeds one task per instance named **`{Module Name} - 1`** (e.g. `Pipeline - 1`),
-   with the project's start/end dates and the workspace default ticket status,
-5. adds the creator as an active **Owner** `ProjectMember`.
+3. adds the creator as an active **Owner** `ProjectMember`,
+4. **only when `mode === HubSpot`:** attaches every default (`isDefault`) workspace
+   module as a `ModuleInstance` (carrying over `defaultTaskLimit`) and seeds one
+   task per instance named **`{Module Name} - 1`** (e.g. `Pipeline - 1`) with the
+   project's start/end dates and the workspace default ticket status.
+
+`Dev` projects start empty (no auto modules/tasks).
 
 ## API surface
 

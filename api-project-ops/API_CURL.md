@@ -213,12 +213,13 @@ curl -s -X DELETE "$BASE/ticket-statuses/<id>" \
 ## projects (Bearer + x-workspace-slug)
 
 ```bash
-# Create a project (auto-attaches default modules + seed tasks)
+# Create a project. mode is required: "HubSpot" | "Dev".
+# HubSpot projects auto-attach default modules + seed tasks; Dev projects start empty.
 curl -s -X POST "$BASE/projects" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Website Revamp","description":"Q1 site rebuild","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z"}'
+  -d '{"name":"Website Revamp","mode":"HubSpot","description":"Q1 site rebuild","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z"}'
 
 # List projects
 curl -s "$BASE/projects" \

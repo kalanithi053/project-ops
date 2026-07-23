@@ -33,9 +33,20 @@ enum MembershipStatus {
 enum StatusCategory {
   todo
   in_progress
+  ready_qa
+  review
   done
 
   @@map("status_category")
+}
+
+// Project kind chosen at creation. HubSpot projects get default modules + seed
+// tasks auto-provisioned; Dev projects start empty.
+enum ProjectMode {
+  HubSpot
+  Dev
+
+  @@map("project_mode")
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +204,10 @@ model Plan {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id          String    @id @default(uuid())
-  workspaceId String    @map("workspace_id")
+  id          String      @id @default(uuid())
+  workspaceId String      @map("workspace_id")
   name        String
+  mode        ProjectMode @default(Dev)
   description String?
   startDate   DateTime? @map("start_date")
   endDate     DateTime? @map("end_date")

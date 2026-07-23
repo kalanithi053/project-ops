@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { PlansService } from '../plans/plans.service';
 import { PlanLimitException } from '../common/exceptions/plan-limit.exception';
@@ -38,6 +39,7 @@ export class ProjectsService {
         data: {
           workspaceId,
           name: dto.name,
+          mode: dto.mode,
           description: dto.description,
           startDate,
           endDate,
@@ -66,41 +68,15 @@ export class ProjectsService {
         });
       }
 
-      // Default workspace ticket status for seed tasks.
-      const defaultStatus =
-        (await tx.ticketStatus.findFirst({
-          where: { workspaceId, isDefault: true },
-        })) ??
-        (await tx.ticketStatus.findFirst({
-          where: { workspaceId },
-          orderBy: { order: 'asc' },
-        }));
-
-      // Attach default modules + seed one task each.
-      const defaultModules = await tx.module.findMany({
-        where: { workspaceId, isDefault: true, isActive: true },
-      });
-
-      for (const module of defaultModules) {
-        const instance = await tx.moduleInstance.create({
-          data: {
-            projectId: project.id,
-            moduleId: module.id,
-            taskLimit: module.defaultTaskLimit,
-          },
-        });
-
-        await tx.task.create({
-          data: {
-            projectId: project.id,
-            moduleInstanceId: instance.id,
-            name: `${module.name} - 1`,
-            startDate,
-            dueDate: endDate,
-            statusId: defaultStatus?.id ?? null,
-            createdBy: userId,
-            position: 0,
-          },
+      // Only HubSpot projects auto-provision default modules + seed tasks.
+      // Dev projects start empty.
+      if (project.mode === 'HubSpot') {
+        await this.provisionDefaultModules(tx, {
+          project,
+          workspaceId,
+          userId,
+          startDate,
+          endDate,
         });
       }
 
@@ -113,6 +89,57 @@ export class ProjectsService {
         },
       });
     });
+  }
+
+  /** Attaches the workspace's default modules to a project and seeds one task each. */
+  private async provisionDefaultModules(
+    tx: Prisma.TransactionClient,
+    ctx: {
+      project: { id: string };
+      workspaceId: string;
+      userId: string;
+      startDate: Date | null;
+      endDate: Date | null;
+    },
+  ) {
+    const { project, workspaceId, userId, startDate, endDate } = ctx;
+
+    // Default workspace ticket status for seed tasks.
+    const defaultStatus =
+      (await tx.ticketStatus.findFirst({
+        where: { workspaceId, isDefault: true },
+      })) ??
+      (await tx.ticketStatus.findFirst({
+        where: { workspaceId },
+        orderBy: { order: 'asc' },
+      }));
+
+    const defaultModules = await tx.module.findMany({
+      where: { workspaceId, isDefault: true, isActive: true },
+    });
+
+    for (const module of defaultModules) {
+      const instance = await tx.moduleInstance.create({
+        data: {
+          projectId: project.id,
+          moduleId: module.id,
+          taskLimit: module.defaultTaskLimit,
+        },
+      });
+
+      await tx.task.create({
+        data: {
+          projectId: project.id,
+          moduleInstanceId: instance.id,
+          name: `${module.name} - 1`,
+          startDate,
+          dueDate: endDate,
+          statusId: defaultStatus?.id ?? null,
+          createdBy: userId,
+          position: 0,
+        },
+      });
+    }
   }
 
   list(workspaceId: string) {

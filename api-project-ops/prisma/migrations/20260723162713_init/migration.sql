@@ -1,48 +1,8 @@
--- =============================================================================
--- Project Ops — full schema DDL (PostgreSQL, snake_case)
---
--- The database uses snake_case identifiers; the Prisma Client API stays
--- camelCase (mapped via @map/@@map in prisma/schema.prisma). Kept in sync with
--- the init migration.
---
--- Idempotent: drops the app tables/types first, so it can be re-run to reset
--- the schema. Does NOT touch the `_prisma_migrations` bookkeeping table.
---
--- Run with either:
---   npx prisma db execute --file prisma/sql/init_schema.sql --schema prisma/schema.prisma
---   psql "$DATABASE_URL" -f prisma/sql/init_schema.sql
--- =============================================================================
-
-BEGIN;
-
--- --- Clean slate (child tables dropped via CASCADE) ------------------------
-DROP TABLE IF EXISTS "task" CASCADE;
-DROP TABLE IF EXISTS "module_instance" CASCADE;
-DROP TABLE IF EXISTS "module" CASCADE;
-DROP TABLE IF EXISTS "project_member" CASCADE;
-DROP TABLE IF EXISTS "project" CASCADE;
-DROP TABLE IF EXISTS "plan" CASCADE;
-DROP TABLE IF EXISTS "role_permission" CASCADE;
-DROP TABLE IF EXISTS "user_permission" CASCADE;
-DROP TABLE IF EXISTS "ticket_status" CASCADE;
-DROP TABLE IF EXISTS "workspace_member" CASCADE;
-DROP TABLE IF EXISTS "user_role" CASCADE;
-DROP TABLE IF EXISTS "workspace" CASCADE;
-DROP TABLE IF EXISTS "otp_request" CASCADE;
-DROP TABLE IF EXISTS "user" CASCADE;
-
-DROP TYPE IF EXISTS "membership_status";
-DROP TYPE IF EXISTS "status_category";
-DROP TYPE IF EXISTS "project_mode";
-
 -- CreateEnum
 CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
 
 -- CreateEnum
-CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'ready_qa', 'review', 'done');
-
--- CreateEnum
-CREATE TYPE "project_mode" AS ENUM ('HubSpot', 'Dev');
+CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'done');
 
 -- CreateTable
 CREATE TABLE "user" (
@@ -143,7 +103,6 @@ CREATE TABLE "project" (
     "id" TEXT NOT NULL,
     "workspace_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "mode" "project_mode" NOT NULL DEFAULT 'Dev',
     "description" TEXT,
     "start_date" TIMESTAMP(3),
     "end_date" TIMESTAMP(3),
@@ -380,5 +339,3 @@ ALTER TABLE "task" ADD CONSTRAINT "task_created_by_fkey" FOREIGN KEY ("created_b
 
 -- AddForeignKey
 ALTER TABLE "ticket_status" ADD CONSTRAINT "ticket_status_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
-COMMIT;

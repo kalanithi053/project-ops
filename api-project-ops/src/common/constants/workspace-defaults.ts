@@ -61,16 +61,52 @@ export const DEFAULT_TICKET_STATUSES: Array<{
   },
 ];
 
-/** Default "Free" plan provisioned for a new workspace. */
-export const DEFAULT_PLAN = {
-  name: 'Free',
-  maxProjects: 3,
-  maxMembers: 5,
-  maxTasksPerModule: 10,
-  features: {
-    maxModules: 5,
-    customTicketStatuses: true,
-    customRoles: true,
-  } as Record<string, unknown>,
-  isActive: true,
+export interface PlanTemplate {
+  name: string;
+  maxProjects: number;
+  maxMembers: number;
+  maxTasksPerModule: number;
+  features: Record<string, unknown>;
+  /** Exactly one template is the default (active) plan for a new workspace. */
+  isActive: boolean;
+}
+
+const SHARED_PLAN_FEATURES: Record<string, unknown> = {
+  maxModules: 100,
+  customTicketStatuses: true,
+  customRoles: true,
 };
+
+/**
+ * Plan catalog provisioned for every workspace. All three tiers are created as
+ * Plan rows; exactly one (Professional) starts active. Switch tiers by
+ * activating another via POST /plans/:planId/activate.
+ *
+ * Limits are identical across tiers for now (100/100/100) — adjust per-tier here.
+ */
+export const PLAN_TEMPLATES: PlanTemplate[] = [
+  {
+    name: 'Professional',
+    maxProjects: 100,
+    maxMembers: 100,
+    maxTasksPerModule: 100,
+    features: SHARED_PLAN_FEATURES,
+    isActive: true,
+  },
+  {
+    name: 'Ultimate',
+    maxProjects: 100,
+    maxMembers: 100,
+    maxTasksPerModule: 100,
+    features: SHARED_PLAN_FEATURES,
+    isActive: true,
+  },
+  {
+    name: 'Enterprise',
+    maxProjects: 100,
+    maxMembers: 100,
+    maxTasksPerModule: 100,
+    features: SHARED_PLAN_FEATURES,
+    isActive: true,
+  },
+];

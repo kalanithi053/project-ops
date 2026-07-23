@@ -146,16 +146,24 @@ curl -s "$BASE/permissions" \
 ## plans (Bearer + x-workspace-slug)
 
 ```bash
+# List all plan tiers (Professional/Ultimate/Enterprise; one is active)
+curl -s "$BASE/plans" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
 # Get active plan
 curl -s "$BASE/plans/active" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Update active plan limits / feature flags
+# Switch the active plan to a tier (deactivates the others)
+curl -s -X POST "$BASE/plans/<planId>/activate" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Update the active plan's limits / feature flags
 curl -s -X PATCH "$BASE/plans/active" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Pro","maxProjects":50,"maxMembers":100,"maxTasksPerModule":500,"features":{"exports":true},"isActive":true}'
+  -d '{"maxProjects":50,"maxMembers":100,"maxTasksPerModule":500,"features":{"exports":true}}'
 ```
 
 ## modules (Bearer + x-workspace-slug)

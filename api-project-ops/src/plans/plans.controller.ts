@@ -1,4 +1,12 @@
-import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
@@ -15,10 +23,26 @@ import { UpdatePlanDto } from './dto/update-plan.dto';
 export class PlansController {
   constructor(private readonly plans: PlansService) {}
 
+  @Get()
+  @ApiOperation({ summary: 'List all plan tiers for the workspace' })
+  list(@CurrentWorkspace('workspaceId') workspaceId: string) {
+    return this.plans.listPlans(workspaceId);
+  }
+
   @Get('active')
   @ApiOperation({ summary: 'Get the active plan for the workspace' })
   getActive(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.plans.getActivePlan(workspaceId);
+  }
+
+  @Post(':planId/activate')
+  @RequirePermission(PERMISSIONS.PLAN_MANAGE)
+  @ApiOperation({ summary: 'Switch the active plan to the given tier' })
+  activate(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('planId') planId: string,
+  ) {
+    return this.plans.activatePlan(workspaceId, planId);
   }
 
   @Patch('active')

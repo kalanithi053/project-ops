@@ -114,7 +114,8 @@ npm run prisma:studio
 The **seed** creates a demo user `demo.owner`, a `Demo Workspace`, the four default
 roles (Owner/Admin/Member/Viewer) with permissions, the module catalog
 (Pipeline → limit 10, Custom Properties → limit 20), the ticket pipeline
-(Backlog/In Progress/Done) and a Free plan. It is idempotent.
+(Backlog/In Progress/Ready for QA/Review/Done) and the plan catalog
+(Professional/Ultimate/Enterprise, with **Professional** active). It is idempotent.
 
 ## Running
 
@@ -226,7 +227,7 @@ transaction:
 | Workspace members | `GET/POST /workspace-members`, `PATCH/DELETE /workspace-members/:id`                              |
 | Roles             | `GET/POST /roles`, `PATCH/DELETE /roles/:id`                                                      |
 | Permissions       | `GET /permissions`                                                                                |
-| Plans             | `GET /plans/active`, `PATCH /plans/active`                                                        |
+| Plans             | `GET /plans`, `GET /plans/active`, `POST /plans/:planId/activate`, `PATCH /plans/active`          |
 | Projects          | `GET/POST /projects`, `GET/PATCH/DELETE /projects/:id`                                            |
 | Project members   | `GET/POST /projects/:projectId/members`, `PATCH/DELETE /projects/:projectId/members/:memberId`   |
 | Modules (catalog) | `GET/POST /modules`, `PATCH/DELETE /modules/:id`                                                  |

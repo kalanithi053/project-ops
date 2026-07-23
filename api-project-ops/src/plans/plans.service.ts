@@ -20,7 +20,34 @@ export class PlansService {
   }
 
   async listPlans(workspaceId: string) {
-    return this.prisma.plan.findMany({ where: { workspaceId } });
+    return this.prisma.plan.findMany({
+      where: { workspaceId },
+      orderBy: { name: 'asc' },
+    });
+  }
+
+  /**
+   * Switches the workspace's active plan: deactivates all others and activates
+   * the chosen one (enforcing the single-active-plan invariant).
+   */
+  async activatePlan(workspaceId: string, planId: string) {
+    const plan = await this.prisma.plan.findFirst({
+      where: { id: planId, workspaceId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found in this workspace.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.plan.updateMany({
+        where: { workspaceId, isActive: true },
+        data: { isActive: false },
+      });
+      return tx.plan.update({
+        where: { id: planId },
+        data: { isActive: true },
+      });
+    });
   }
 
   /** Updates the active plan's limits / feature flags. */

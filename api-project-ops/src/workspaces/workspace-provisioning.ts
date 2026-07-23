@@ -5,8 +5,8 @@ import {
 } from '../common/constants/permissions';
 import {
   DEFAULT_MODULES,
-  DEFAULT_PLAN,
   DEFAULT_TICKET_STATUSES,
+  PLAN_TEMPLATES,
 } from '../common/constants/workspace-defaults';
 
 export interface ProvisionedDefaults {
@@ -95,17 +95,17 @@ export async function provisionWorkspaceDefaults(
     skipDuplicates: true,
   });
 
-  // 5. Free plan (single active plan per workspace)
-  await tx.plan.create({
-    data: {
+  // 5. Plan catalog (Professional/Ultimate/Enterprise). Exactly one is active.
+  await tx.plan.createMany({
+    data: PLAN_TEMPLATES.map((plan) => ({
       workspaceId,
-      name: DEFAULT_PLAN.name,
-      maxProjects: DEFAULT_PLAN.maxProjects,
-      maxMembers: DEFAULT_PLAN.maxMembers,
-      maxTasksPerModule: DEFAULT_PLAN.maxTasksPerModule,
-      features: DEFAULT_PLAN.features as Prisma.InputJsonValue,
-      isActive: DEFAULT_PLAN.isActive,
-    },
+      name: plan.name,
+      maxProjects: plan.maxProjects,
+      maxMembers: plan.maxMembers,
+      maxTasksPerModule: plan.maxTasksPerModule,
+      features: plan.features as Prisma.InputJsonValue,
+      isActive: plan.isActive,
+    })),
   });
 
   return { roleIdsByName, ownerRoleId, defaultRoleId };

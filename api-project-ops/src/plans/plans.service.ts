@@ -109,6 +109,8 @@ export class PlansService {
   }
 
   async listPlans(workspaceId: string, projectTypeId?: string) {
+    if (!projectTypeId)
+      throw new BadRequestException('project Type Id is required');
     return this.prisma.plan.findMany({
       where: { workspaceId, projectTypeId },
       orderBy: { name: 'asc' },

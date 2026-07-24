@@ -29,7 +29,7 @@ export const useToastStore = create<ToastState>((set) => ({
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
 }));
 
-const DEFAULT_DURATION = 2500;
+const DEFAULT_DURATION = 2000;
 
 function show(variant: ToastVariant, title: string, description?: string) {
   return useToastStore.getState().push({

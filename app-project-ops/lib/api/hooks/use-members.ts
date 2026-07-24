@@ -40,7 +40,7 @@ export function useInviteMember(workspaceSlug: string) {
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["members", workspaceSlug] });
-      toast.success("Invitation sent");
+      toast.success("User added");
     },
   });
 }

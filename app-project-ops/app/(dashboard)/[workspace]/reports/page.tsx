@@ -11,23 +11,28 @@ import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton, StatsSkeleton } from "@/components/shared/skeletons";
 import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
 import { formatDate } from "@/lib/format";
-import type { Panel } from "@/types/module";
-import type { ProjectMode } from "@/lib/api/types";
+import type { Panel, Tone } from "@/types/module";
 
-const MODES: ProjectMode[] = ["HubSpot", "Dev"];
+const TONE_CYCLE: Tone[] = ["info", "warning", "success", "neutral"];
 
 /**
  * Workspace reporting overview. The API doesn't expose an activity feed
- * yet, so this summarizes the live data we do have (projects, members)
- * into breakdowns and a recent-projects list.
+ * yet, so this summarizes the live data we do have (projects, members,
+ * project types) into breakdowns and a recent-projects list.
  */
 export default function ReportsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const projectsQuery = useProjects(workspace);
   const membersQuery = useWorkspaceMembers(workspace);
+  const typesQuery = useProjectTypes(workspace);
   const projects = projectsQuery.data ?? [];
   const members = membersQuery.data ?? [];
+  const projectTypes = typesQuery.data ?? [];
+
+  const isLoading =
+    projectsQuery.isLoading || typesQuery.isLoading || membersQuery.isLoading;
 
   const stats = [
     { label: "Projects", value: projects.length, icon: FolderKanban },
@@ -42,12 +47,12 @@ export default function ReportsPage() {
   const panels: Panel[] = [
     {
       type: "breakdown",
-      title: "Projects by mode",
-      description: "Split across delivery modes",
-      items: MODES.map((mode) => ({
-        label: mode,
-        count: projects.filter((p) => p.mode === mode).length,
-        tone: mode === "HubSpot" ? ("warning" as const) : ("info" as const),
+      title: "Projects by type",
+      description: "Split across project types",
+      items: projectTypes.map((type, index) => ({
+        label: type.name,
+        count: projects.filter((p) => p.projectType?.id === type.id).length,
+        tone: TONE_CYCLE[index % TONE_CYCLE.length],
       })),
     },
     {
@@ -58,7 +63,7 @@ export default function ReportsPage() {
       items: projects.slice(0, 6).map((project) => ({
         icon: FolderKanban,
         primary: project.name,
-        secondary: project.description || project.mode,
+        secondary: project.description || project.projectType?.name || "",
         meta: project.endDate ? `due ${formatDate(project.endDate)}` : undefined,
       })),
     },
@@ -71,14 +76,10 @@ export default function ReportsPage() {
         description="A live summary of activity across this workspace."
       />
 
-      {projectsQuery.isLoading ? (
-        <StatsSkeleton count={3} />
-      ) : (
-        <StatsGrid stats={stats} />
-      )}
+      {isLoading ? <StatsSkeleton count={3} /> : <StatsGrid stats={stats} />}
 
       <QueryState
-        isLoading={projectsQuery.isLoading}
+        isLoading={isLoading}
         isError={projectsQuery.isError}
         error={projectsQuery.error}
         onRetry={() => projectsQuery.refetch()}

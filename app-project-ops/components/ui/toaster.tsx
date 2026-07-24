@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   AlertCircle,
   CheckCircle2,
@@ -25,21 +26,25 @@ const ACCENT: Record<ToastVariant, string> = {
 };
 
 /**
- * Global toast host. Renders stacked, auto-dismissing alerts bottom-right
- * (bottom on mobile). Fire toasts with `toast.success/error/info`.
+ * Global toast host. Renders stacked alerts in the top-right corner
+ * (150px from the top, clear of the app header), each sliding in from the
+ * right and fading/sliding back out on dismiss. Fire toasts with
+ * `toast.success/error/info`.
  */
 export function Toaster() {
   const toasts = useToastStore((state) => state.toasts);
 
   return (
     <div
-      className="pointer-events-none fixed inset-x-0 top-0 z-[100] flex flex-col items-center gap-2 p-4"
+      className="pointer-events-none fixed right-4 top-[150px] z-[100] flex w-full max-w-sm flex-col gap-2 sm:right-6"
       role="region"
       aria-label="Notifications"
     >
-      {toasts.map((toast) => (
-        <ToastItem key={toast.id} toast={toast} />
-      ))}
+      <AnimatePresence initial={false}>
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} />
+        ))}
+      </AnimatePresence>
     </div>
   );
 }
@@ -54,13 +59,16 @@ function ToastItem({ toast }: { toast: Toast }) {
   }, [toast.id, toast.duration, dismiss]);
 
   return (
-    <div
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: 60, scale: 0.95 }}
+      animate={{ opacity: 1, x: 0, scale: 1 }}
+      exit={{ opacity: 0, x: 60, scale: 0.95, transition: { duration: 0.2 } }}
+      transition={{ type: "spring", stiffness: 320, damping: 28 }}
       role="alert"
       className={cn(
-        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
-        "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-top-2",
+        "pointer-events-auto flex w-full items-start gap-3 rounded-lg border border-border bg-popover p-3 text-popover-foreground shadow-lg",
       )}
-      data-state="open"
     >
       <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", ACCENT[toast.variant])} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
@@ -77,6 +85,6 @@ function ToastItem({ toast }: { toast: Toast }) {
       >
         <X className="h-4 w-4" />
       </button>
-    </div>
+    </motion.div>
   );
 }

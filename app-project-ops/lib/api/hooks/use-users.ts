@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/auth-store";
+import { toast } from "@/lib/toast/toast-store";
 import type { Me } from "@/lib/api/types";
 
 /** GET /users/me — the current signed-in user. */
@@ -24,6 +25,7 @@ export function useUpdateMe() {
       apiFetch<Me>("/users/me", { method: "PATCH", body: dto }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["me"] });
+      toast.success("Profile updated");
     },
   });
 }

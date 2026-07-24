@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { LogOut, Settings, SlidersHorizontal, User } from "lucide-react";
 
 import type { AuthUser } from "@/types/auth";
@@ -35,13 +35,19 @@ function initials(name: string) {
  */
 export function UserMenu({ user }: { user: AuthUser }) {
   const router = useRouter();
+  const pathname = usePathname();
   const clear = useAuthStore((state) => state.clear);
   const { data: me, isLoading } = useMe();
+  const workspaceSlug = pathname.split("/").filter(Boolean)[0];
 
   function logout() {
     clear();
     toast.success("Signed out");
     router.replace("/login");
+  }
+
+  function goTo(path: string) {
+    if (workspaceSlug) router.push(`/${workspaceSlug}${path}`);
   }
 
   if (isLoading && !me) {
@@ -74,15 +80,15 @@ export function UserMenu({ user }: { user: AuthUser }) {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => goTo("/preferences")}>
           <User className="h-4 w-4" />
           Profile
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => goTo("/preferences")}>
           <SlidersHorizontal className="h-4 w-4" />
           Preferences
         </DropdownMenuItem>
-        <DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => goTo("/settings")}>
           <Settings className="h-4 w-4" />
           Settings
         </DropdownMenuItem>

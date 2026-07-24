@@ -1,8 +1,12 @@
+"use client";
+
+import { useRouter } from "next/navigation";
 import { LogOut, Settings, SlidersHorizontal, User } from "lucide-react";
 
 import type { AuthUser } from "@/types/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,6 +15,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useAuthStore } from "@/lib/store/auth-store";
+import { useMe } from "@/lib/api/hooks/use-users";
+import { toast } from "@/lib/toast/toast-store";
 
 function initials(name: string) {
   return name
@@ -27,6 +34,20 @@ function initials(name: string) {
  * dependency on how authentication is ultimately implemented.
  */
 export function UserMenu({ user }: { user: AuthUser }) {
+  const router = useRouter();
+  const clear = useAuthStore((state) => state.clear);
+  const { data: me, isLoading } = useMe();
+
+  function logout() {
+    clear();
+    toast.success("Signed out");
+    router.replace("/login");
+  }
+
+  if (isLoading && !me) {
+    return <Skeleton className="h-8 w-8 rounded-full" />;
+  }
+
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -66,7 +87,10 @@ export function UserMenu({ user }: { user: AuthUser }) {
           Settings
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem className="text-destructive focus:bg-destructive/10 focus:text-destructive">
+        <DropdownMenuItem
+          onSelect={logout}
+          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+        >
           <LogOut className="h-4 w-4" />
           Logout
         </DropdownMenuItem>

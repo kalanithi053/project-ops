@@ -1,29 +1,32 @@
+"use client";
+
+import { useParams } from "next/navigation";
+
+import { AuthGuard } from "@/components/auth/auth-guard";
 import { TenantProvider } from "@/lib/tenant/tenant-context";
-import { AppShell } from "@/components/layout/app-shell";
-import { mockCurrentUser, mockNotifications } from "@/lib/mock/data";
+import { WorkspaceShell } from "@/components/layout/workspace-shell";
 
 /**
  * Shared layout for every workspace-scoped route (`/{workspace}/…`).
- * The `[workspace]` slug is the source of truth for the active tenant —
- * it's handed to TenantProvider so the header, nav, and data all align
- * with the URL. This is also where the real session lookup will live
- * once auth exists; today it feeds mock user/notifications into the
- * shell the same way the session will later.
+ *
+ * The `[workspace]` slug is the source of truth for the active tenant:
+ * it drives the header/nav and is sent as `x-workspace-slug` on API
+ * calls. `AuthGuard` blocks the area for signed-out users, `WorkspaceShell`
+ * loads the real profile, and `TenantProvider` resolves the workspace
+ * list from GET /workspaces/me.
  */
-export default async function WorkspaceLayout({
+export default function WorkspaceLayout({
   children,
-  params,
 }: {
   children: React.ReactNode;
-  params: Promise<{ workspace: string }>;
 }) {
-  const { workspace } = await params;
+  const { workspace } = useParams<{ workspace: string }>();
 
   return (
-    <TenantProvider slug={workspace}>
-      <AppShell user={mockCurrentUser} notifications={mockNotifications}>
-        {children}
-      </AppShell>
-    </TenantProvider>
+    <AuthGuard>
+      <TenantProvider slug={workspace}>
+        <WorkspaceShell>{children}</WorkspaceShell>
+      </TenantProvider>
+    </AuthGuard>
   );
 }

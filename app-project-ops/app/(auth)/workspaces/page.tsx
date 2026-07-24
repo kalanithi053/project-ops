@@ -1,34 +1,19 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { ArrowLeft, Boxes, ChevronRight, Plus, Users } from "lucide-react";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { ArrowLeft, Boxes, ChevronRight, Plus } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { AuthGuard } from "@/components/auth/auth-guard";
 import { WorkspaceForm } from "@/components/auth/workspace-form";
-import { setActiveWorkspace } from "@/lib/tenant/active-workspace";
-
-interface AccessibleWorkspace {
-  id: string;
-  name: string;
-  slug: string;
-  role: string;
-  members: number;
-}
-
-/**
- * Workspaces the signed-in user already has access to. Mock for now —
- * replace with a call that lists the tenants the authenticated session
- * is a member of (see TenantProvider).
- */
-const myWorkspaces: AccessibleWorkspace[] = [
-  { id: "tn_1", name: "Acme Engineering", slug: "acme-engineering", role: "Engineering Manager", members: 56 },
-  { id: "tn_2", name: "Internal Platform", slug: "internal-platform", role: "Admin", members: 24 },
-];
+import { ListSkeleton } from "@/components/shared/skeletons";
+import { useMyWorkspaces } from "@/lib/api/hooks/use-workspaces";
+import type { Workspace } from "@/lib/api/types";
 
 function initials(name: string) {
   return name
-    .split(" ")
+    .split(/[\s-]+/)
     .map((part) => part[0])
     .join("")
     .slice(0, 2)
@@ -36,22 +21,31 @@ function initials(name: string) {
 }
 
 /**
- * Post-login workspace hub. The user can enter a workspace they already
- * belong to, or create a new one. Both paths lead to the dashboard.
- * Entering a workspace is a UI convenience only — the backend must still
- * authorize the session against the selected tenant on every request.
+ * Post-login workspace hub. Lists the workspaces the user belongs to
+ * (GET /workspaces/me) and lets them create a new one. Both paths route
+ * into `/{slug}/dashboard`.
  */
 export default function WorkspacesPage() {
-  const router = useRouter();
-  const [mode, setMode] = useState<"select" | "create">("select");
+  return (
+    <AuthGuard>
+      <Suspense fallback={<ListSkeleton rows={2} />}>
+        <WorkspacesHub />
+      </Suspense>
+    </AuthGuard>
+  );
+}
 
-  function openWorkspace(workspace: AccessibleWorkspace) {
-    // Persist the choice, then enter its workspace-scoped dashboard.
-    setActiveWorkspace({
-      id: workspace.id,
-      name: workspace.name,
-      slug: workspace.slug,
-    });
+function WorkspacesHub() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  // Deep-link to the create form via /workspaces?new=1 (header menu).
+  const [mode, setMode] = useState<"select" | "create">(
+    searchParams.get("new") ? "create" : "select",
+  );
+  const { data, isLoading, isError } = useMyWorkspaces();
+  const workspaces = data ?? [];
+
+  function openWorkspace(workspace: Workspace) {
     router.push(`/${workspace.slug}/dashboard`);
   }
 
@@ -73,12 +67,13 @@ export default function WorkspacesPage() {
             Create your workspace
           </h1>
           <p className="text-sm text-muted-foreground">
-            Set up a shared space for your team. You can change any of this
-            later in tenant settings.
+            Set up a shared space for your team.
           </p>
         </div>
 
-        <WorkspaceForm />
+        <WorkspaceForm
+          onCreated={(slug) => router.push(`/${slug}/dashboard`)}
+        />
       </div>
     );
   }
@@ -92,48 +87,53 @@ export default function WorkspacesPage() {
           Choose a workspace
         </h1>
         <p className="text-sm text-muted-foreground">
-          {myWorkspaces.length > 0
+          {workspaces.length > 0
             ? "Pick up where you left off, or spin up a new workspace."
             : "You don't belong to any workspaces yet. Create one to get started."}
         </p>
       </div>
 
-      {myWorkspaces.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
-            Your workspaces
-          </p>
-          <ul className="flex flex-col gap-2">
-            {myWorkspaces.map((workspace) => (
-              <li key={workspace.id}>
-                <button
-                  type="button"
-                  onClick={() => openWorkspace(workspace)}
-                  className={cn(
-                    "group flex w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors",
-                    "hover:border-foreground/20 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  )}
-                >
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-                    {initials(workspace.name)}
-                  </span>
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className="truncate text-sm font-medium">
-                      {workspace.name}
+      {isLoading ? (
+        <ListSkeleton rows={2} />
+      ) : isError ? (
+        <p className="text-sm text-destructive">
+          Couldn&apos;t load your workspaces. Please try again.
+        </p>
+      ) : (
+        workspaces.length > 0 && (
+          <div className="flex flex-col gap-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
+              Your workspaces
+            </p>
+            <ul className="flex flex-col gap-2">
+              {workspaces.map((workspace) => (
+                <li key={String(workspace.id ?? workspace.slug)}>
+                  <button
+                    type="button"
+                    onClick={() => openWorkspace(workspace)}
+                    className={cn(
+                      "group flex w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors",
+                      "hover:border-foreground/20 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    )}
+                  >
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
+                      {initials(workspace.name ?? workspace.slug)}
                     </span>
-                    <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      {workspace.role}
-                      <span aria-hidden>·</span>
-                      <Users className="h-3 w-3" />
-                      {workspace.members}
+                    <span className="flex min-w-0 flex-1 flex-col">
+                      <span className="truncate text-sm font-medium">
+                        {workspace.name ?? workspace.slug}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        projectops.app/{workspace.slug}
+                      </span>
                     </span>
-                  </span>
-                  <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        </div>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )
       )}
 
       <button

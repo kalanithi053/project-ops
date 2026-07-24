@@ -13,89 +13,193 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import {
-  TEAMS,
-  useWorkspaceData,
-  type Project,
-  type TeamName,
-} from "@/lib/workspace/data";
+import { QueryState } from "@/components/shared/query-state";
+import { TableSkeleton } from "@/components/shared/skeletons";
+import { useCreateProject, useProjects } from "@/lib/api/hooks/use-projects";
+import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useMe } from "@/lib/api/hooks/use-users";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { PERMISSIONS } from "@/lib/api/permissions";
+import { formatDate } from "@/lib/format";
+import type {
+  CreateProjectDto,
+  Me,
+  Project,
+  ProjectMode,
+  WorkspaceMember,
+} from "@/lib/api/types";
 import type { ColumnDef, Tone } from "@/types/module";
 
-const TEAM_OPTIONS: SelectOption[] = TEAMS.map((team) => ({
-  label: team,
-  value: team,
-}));
+const MODE_OPTIONS: SelectOption[] = [
+  { label: "HubSpot", value: "HubSpot" },
+  { label: "Dev", value: "Dev" },
+];
 
-const TEAM_TONE: Record<TeamName, Tone> = {
+const MODE_TONE: Record<ProjectMode, Tone> = {
   HubSpot: "warning",
-  "Dev Team": "info",
+  Dev: "info",
 };
 
-function daysBetween(start: string, end: string): number {
+function daysBetween(start?: string, end?: string): number | null {
+  if (!start || !end) return null;
   const ms = new Date(end).getTime() - new Date(start).getTime();
+  if (Number.isNaN(ms)) return null;
   return Math.max(0, Math.round(ms / 86_400_000));
 }
 
-const columns: ColumnDef<Project>[] = [
+function fullName(person: {
+  firstName?: string;
+  lastName?: string;
+}): string {
+  return [person.firstName, person.lastName].filter(Boolean).join(" ").trim();
+}
+
+/** Resolve a username to a first + last name using members + the current user. */
+function resolveName(
+  username: string,
+  members: WorkspaceMember[],
+  me: Me | undefined,
+): string {
+  if (me?.username === username) return fullName(me) || username;
+  const match = members.find(
+    (m) => (m.user?.username ?? m.username) === username,
+  );
+  const user = match?.user ?? match;
+  return (user && fullName(user)) || username;
+}
+
+/**
+ * Best-effort display of a project's owner/creator as a full name. Reads
+ * whichever owner-ish field the API returns, mapping a username to first
+ * + last name; returns null when no owner info is present.
+ */
+function ownerName(
+  project: Project,
+  members: WorkspaceMember[],
+  me: Me | undefined,
+): string | null {
+  const candidates = [
+    project.createdBy,
+    project.owner,
+    project.ownerUsername,
+    project.createdByUsername,
+    project.user,
+    project.author,
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    if (typeof raw === "string") return resolveName(raw, members, me);
+    if (typeof raw === "object") {
+      const record = raw as Record<string, unknown>;
+      const full = fullName({
+        firstName: record.firstName as string | undefined,
+        lastName: record.lastName as string | undefined,
+      });
+      if (full) return full;
+      if (typeof record.username === "string") {
+        return resolveName(record.username, members, me);
+      }
+    }
+  }
+  return null;
+}
+
+const baseColumns: ColumnDef<Project>[] = [
   {
     key: "name",
     header: "Project",
     sortable: true,
     sortAccessor: (p) => p.name,
-    cell: (p) => <span className="font-medium">{p.name}</span>,
+    cell: (p) => (
+      <div className="flex flex-col">
+        <span className="font-medium">{p.name}</span>
+        {p.description ? (
+          <span className="truncate text-xs text-muted-foreground">
+            {p.description}
+          </span>
+        ) : null}
+      </div>
+    ),
   },
   {
-    key: "team",
-    header: "Team",
+    key: "mode",
+    header: "Mode",
     sortable: true,
-    sortAccessor: (p) => p.team,
-    cell: (p) => <StatusBadge label={p.team} tone={TEAM_TONE[p.team]} />,
+    sortAccessor: (p) => p.mode,
+    cell: (p) => (
+      <StatusBadge label={p.mode} tone={MODE_TONE[p.mode] ?? "neutral"} />
+    ),
   },
   {
     key: "startDate",
     header: "Start",
     hideBelow: "sm",
     sortable: true,
-    sortAccessor: (p) => p.startDate,
-    cell: (p) => <span className="text-muted-foreground">{p.startDate}</span>,
+    sortAccessor: (p) => p.startDate ?? "",
+    cell: (p) => (
+      <span className="text-muted-foreground">{formatDate(p.startDate)}</span>
+    ),
   },
   {
     key: "endDate",
     header: "End",
     hideBelow: "sm",
     sortable: true,
-    sortAccessor: (p) => p.endDate,
-    cell: (p) => <span className="text-muted-foreground">{p.endDate}</span>,
+    sortAccessor: (p) => p.endDate ?? "",
+    cell: (p) => (
+      <span className="text-muted-foreground">{formatDate(p.endDate)}</span>
+    ),
   },
   {
     key: "duration",
     header: "Duration",
     align: "right",
     hideBelow: "md",
-    sortable: true,
-    sortAccessor: (p) => daysBetween(p.startDate, p.endDate),
-    cell: (p) => `${daysBetween(p.startDate, p.endDate)}d`,
+    cell: (p) => {
+      const days = daysBetween(p.startDate, p.endDate);
+      return days === null ? "—" : `${days}d`;
+    },
   },
 ];
 
 export default function ProjectsPage() {
   const { workspace } = useParams<{ workspace: string }>();
-  const { projects, addProject } = useWorkspaceData(workspace);
+  const { data, isLoading, isError, error, refetch } = useProjects(workspace);
+  const { data: memberData } = useWorkspaceMembers(workspace);
+  const { data: me } = useMe();
+  const { can } = usePermissions(workspace);
   const [open, setOpen] = React.useState(false);
+
+  const projects = React.useMemo(() => data ?? [], [data]);
+  const members = React.useMemo(() => memberData ?? [], [memberData]);
+
+  // Only show the "Created by" column when the API actually returns owner info.
+  const columns = React.useMemo<ColumnDef<Project>[]>(() => {
+    const hasOwner = projects.some((p) => ownerName(p, members, me));
+    if (!hasOwner) return baseColumns;
+    return [
+      ...baseColumns,
+      {
+        key: "owner",
+        header: "Created by",
+        hideBelow: "lg",
+        cell: (p) => ownerName(p, members, me) ?? "—",
+      },
+    ];
+  }, [projects, members, me]);
 
   const stats = [
     { label: "Total Projects", value: projects.length, icon: FolderKanban },
-    { label: "HubSpot", value: projects.filter((p) => p.team === "HubSpot").length },
-    { label: "Dev Team", value: projects.filter((p) => p.team === "Dev Team").length },
+    { label: "HubSpot", value: projects.filter((p) => p.mode === "HubSpot").length },
+    { label: "Dev", value: projects.filter((p) => p.mode === "Dev").length },
   ];
 
   return (
@@ -105,129 +209,172 @@ export default function ProjectsPage() {
           title="Projects"
           description="Create and track projects in this workspace."
         />
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <Plus className="h-4 w-4" />
-              New project
-            </Button>
-          </DialogTrigger>
-          <NewProjectDialog onCreate={addProject} onDone={() => setOpen(false)} />
-        </Dialog>
+        {can(PERMISSIONS.PROJECT_CREATE) && (
+          <Sheet open={open} onOpenChange={setOpen}>
+            <SheetTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <Plus className="h-4 w-4" />
+                New project
+              </Button>
+            </SheetTrigger>
+            <NewProjectPanel
+              workspaceSlug={workspace}
+              onDone={() => setOpen(false)}
+            />
+          </Sheet>
+        )}
       </div>
 
       <StatsGrid stats={stats} />
 
-      <DataTable
-        columns={columns}
-        data={projects}
-        getRowId={(p) => p.id}
-        searchAccessors={[(p) => p.name, (p) => p.team]}
-        searchPlaceholder="Search projects…"
-        emptyMessage="No projects yet. Create your first project to get started."
-      />
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        skeleton={<TableSkeleton columns={5} />}
+      >
+        <DataTable
+          columns={columns}
+          data={projects}
+          getRowId={(p) => String(p.id)}
+          searchAccessors={[(p) => p.name, (p) => p.mode]}
+          searchPlaceholder="Search projects…"
+          emptyMessage="No projects yet. Create your first project to get started."
+        />
+      </QueryState>
     </PageContainer>
   );
 }
 
-function NewProjectDialog({
-  onCreate,
+/**
+ * New-project creation side panel. Slides in from the right; the form
+ * scrolls independently of a sticky footer action.
+ */
+function NewProjectPanel({
+  workspaceSlug,
   onDone,
 }: {
-  onCreate: (input: {
-    name: string;
-    startDate: string;
-    endDate: string;
-    team: TeamName;
-  }) => void;
+  workspaceSlug: string;
   onDone: () => void;
 }) {
+  const createProject = useCreateProject(workspaceSlug);
   const [name, setName] = React.useState("");
+  const [description, setDescription] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
-  const [team, setTeam] = React.useState<TeamName>();
+  const [mode, setMode] = React.useState<ProjectMode>();
   const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
     if (!name.trim()) return setError("Enter a project name.");
-    if (!startDate) return setError("Choose a start date.");
-    if (!endDate) return setError("Choose an end date.");
-    if (endDate < startDate) return setError("End date can't be before the start date.");
-    if (!team) return setError("Select a team.");
+    if (!mode) return setError("Select a mode.");
+    if (startDate && endDate && endDate < startDate) {
+      return setError("End date can't be before the start date.");
+    }
 
-    setSubmitting(true);
-    onCreate({ name: name.trim(), startDate, endDate, team });
-    onDone();
+    const dto: CreateProjectDto = {
+      name: name.trim(),
+      mode,
+      description: description.trim() || undefined,
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    };
+
+    // API errors surface via the global error toast; success closes the panel.
+    createProject.mutate(dto, { onSuccess: () => onDone() });
   }
 
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>New project</DialogTitle>
-        <DialogDescription>
-          Add a project and assign it to a team.
-        </DialogDescription>
-      </DialogHeader>
+    <SheetContent
+      side="right"
+      className="flex w-full flex-col gap-0 sm:max-w-md"
+    >
+      <SheetHeader>
+        <SheetTitle className="text-base">New project</SheetTitle>
+        <SheetDescription>
+          Add a project and choose its delivery mode.
+        </SheetDescription>
+      </SheetHeader>
 
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="project-name">Project name</Label>
-          <Input
-            id="project-name"
-            placeholder="Website Redesign"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            autoFocus
-          />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <form
+        onSubmit={handleSubmit}
+        noValidate
+        className="flex min-h-0 flex-1 flex-col"
+      >
+        <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-start">Start date</Label>
+            <Label htmlFor="project-name">Project name</Label>
             <Input
-              id="project-start"
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
+              id="project-name"
+              placeholder="Website Redesign"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              autoFocus
             />
           </div>
+
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-end">End date</Label>
-            <Input
-              id="project-end"
-              type="date"
-              value={endDate}
-              min={startDate || undefined}
-              onChange={(event) => setEndDate(event.target.value)}
+            <Label htmlFor="project-mode">Team / mode</Label>
+            <SelectField
+              id="project-mode"
+              aria-label="Mode"
+              options={MODE_OPTIONS}
+              value={mode}
+              onValueChange={(value) => setMode(value as ProjectMode)}
+              placeholder="Select HubSpot or Dev"
             />
           </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-description">Description</Label>
+            <Input
+              id="project-description"
+              placeholder="Optional summary"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-start">Start date</Label>
+              <Input
+                id="project-start"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-end">End date</Label>
+              <Input
+                id="project-end"
+                type="date"
+                value={endDate}
+                min={startDate || undefined}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </div>
+          </div>
+
+          {error ? (
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+          ) : null}
         </div>
 
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="project-team">Team</Label>
-          <SelectField
-            id="project-team"
-            aria-label="Team"
-            options={TEAM_OPTIONS}
-            value={team}
-            onValueChange={(value) => setTeam(value as TeamName)}
-            placeholder="Select a team"
-          />
-        </div>
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-
-        <DialogFooter>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? (
+        <div className="border-t border-border p-4">
+          <Button
+            type="submit"
+            className="w-full"
+            disabled={createProject.isPending}
+          >
+            {createProject.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Creating…
@@ -236,8 +383,8 @@ function NewProjectDialog({
               "Create project"
             )}
           </Button>
-        </DialogFooter>
+        </div>
       </form>
-    </DialogContent>
+    </SheetContent>
   );
 }

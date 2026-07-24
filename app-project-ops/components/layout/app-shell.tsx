@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { MobileSidebar } from "@/components/layout/mobile-sidebar";
 import { AppHeader } from "@/components/layout/app-header";
+import { ErrorBoundary } from "@/components/shared/error-boundary";
 
 interface AppShellProps {
   user: AuthUser;
@@ -40,7 +41,9 @@ export function AppShell({ user, notifications, children }: AppShellProps) {
             onOpenMobileNav={() => setMobileOpen(true)}
             onToggleSidebar={toggleCollapsed}
           />
-          <main className="flex-1">{children}</main>
+          <main className="flex-1">
+            <ErrorBoundary>{children}</ErrorBoundary>
+          </main>
         </div>
       </div>
     </TooltipProvider>

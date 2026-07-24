@@ -9,6 +9,7 @@ import { PageHeader } from "@/components/shared/page-header";
 import { StatsGrid } from "@/components/shared/stats-grid";
 import { DataTable } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
+import { QueryState } from "@/components/shared/query-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,41 +23,48 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { SelectField, type SelectOption } from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
 import {
-  TEAMS,
-  useWorkspaceData,
-  type Member,
-  type TeamName,
-} from "@/lib/workspace/data";
-import type { ColumnDef, Tone } from "@/types/module";
+  useInviteMember,
+  useRoles,
+  useWorkspaceMembers,
+} from "@/lib/api/hooks/use-members";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { PERMISSIONS } from "@/lib/api/permissions";
+import type { MemberUser, WorkspaceMember } from "@/lib/api/types";
+import type { ColumnDef } from "@/types/module";
 
-const TEAM_OPTIONS: SelectOption[] = TEAMS.map((team) => ({
-  label: team,
-  value: team,
-}));
+/** Member name/email live under a nested `user` object (fallback to flat). */
+function memberUser(m: WorkspaceMember): MemberUser {
+  return m.user ?? m;
+}
 
-const ROLE_OPTIONS: SelectOption[] = [
-  { label: "Admin", value: "Admin" },
-  { label: "Manager", value: "Manager" },
-  { label: "Member", value: "Member" },
-  { label: "Viewer", value: "Viewer" },
-];
+function memberName(m: WorkspaceMember): string {
+  const u = memberUser(m);
+  const full = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
+  return full || u.username || "—";
+}
 
-const TEAM_TONE: Record<TeamName, Tone> = {
-  HubSpot: "warning",
-  "Dev Team": "info",
-};
+function memberEmail(m: WorkspaceMember): string {
+  const u = memberUser(m);
+  return u.email ?? u.username ?? "";
+}
 
-const columns: ColumnDef<Member>[] = [
+function roleName(m: WorkspaceMember): string {
+  if (!m.role) return "—";
+  return typeof m.role === "string" ? m.role : m.role.name ?? "—";
+}
+
+const columns: ColumnDef<WorkspaceMember>[] = [
   {
     key: "name",
     header: "User",
     sortable: true,
-    sortAccessor: (m) => m.name,
+    sortAccessor: (m) => memberName(m),
     cell: (m) => (
       <div className="flex flex-col">
-        <span className="font-medium">{m.name}</span>
-        <span className="text-xs text-muted-foreground">{m.email}</span>
+        <span className="font-medium">{memberName(m)}</span>
+        <span className="text-xs text-muted-foreground">{memberEmail(m)}</span>
       </div>
     ),
   },
@@ -65,91 +73,122 @@ const columns: ColumnDef<Member>[] = [
     header: "Role",
     hideBelow: "sm",
     sortable: true,
-    sortAccessor: (m) => m.role,
-    cell: (m) => m.role,
+    sortAccessor: (m) => roleName(m),
+    cell: (m) => roleName(m),
   },
   {
-    key: "team",
-    header: "Team",
-    sortable: true,
-    sortAccessor: (m) => m.team,
-    cell: (m) => <StatusBadge label={m.team} tone={TEAM_TONE[m.team]} />,
+    key: "status",
+    header: "Status",
+    align: "right",
+    cell: (m) =>
+      m.status ? (
+        <StatusBadge
+          label={String(m.status)}
+          tone={String(m.status).toLowerCase() === "active" ? "success" : "neutral"}
+        />
+      ) : (
+        "—"
+      ),
   },
 ];
 
 export default function UsersPage() {
   const { workspace } = useParams<{ workspace: string }>();
-  const { members, addMember } = useWorkspaceData(workspace);
+  const { data, isLoading, isError, error, refetch } =
+    useWorkspaceMembers(workspace);
+  const { can } = usePermissions(workspace);
   const [open, setOpen] = React.useState(false);
+  const members = data ?? [];
 
   const stats = [
     { label: "Total Users", value: members.length, icon: Users },
-    { label: "HubSpot", value: members.filter((m) => m.team === "HubSpot").length },
-    { label: "Dev Team", value: members.filter((m) => m.team === "Dev Team").length },
+    {
+      label: "Active",
+      value: members.filter(
+        (m) => String(m.status ?? "").toLowerCase() === "active",
+      ).length,
+    },
   ];
+
+  const canInvite = can(PERMISSIONS.MEMBER_INVITE);
 
   return (
     <PageContainer className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader
           title="Users"
-          description="Add people to this workspace and assign them to a team."
+          description="Add people to this workspace and manage their roles."
         />
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
-              <UserPlus className="h-4 w-4" />
-              Add user
-            </Button>
-          </DialogTrigger>
-          <AddUserDialog onCreate={addMember} onDone={() => setOpen(false)} />
-        </Dialog>
+        {canInvite && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <UserPlus className="h-4 w-4" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <AddUserDialog
+              workspaceSlug={workspace}
+              onDone={() => setOpen(false)}
+            />
+          </Dialog>
+        )}
       </div>
 
       <StatsGrid stats={stats} />
 
-      <DataTable
-        columns={columns}
-        data={members}
-        getRowId={(m) => m.id}
-        searchAccessors={[(m) => m.name, (m) => m.email, (m) => m.role]}
-        searchPlaceholder="Search users…"
-        emptyMessage="No users yet. Add someone to this workspace to get started."
-      />
+      <QueryState
+        isLoading={isLoading}
+        isError={isError}
+        error={error}
+        onRetry={() => refetch()}
+        skeleton={<TableSkeleton columns={3} />}
+      >
+        <DataTable
+          columns={columns}
+          data={members}
+          getRowId={(m) => String(m.id)}
+          searchAccessors={[
+            (m) => memberName(m),
+            (m) => memberEmail(m),
+            (m) => memberUser(m).username ?? "",
+          ]}
+          searchPlaceholder="Search users…"
+          emptyMessage="No members yet. Add someone to this workspace to get started."
+        />
+      </QueryState>
     </PageContainer>
   );
 }
 
 function AddUserDialog({
-  onCreate,
+  workspaceSlug,
   onDone,
 }: {
-  onCreate: (input: {
-    name: string;
-    email: string;
-    role: string;
-    team: TeamName;
-  }) => void;
+  workspaceSlug: string;
   onDone: () => void;
 }) {
-  const [name, setName] = React.useState("");
-  const [email, setEmail] = React.useState("");
-  const [role, setRole] = React.useState<string>("Member");
-  const [team, setTeam] = React.useState<TeamName>();
+  const invite = useInviteMember(workspaceSlug);
+  const { data: roles } = useRoles(workspaceSlug);
+  const [username, setUsername] = React.useState("");
+  const [roleId, setRoleId] = React.useState<string>();
   const [error, setError] = React.useState<string | null>(null);
-  const [submitting, setSubmitting] = React.useState(false);
+
+  const roleOptions: SelectOption[] = (roles ?? []).map((role) => ({
+    label: role.name,
+    value: String(role.id),
+  }));
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    if (!username.trim()) return setError("Enter the user's username.");
 
-    if (!name.trim()) return setError("Enter the user's name.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return setError("Enter a valid email address.");
-    if (!team) return setError("Select a team.");
-
-    setSubmitting(true);
-    onCreate({ name: name.trim(), email: email.trim(), role, team });
-    onDone();
+    // API errors surface via the global error toast; success closes the dialog.
+    invite.mutate(
+      { username: username.trim(), roleId: roleId || undefined },
+      { onSuccess: () => onDone() },
+    );
   }
 
   return (
@@ -157,55 +196,36 @@ function AddUserDialog({
       <DialogHeader>
         <DialogTitle>Add user</DialogTitle>
         <DialogDescription>
-          Invite someone to this workspace and place them on a team.
+          Add a user by username and assign the role that controls their
+          permissions.
         </DialogDescription>
       </DialogHeader>
 
       <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <Label htmlFor="user-name">Full name</Label>
+          <Label htmlFor="invite-username">Username</Label>
           <Input
-            id="user-name"
-            placeholder="Jordan Rivera"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
+            id="invite-username"
+            placeholder="jordan.rivera"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
             autoFocus
           />
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="user-email">Email</Label>
-          <Input
-            id="user-email"
-            type="email"
-            placeholder="jordan@company.com"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
+          <Label htmlFor="invite-role">Role</Label>
+          <SelectField
+            id="invite-role"
+            aria-label="Role"
+            options={roleOptions}
+            value={roleId}
+            onValueChange={setRoleId}
+            placeholder={roleOptions.length ? "Select a role" : "Default role"}
           />
-        </div>
-
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="user-role">Role</Label>
-            <SelectField
-              id="user-role"
-              aria-label="Role"
-              options={ROLE_OPTIONS}
-              value={role}
-              onValueChange={setRole}
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="user-team">Team</Label>
-            <SelectField
-              id="user-team"
-              aria-label="Team"
-              options={TEAM_OPTIONS}
-              value={team}
-              onValueChange={(value) => setTeam(value as TeamName)}
-              placeholder="Select a team"
-            />
-          </div>
+          <p className="text-xs text-muted-foreground">
+            The role determines what this user can do in the workspace.
+          </p>
         </div>
 
         {error ? (
@@ -215,14 +235,14 @@ function AddUserDialog({
         ) : null}
 
         <DialogFooter>
-          <Button type="submit" disabled={submitting}>
-            {submitting ? (
+          <Button type="submit" disabled={invite.isPending}>
+            {invite.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Adding…
               </>
             ) : (
-              "Add user"
+              "Add User"
             )}
           </Button>
         </DialogFooter>

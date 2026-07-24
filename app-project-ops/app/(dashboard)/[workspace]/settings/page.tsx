@@ -5,8 +5,13 @@ import { useParams } from "next/navigation";
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/shared/page-header";
 import { ModulePanels } from "@/components/shared/module-panels";
+import { PlansSection } from "@/components/shared/plans-section";
+import { CardsSkeleton } from "@/components/shared/skeletons";
+import { Separator } from "@/components/ui/separator";
 import { useTenant } from "@/lib/tenant/tenant-context";
-import { useWorkspaceData } from "@/lib/workspace/data";
+import { useMe } from "@/lib/api/hooks/use-users";
+import { useProjects } from "@/lib/api/hooks/use-projects";
+import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import type { Panel } from "@/types/module";
 
 const WORKSPACE_DOMAIN = "projectops.app";
@@ -14,7 +19,14 @@ const WORKSPACE_DOMAIN = "projectops.app";
 export default function SettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const { tenant } = useTenant();
-  const { projects, members } = useWorkspaceData(workspace);
+  const { data: me } = useMe();
+  const { data: projects, isLoading } = useProjects(workspace);
+  const { data: members } = useWorkspaceMembers(workspace);
+
+  const fullName =
+    [me?.firstName, me?.lastName].filter(Boolean).join(" ").trim() ||
+    me?.username ||
+    "—";
 
   const panels: Panel[] = [
     {
@@ -32,9 +44,18 @@ export default function SettingsPage() {
       title: "Usage",
       description: "What's inside this workspace",
       items: [
-        { label: "Projects", value: String(projects.length) },
-        { label: "Users", value: String(members.length) },
-        { label: "Teams", value: "HubSpot, Dev Team" },
+        { label: "Projects", value: String((projects ?? []).length) },
+        { label: "Members", value: String((members ?? []).length) },
+      ],
+    },
+    {
+      type: "fields",
+      title: "Your account",
+      description: "From your profile",
+      items: [
+        { label: "Name", value: fullName },
+        { label: "Username", value: me?.username ?? "—" },
+        { label: "Email", value: me?.email ?? "—" },
       ],
     },
   ];
@@ -45,7 +66,11 @@ export default function SettingsPage() {
         title="Settings"
         description="Configuration for this workspace."
       />
-      <ModulePanels panels={panels} />
+      {isLoading ? <CardsSkeleton count={3} /> : <ModulePanels panels={panels} />}
+
+      <Separator />
+
+      <PlansSection workspaceSlug={workspace} />
     </PageContainer>
   );
 }

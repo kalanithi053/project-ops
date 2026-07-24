@@ -15,6 +15,7 @@ export class ModulesService {
 
   /** Lists modules, optionally scoped to a single plan. */
   list(workspaceId: string, planId?: string) {
+    if (!planId) throw new BadRequestException('Plan Id is required');
     return this.prisma.module.findMany({
       where: { workspaceId, planId: planId ?? undefined },
       orderBy: [{ planId: 'asc' }, { name: 'asc' }],

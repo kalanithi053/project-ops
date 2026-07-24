@@ -1,4 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { provisionWorkspaceDefaults } from './workspace-provisioning';
@@ -13,14 +17,20 @@ export class WorkspacesService {
    * as an active Owner member.
    */
   async create(userId: string, dto: CreateWorkspaceDto) {
-    const slug = await this.buildUniqueSlug(dto.slug ?? dto.name);
+    const existing = this.prisma.workspace.findFirst({
+      where: { slug: dto.slug ?? '' },
+    });
+    if (existing) throw new BadRequestException('Workspace already exists');
 
     return this.prisma.$transaction(async (tx) => {
       const workspace = await tx.workspace.create({
-        data: { name: dto.name, slug, ownerId: userId },
+        data: { name: dto.name, slug: dto?.slug, ownerId: userId },
       });
 
-      const { ownerRoleId } = await provisionWorkspaceDefaults(tx, workspace.id);
+      const { ownerRoleId } = await provisionWorkspaceDefaults(
+        tx,
+        workspace.id,
+      );
 
       await tx.workspaceMember.create({
         data: {
@@ -84,7 +94,9 @@ export class WorkspacesService {
     const base = this.slugify(source) || 'workspace';
     let candidate = base;
     let suffix = 1;
-    while (await this.prisma.workspace.findUnique({ where: { slug: candidate } })) {
+    while (
+      await this.prisma.workspace.findUnique({ where: { slug: candidate } })
+    ) {
       suffix += 1;
       candidate = `${base}-${suffix}`;
     }

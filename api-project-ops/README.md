@@ -17,7 +17,7 @@ re-authenticating.
 - [Running](#running)
 - [Auth flow (end to end)](#auth-flow-end-to-end)
 - [Authorization model](#authorization-model)
-- [Plan limits](#plan-limits)
+- [Task limits](#task-limits)
 - [Project creation side effects](#project-creation-side-effects)
 - [API surface](#api-surface)
 - [Design decisions / assumptions](#design-decisions--assumptions)
@@ -45,7 +45,6 @@ src/
     constants/       permission catalog, default roles, workspace defaults
     decorators/      @Public, @RequirePermission, @CurrentUser, @CurrentWorkspace
     guards/          JwtAuthGuard (global), WorkspaceScopeGuard, PermissionsGuard
-    exceptions/      PlanLimitException (HTTP 402)
     types/           JWT payload shapes
 prisma/
   schema.prisma      all models
@@ -193,31 +192,28 @@ resolves the caller's role → permission-code set (cached per request) and retu
 `src/common/constants/permissions.ts`; default role → permission mappings are in the
 same file and are seeded per workspace.
 
-## Plan limits
+## Task limits
 
-Enforced at the service layer before create actions:
-
-- `POST /projects` → **402** when `Plan.maxProjects` reached.
-- workspace/project member invite creating a *new* workspace member → **402** when
-  `Plan.maxMembers` reached.
-- `POST /projects/:id/tasks` → **409** when the target `ModuleInstance.taskLimit`
-  is reached.
+Plans carry no numeric quotas (no maxProjects/maxMembers). The only limit is the
+per-project **`ModuleInstance.taskLimit`**: tasks created beyond it are not
+rejected — they spill into another same-named module instance with capacity, or
+increment the instance's **`addonTask`** counter when every same-named instance
+is full.
 
 ## Project creation side effects
 
 `POST /projects` requires **`name`, `startDate`, `endDate`, `projectTypeId`** and
-**`planId`**, and runs in a single transaction:
+**`planId`** (an array of plan ids), and runs in a single transaction:
 
-1. creates the project (under the chosen project type + plan),
+1. creates the project (under the chosen project type + plans),
 2. adds the creator as an active **Owner** `ProjectMember`,
-3. **only when the project type's `isPlanAdd` is true:** checks the chosen plan's
-   `maxProjects` quota, then attaches that plan's default (`isDefault`) modules as
-   `ModuleInstance`s (carrying over `defaultTaskLimit`) and seeds one task per
-   instance named **`{Module Name} - 1`** (e.g. `Pipeline - 1`).
+3. **only when the project type's `isPlanAdd` is true:** attaches each chosen
+   plan's default (`isDefault`) modules as `ModuleInstance`s (carrying over
+   `defaultTaskLimit`) and seeds tasks per instance named
+   **`{Module Name} - N`**.
 
-A project type with `isPlanAdd = false` produces a **bare project** — the plan
-quota check, module attachment and seed tasks are all skipped (the `planId` is
-still recorded on the project).
+A project type with `isPlanAdd = false` produces a **bare project** — module
+attachment and seed tasks are skipped.
 
 ## API surface
 

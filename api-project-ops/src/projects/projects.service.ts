@@ -4,25 +4,19 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PlanLimitException } from '../common/exceptions/plan-limit.exception';
-import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
 @Injectable()
 export class ProjectsService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly plans: PlansService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Creates a project and, atomically:
-   *   1. enforces the plan's maxProjects quota,
-   *   2. attaches every default (isDefault) workspace module as a ModuleInstance,
-   *   3. seeds one Task per instance ("{Module Name} - 1"),
-   *   4. adds the creator as an active Owner ProjectMember.
+   *   1. attaches each chosen plan's default modules as ModuleInstances,
+   *   2. seeds tasks per instance ("{Module Name} - N"),
+   *   3. adds the creator as an active Owner ProjectMember.
    */
   async create(workspaceId: string, userId: string, dto: CreateProjectDto) {
     // The chosen project type decides whether plan-based steps run.
@@ -39,22 +33,22 @@ export class ProjectsService {
       throw new BadRequestException('Project type not found in workspace');
     }
 
-    const plan = await this.plans.getPlan(workspaceId, dto?.planId);
-    // When the type provisions a plan, enforce the chosen plan's project quota.
-    if (projectType.isPlanAdd) {
-      if (!plan) {
-        throw new BadRequestException(
-          'Plan is required for this type of project',
-        );
-      }
-      const projectCount = await this.prisma.project.count({
-        where: { workspaceId, deletedAt: null },
-      });
-      if (projectCount >= plan.maxProjects) {
-        throw new PlanLimitException(
-          `Project limit reached (${plan.maxProjects}). Upgrade your plan to add more.`,
-        );
-      }
+    // Validate the chosen plans (all must belong to the workspace).
+    const planIds = dto.planId ?? [];
+    const selectedPlans = planIds.length
+      ? await this.prisma.plan.findMany({
+          where: { id: { in: planIds }, workspaceId },
+        })
+      : [];
+    if (selectedPlans.length !== planIds.length) {
+      throw new BadRequestException('One or more plans not found in workspace');
+    }
+
+    // When the type provisions plans, at least one is required.
+    if (projectType.isPlanAdd && !selectedPlans.length) {
+      throw new BadRequestException(
+        'At least one plan is required for this type of project',
+      );
     }
 
     const startDate = new Date(dto.startDate);
@@ -66,7 +60,7 @@ export class ProjectsService {
           workspaceId,
           name: dto.name,
           projectTypeId: projectType.id,
-          planId: plan?.id,
+          planId: planIds,
           description: dto.description,
           startDate,
           endDate,
@@ -95,24 +89,25 @@ export class ProjectsService {
         });
       }
 
-      // isPlanAdd types auto-provision the chosen plan's default modules + seed
-      // tasks; otherwise the project starts empty.
+      // isPlanAdd types auto-provision each chosen plan's default modules +
+      // seed tasks; otherwise the project starts empty.
       if (projectType.isPlanAdd) {
-        await this.provisionDefaultModules(tx, {
-          project,
-          workspaceId,
-          planId: plan.id,
-          userId,
-          startDate,
-          endDate,
-        });
+        for (const plan of selectedPlans) {
+          await this.provisionDefaultModules(tx, {
+            project,
+            workspaceId,
+            planId: plan.id,
+            userId,
+            startDate,
+            endDate,
+          });
+        }
       }
 
       return tx.project.findUnique({
         where: { id: project.id },
         include: {
           projectType: { select: { id: true, name: true, isPlanAdd: true } },
-          plan: { select: { id: true, name: true } },
           moduleInstances: { include: { module: true } },
           tasks: true,
           members: true,

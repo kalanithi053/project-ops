@@ -10,11 +10,13 @@
 ```bash
 BASE="http://localhost:3000/api/v1"
 TOKEN="<accessToken>"
-WORKSPACE_SLUG="demo-workspace"
+WORKSPACE_SLUG="amwhizcom"
 ```
 
 Workspace-scoped routes return **400** if `x-workspace-slug` is missing, **404** if
 the slug is unknown, and **403** if you are not an active member.
+
+Seed data (dev): user **`amwhizcom.owner`**, workspace **`amwhizcom`**, OTP **`123456`**.
 
 ---
 
@@ -76,7 +78,7 @@ curl -s "$BASE/project/<projectId>/permission" \
 ## users (Bearer)
 
 ```bash
-# Get my profile. Without the workspace header: { workspace: null, permissions: [] }.
+# Get my profile. Without the workspace header the workspace/permissions fields are omitted.
 curl -s "$BASE/users/me" -H "Authorization: Bearer $TOKEN"
 
 # With x-workspace-slug: also returns the active workspace, my role in it, and my permission codes.
@@ -93,7 +95,8 @@ curl -s -X PATCH "$BASE/users/me" \
 ## workspaces (Bearer — no slug header needed)
 
 ```bash
-# Create workspace (provisions default roles, modules, statuses, plan)
+# Create workspace. Provisions: roles+permissions, project types (HubSpot/Development),
+# plans (Professional/Ultimate/Enterprise) with HubSpot modules each, statuses, priorities.
 curl -s -X POST "$BASE/workspaces" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -172,19 +175,19 @@ curl -s "$BASE/permissions" \
 ## plans (Bearer + x-workspace-slug)
 
 ```bash
-# List all plan tiers (Professional/Ultimate/Enterprise; one is active)
-curl -s "$BASE/plans" \
+# List plan tiers for a project type (projectTypeId query param is required)
+curl -s "$BASE/plans?projectTypeId=<projectTypeId>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
 # Create a new plan tier. projectTypeId is REQUIRED (a plan belongs to a project type).
-# isActive:true deactivates the other plans.
+# The plan auto-seeds the default HubSpot modules. isActive:true deactivates the other plans.
 curl -s -X POST "$BASE/plans" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"projectTypeId":"<projectTypeId>","name":"Starter","maxProjects":5,"maxMembers":3,"maxTasksPerModule":20,"features":{},"isActive":false}'
+  -d '{"projectTypeId":"<projectTypeId>","name":"Starter","features":{},"isActive":false}'
 
-# Get active plan
+# Get ALL active plans (array; multiple plans can be active)
 curl -s "$BASE/plans/active" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
@@ -192,12 +195,12 @@ curl -s "$BASE/plans/active" \
 curl -s -X POST "$BASE/plans/<planId>/activate" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Update the active plan's limits / feature flags
+# Update the active plan's name / feature flags
 curl -s -X PATCH "$BASE/plans/active" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"maxProjects":50,"maxMembers":100,"maxTasksPerModule":500,"features":{"exports":true}}'
+  -d '{"name":"Pro","features":{"exports":true}}'
 ```
 
 ## modules (Bearer + x-workspace-slug)
@@ -286,7 +289,8 @@ curl -s "$BASE/project-types" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
 # Create a project type. isPlanAdd=false -> projects of this type skip plan/module/task steps.
-# A project type owns many plans (create plans under it via POST /plans with this id).
+# isPlanAdd=true auto-seeds the default plans (Professional/Ultimate/Enterprise, inactive),
+# each of which auto-seeds the default HubSpot modules.
 curl -s -X POST "$BASE/project-types" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
@@ -308,13 +312,14 @@ curl -s -X DELETE "$BASE/project-types/<id>" \
 ## projects (Bearer + x-workspace-slug)
 
 ```bash
-# Create a project. Required: name, startDate, endDate, projectTypeId, planId.
-# If the type's isPlanAdd is true -> attach the chosen plan's modules + seed tasks; if false -> bare project.
+# Create a project. Required: name (unique per workspace), startDate, endDate, projectTypeId.
+# planId is an ARRAY of plan ids — required (min 1) when the type's isPlanAdd is true.
+# isPlanAdd=true -> attaches each chosen plan's default modules + seed tasks; false -> bare project.
 curl -s -X POST "$BASE/projects" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Website Revamp","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z","projectTypeId":"<projectTypeId>","planId":"<planId>","description":"Q1 site rebuild"}'
+  -d '{"name":"Website Revamp","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z","projectTypeId":"<projectTypeId>","planId":["<planId>"],"description":"Q1 site rebuild"}'
 
 # List projects
 curl -s "$BASE/projects" \
@@ -365,7 +370,8 @@ curl -s -X DELETE "$BASE/projects/<projectId>/members/<memberId>" \
 ## project modules (module-instances) (Bearer + x-workspace-slug)
 
 ```bash
-# List modules attached to a project
+# List modules attached to a project.
+# Each instance includes addonTask — the count of tasks created beyond taskLimit.
 curl -s "$BASE/projects/<projectId>/modules" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
@@ -395,7 +401,16 @@ curl -s -X DELETE "$BASE/projects/<projectId>/modules/<instanceId>" \
 curl -s "$BASE/projects/<projectId>/tasks?moduleInstanceId=<id>&statusId=<id>&priorityId=<id>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Create a task (enforces module task limit)
+# Create a task.
+# - moduleInstanceId is REQUIRED when the project's type has isPlanAdd=true (400 otherwise).
+# - prefix is auto-generated when omitted (an explicit prefix always wins):
+#     module-bound task -> "{Module Name} - N" (N continues across ALL same-named
+#     module instances in the project, so numbering never restarts)
+#     unbound task      -> "{first letter of project name}-T{task count + 1}" (e.g. "W-T48")
+# - Overflow: if the requested instance is at its taskLimit, the task is stored on
+#   another instance in the project whose module has the SAME NAME and spare capacity
+#   (multi-plan projects). Only when every same-named instance is full does the task
+#   stay on the requested instance with its addonTask counter incremented.
 curl -s -X POST "$BASE/projects/<projectId>/tasks" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \

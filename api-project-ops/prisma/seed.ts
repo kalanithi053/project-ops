@@ -13,8 +13,8 @@ import { provisionWorkspaceDefaults } from '../src/workspaces/workspace-provisio
 
 const prisma = new PrismaClient();
 
-const DEMO_USERNAME = 'demo.owner';
-const DEMO_WORKSPACE_SLUG = 'demo-workspace';
+const DEMO_USERNAME = 'amwhizcom.owner';
+const DEMO_WORKSPACE_SLUG = 'amwhizcom';
 
 async function main() {
   const owner = await prisma.user.upsert({
@@ -24,7 +24,7 @@ async function main() {
       username: DEMO_USERNAME,
       firstName: 'Demo',
       lastName: 'Owner',
-      email: 'demo.owner@example.com',
+      email: 'demo.owner@amwhiz.com',
     },
   });
 
@@ -33,7 +33,7 @@ async function main() {
   });
   if (existing) {
     console.log(
-      `Demo workspace "${DEMO_WORKSPACE_SLUG}" already exists (${existing.id}); skipping.`,
+      `Amwhiz workspace "${DEMO_WORKSPACE_SLUG}" already exists (${existing.id}); skipping.`,
     );
     return;
   }
@@ -41,7 +41,7 @@ async function main() {
   const workspace = await prisma.$transaction(async (tx) => {
     const ws = await tx.workspace.create({
       data: {
-        name: 'Demo Workspace',
+        name: 'Amwhiz',
         slug: DEMO_WORKSPACE_SLUG,
         ownerId: owner.id,
       },
@@ -64,8 +64,12 @@ async function main() {
   console.log('Seed complete:');
   console.log(`  Demo user      : ${owner.username} (${owner.id})`);
   console.log(`  Demo workspace : ${workspace.name} (${workspace.id})`);
-  console.log(`  Login flow     : POST /api/v1/auth/otp/request { "username": "${DEMO_USERNAME}" }`);
-  console.log('  Watch the server console for the OTP code, then verify + select the workspace.');
+  console.log(
+    `  Login flow     : POST /api/v1/auth/otp/request { "username": "${DEMO_USERNAME}" }`,
+  );
+  console.log(
+    '  Watch the server console for the OTP code, then verify + select the workspace.',
+  );
 }
 
 main()

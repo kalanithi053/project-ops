@@ -1,38 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
   IsBoolean,
-  IsInt,
   IsObject,
   IsOptional,
   IsString,
   MaxLength,
-  Min,
 } from 'class-validator';
 
 export class UpdatePlanDto {
-  @ApiProperty({ required: false, example: 'Pro' })
-  @IsOptional()
+  @ApiProperty({ required: true, example: 'Pro' })
   @IsString()
   @MaxLength(50)
-  name?: string;
-
-  @ApiProperty({ required: false, minimum: 0 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  maxProjects?: number;
-
-  @ApiProperty({ required: false, minimum: 0 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  maxMembers?: number;
-
-  @ApiProperty({ required: false, minimum: 0 })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  maxTasksPerModule?: number;
+  name!: string;
 
   @ApiProperty({
     required: false,
@@ -43,8 +22,7 @@ export class UpdatePlanDto {
   @IsObject()
   features?: Record<string, unknown>;
 
-  @ApiProperty({ required: false })
-  @IsOptional()
+  @ApiProperty({ required: true })
   @IsBoolean()
-  isActive?: boolean;
+  isActive!: boolean;
 }

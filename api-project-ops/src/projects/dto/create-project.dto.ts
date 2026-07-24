@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  ArrayUnique,
+  IsArray,
   IsDateString,
   IsOptional,
   IsString,
@@ -32,12 +34,15 @@ export class CreateProjectDto {
 
   @ApiProperty({
     required: false,
+    type: [String],
     description:
-      'Plan the project is created under. If omitted, the active plan is used.',
+      'Plans the project is created under. Required (min 1) when the project type has isPlanAdd=true.',
   })
-  @IsUUID()
   @IsOptional()
-  planId?: string;
+  @IsArray()
+  @ArrayUnique()
+  @IsUUID('4', { each: true })
+  planId?: string[];
 
   @ApiProperty({ required: false })
   @IsOptional()

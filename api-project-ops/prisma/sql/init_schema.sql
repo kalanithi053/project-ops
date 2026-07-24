@@ -130,9 +130,6 @@ CREATE TABLE "plan" (
     "workspace_id" TEXT NOT NULL,
     "project_type_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "max_projects" INTEGER NOT NULL DEFAULT 3,
-    "max_members" INTEGER NOT NULL DEFAULT 5,
-    "max_tasks_per_module" INTEGER NOT NULL DEFAULT 10,
     "features" JSONB NOT NULL DEFAULT '{}',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
 
@@ -145,7 +142,7 @@ CREATE TABLE "project" (
     "workspace_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "project_type_id" TEXT,
-    "plan_id" TEXT,
+    "plan_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "description" TEXT,
     "start_date" TIMESTAMP(3),
     "end_date" TIMESTAMP(3),
@@ -190,6 +187,7 @@ CREATE TABLE "module_instance" (
     "project_id" TEXT NOT NULL,
     "module_id" TEXT NOT NULL,
     "task_limit" INTEGER NOT NULL,
+    "addon_task" INTEGER NOT NULL DEFAULT 0,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "module_instance_pkey" PRIMARY KEY ("id")
@@ -311,9 +309,6 @@ CREATE INDEX "project_owner_id_idx" ON "project"("owner_id");
 CREATE INDEX "project_project_type_id_idx" ON "project"("project_type_id");
 
 -- CreateIndex
-CREATE INDEX "project_plan_id_idx" ON "project"("plan_id");
-
--- CreateIndex
 CREATE INDEX "project_type_workspace_id_idx" ON "project_type"("workspace_id");
 
 -- CreateIndex
@@ -402,9 +397,6 @@ ALTER TABLE "project" ADD CONSTRAINT "project_workspace_id_fkey" FOREIGN KEY ("w
 
 -- AddForeignKey
 ALTER TABLE "project" ADD CONSTRAINT "project_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "project" ADD CONSTRAINT "project_plan_id_fkey" FOREIGN KEY ("plan_id") REFERENCES "plan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "project" ADD CONSTRAINT "project_project_type_id_fkey" FOREIGN KEY ("project_type_id") REFERENCES "project_type"("id") ON DELETE SET NULL ON UPDATE CASCADE;

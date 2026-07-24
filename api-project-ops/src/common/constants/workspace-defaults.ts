@@ -1,18 +1,53 @@
 import { StatusCategory } from '@prisma/client';
 
-/** Default modules attached to every new workspace (and auto-added to projects). */
+/**
+ * Default module catalog (HubSpot implementation modules). Seeded per plan;
+ * `isDefault` modules are auto-attached to new projects with seed tasks.
+ */
 export const DEFAULT_MODULES: Array<{
   key: string;
   name: string;
   defaultTaskLimit: number;
   isDefault: boolean;
 }> = [
-  { key: 'pipeline', name: 'Pipeline', defaultTaskLimit: 10, isDefault: true },
+  { key: 'pipelines', name: 'Pipelines', defaultTaskLimit: 10, isDefault: true },
   {
     key: 'custom_properties',
     name: 'Custom Properties',
     defaultTaskLimit: 20,
     isDefault: true,
+  },
+  { key: 'workflows', name: 'Workflows', defaultTaskLimit: 15, isDefault: true },
+  { key: 'forms', name: 'Forms', defaultTaskLimit: 10, isDefault: false },
+  {
+    key: 'email_templates',
+    name: 'Email Templates',
+    defaultTaskLimit: 10,
+    isDefault: false,
+  },
+  {
+    key: 'landing_pages',
+    name: 'Landing Pages',
+    defaultTaskLimit: 10,
+    isDefault: false,
+  },
+  {
+    key: 'reports_dashboards',
+    name: 'Reports & Dashboards',
+    defaultTaskLimit: 10,
+    isDefault: false,
+  },
+  {
+    key: 'custom_objects',
+    name: 'Custom Objects',
+    defaultTaskLimit: 10,
+    isDefault: false,
+  },
+  {
+    key: 'integrations',
+    name: 'Integrations',
+    defaultTaskLimit: 5,
+    isDefault: false,
   },
 ];
 
@@ -86,13 +121,13 @@ export const DEFAULT_PROJECT_TYPES: Array<{
   isPlanAdd: boolean;
 }> = [
   {
-    name: 'Standard',
+    name: 'HubSpot',
     description:
       'Full setup — provisions the active plan modules and seed tasks',
     isPlanAdd: true,
   },
   {
-    name: 'Blank',
+    name: 'Development',
     description: 'Empty project — no modules or seed tasks',
     isPlanAdd: false,
   },
@@ -100,50 +135,18 @@ export const DEFAULT_PROJECT_TYPES: Array<{
 
 export interface PlanTemplate {
   name: string;
-  maxProjects: number;
-  maxMembers: number;
-  maxTasksPerModule: number;
   features: Record<string, unknown>;
-  /** Exactly one template is the default (active) plan for a new workspace. */
   isActive: boolean;
 }
 
 const SHARED_PLAN_FEATURES: Record<string, unknown> = {
-  maxModules: 100,
   customTicketStatuses: true,
   customRoles: true,
 };
 
-/**
- * Plan catalog provisioned for every workspace. All three tiers are created as
- * Plan rows; exactly one (Professional) starts active. Switch tiers by
- * activating another via POST /plans/:planId/activate.
- *
- * Limits are identical across tiers for now (100/100/100) — adjust per-tier here.
- */
+/** Plan catalog provisioned for every workspace. */
 export const PLAN_TEMPLATES: PlanTemplate[] = [
-  {
-    name: 'Professional',
-    maxProjects: 100,
-    maxMembers: 100,
-    maxTasksPerModule: 100,
-    features: SHARED_PLAN_FEATURES,
-    isActive: true,
-  },
-  {
-    name: 'Ultimate',
-    maxProjects: 100,
-    maxMembers: 100,
-    maxTasksPerModule: 100,
-    features: SHARED_PLAN_FEATURES,
-    isActive: true,
-  },
-  {
-    name: 'Enterprise',
-    maxProjects: 100,
-    maxMembers: 100,
-    maxTasksPerModule: 100,
-    features: SHARED_PLAN_FEATURES,
-    isActive: true,
-  },
+  { name: 'Professional', features: SHARED_PLAN_FEATURES, isActive: true },
+  { name: 'Ultimate', features: SHARED_PLAN_FEATURES, isActive: true },
+  { name: 'Enterprise', features: SHARED_PLAN_FEATURES, isActive: true },
 ];

@@ -33,10 +33,13 @@ export class CreateTaskDto {
   @MaxLength(4000)
   description?: string;
 
-  @ApiProperty({ required: false, description: 'Module instance this task belongs to' })
+  @ApiProperty({
+    required: false,
+    description: 'Module instance this task belongs to',
+  })
   @IsOptional()
   @IsUUID()
-  moduleInstanceId?: string;
+  moduleInstanceId: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

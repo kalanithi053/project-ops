@@ -17,9 +17,9 @@ export class WorkspacesService {
    * as an active Owner member.
    */
   async create(userId: string, dto: CreateWorkspaceDto) {
-    const existing = this.prisma.workspace.findFirst({
-      where: { slug: dto.slug ?? '' },
-    });
+    const existing = dto.slug
+      ? await this.prisma.workspace.findFirst({ where: { slug: dto.slug } })
+      : null;
     if (existing) throw new BadRequestException('Workspace already exists');
 
     return this.prisma.$transaction(async (tx) => {

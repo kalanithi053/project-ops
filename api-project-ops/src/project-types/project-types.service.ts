@@ -46,9 +46,6 @@ export class ProjectTypesService {
         await this.plans.createPlan(workspaceId, {
           projectTypeId: projectType.id,
           name: template.name,
-          maxProjects: template.maxProjects,
-          maxMembers: template.maxMembers,
-          maxTasksPerModule: template.maxTasksPerModule,
           features: template.features,
           isActive: false,
         });

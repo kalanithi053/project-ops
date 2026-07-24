@@ -4,18 +4,13 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { PlanLimitException } from '../common/exceptions/plan-limit.exception';
-import { PlansService } from '../plans/plans.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 
 @Injectable()
 export class WorkspaceMembersService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly plans: PlansService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   list(workspaceId: string) {
     return this.prisma.workspaceMember.findMany({
@@ -51,17 +46,6 @@ export class WorkspaceMembersService {
     });
     if (existing && existing.status !== 'removed') {
       throw new ConflictException('User is already a workspace member.');
-    }
-
-    // Enforce plan quota for genuinely new/reactivated members.
-    const plan = await this.plans.getActivePlan(workspaceId);
-    const memberCount = await this.prisma.workspaceMember.count({
-      where: { workspaceId, status: { not: 'removed' } },
-    });
-    if (memberCount >= plan.maxMembers) {
-      throw new PlanLimitException(
-        `Member limit reached (${plan.maxMembers}). Upgrade your plan to add more.`,
-      );
     }
 
     if (existing) {

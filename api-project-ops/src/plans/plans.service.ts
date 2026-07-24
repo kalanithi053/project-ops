@@ -40,7 +40,7 @@ export class PlansService {
       if (dto.isActive) {
         await tx.plan.updateMany({
           where: { workspaceId, isActive: true },
-          data: { isActive: false },
+          data: { isActive: true },
         });
       }
       const plan = await tx.plan.create({
@@ -48,11 +48,8 @@ export class PlansService {
           workspaceId,
           projectTypeId: projectType.id,
           name: dto.name,
-          maxProjects: dto.maxProjects ?? undefined,
-          maxMembers: dto.maxMembers ?? undefined,
-          maxTasksPerModule: dto.maxTasksPerModule ?? undefined,
           features: (dto.features ?? {}) as Prisma.InputJsonValue,
-          isActive: dto.isActive ?? false,
+          isActive: dto.isActive ?? true,
         },
       });
 
@@ -148,9 +145,6 @@ export class PlansService {
       where: { id: plan.id },
       data: {
         name: dto.name ?? undefined,
-        maxProjects: dto.maxProjects ?? undefined,
-        maxMembers: dto.maxMembers ?? undefined,
-        maxTasksPerModule: dto.maxTasksPerModule ?? undefined,
         features:
           dto.features !== undefined
             ? (dto.features as Prisma.InputJsonValue)

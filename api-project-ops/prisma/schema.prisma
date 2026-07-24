@@ -180,16 +180,12 @@ model Plan {
   workspaceId       String  @map("workspace_id")
   projectTypeId     String  @map("project_type_id")
   name              String
-  maxProjects       Int     @default(3) @map("max_projects")
-  maxMembers        Int     @default(5) @map("max_members")
-  maxTasksPerModule Int     @default(10) @map("max_tasks_per_module")
   features          Json    @default("{}")
   isActive          Boolean @default(true) @map("is_active")
 
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   projectType ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
   modules     Module[]
-  projects    Project[]
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -206,7 +202,9 @@ model Project {
   workspaceId   String    @map("workspace_id")
   name          String
   projectTypeId String?   @map("project_type_id")
-  planId        String?   @map("plan_id")
+  // Plans the project is created under. Scalar list (Postgres text[]) — ids are
+  // validated in the service layer; no FK relation is possible on a list.
+  planId        String[]  @default([]) @map("plan_ids")
   description   String?
   startDate     DateTime? @map("start_date")
   endDate       DateTime? @map("end_date")
@@ -218,7 +216,6 @@ model Project {
   workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner           User             @relation("ProjectOwner", fields: [ownerId], references: [id])
   projectType     ProjectType?     @relation(fields: [projectTypeId], references: [id])
-  plan            Plan?            @relation(fields: [planId], references: [id])
   members         ProjectMember[]
   moduleInstances ModuleInstance[]
   tasks           Task[]
@@ -226,7 +223,6 @@ model Project {
   @@index([workspaceId])
   @@index([ownerId])
   @@index([projectTypeId])
-  @@index([planId])
   @@map("project")
 }
 
@@ -301,6 +297,9 @@ model ModuleInstance {
   projectId String   @map("project_id")
   moduleId  String   @map("module_id")
   taskLimit Int      @map("task_limit")
+  // Count of tasks created beyond taskLimit (billable/tracked add-ons instead
+  // of a hard rejection).
+  addonTask Int      @default(0) @map("addon_task")
   createdAt DateTime @default(now()) @map("created_at")
 
   project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)

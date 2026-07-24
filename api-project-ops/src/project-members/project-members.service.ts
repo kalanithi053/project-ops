@@ -5,17 +5,12 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { PlansService } from '../plans/plans.service';
-import { PlanLimitException } from '../common/exceptions/plan-limit.exception';
 import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 
 @Injectable()
 export class ProjectMembersService {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly plans: PlansService,
-  ) {}
+  constructor(private readonly prisma: PrismaService) {}
 
   async list(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
@@ -29,9 +24,9 @@ export class ProjectMembersService {
   }
 
   /**
-   * Invites a user to a project. Per configuration, if the invitee is not yet a
-   * workspace member they are auto-invited to the workspace too (respecting the
-   * plan's maxMembers quota). Unknown usernames are self-registered.
+   * Invites a user to a project. If the invitee is not yet a workspace member
+   * they are auto-invited to the workspace too. Unknown usernames are
+   * self-registered.
    */
   async invite(
     workspaceId: string,
@@ -126,17 +121,6 @@ export class ProjectMembersService {
         });
       }
       return;
-    }
-
-    // New workspace member — enforce the plan quota.
-    const plan = await this.plans.getActivePlan(workspaceId);
-    const memberCount = await this.prisma.workspaceMember.count({
-      where: { workspaceId, status: { not: 'removed' } },
-    });
-    if (memberCount >= plan.maxMembers) {
-      throw new PlanLimitException(
-        `Member limit reached (${plan.maxMembers}). Upgrade your plan to add more.`,
-      );
     }
 
     const defaultRole = await this.prisma.userRole.findFirst({

@@ -25,6 +25,8 @@ import { QueryState } from "@/components/shared/query-state";
 import { TableSkeleton } from "@/components/shared/skeletons";
 import { useCreateProject, useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
+import { usePlans } from "@/lib/api/hooks/use-plans";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
@@ -33,20 +35,19 @@ import type {
   CreateProjectDto,
   Me,
   Project,
-  ProjectMode,
+  ProjectType,
   WorkspaceMember,
 } from "@/lib/api/types";
 import type { ColumnDef, Tone } from "@/types/module";
 
-const MODE_OPTIONS: SelectOption[] = [
-  { label: "HubSpot", value: "HubSpot" },
-  { label: "Dev", value: "Dev" },
-];
+/** Small rotating palette so distinct (dynamic) project types read apart. */
+const TONE_CYCLE: Tone[] = ["info", "warning", "success", "neutral"];
 
-const MODE_TONE: Record<ProjectMode, Tone> = {
-  HubSpot: "warning",
-  Dev: "info",
-};
+function toneForType(typeId: string | undefined, types: ProjectType[]): Tone {
+  if (!typeId) return "neutral";
+  const index = types.findIndex((t) => String(t.id) === typeId);
+  return TONE_CYCLE[index % TONE_CYCLE.length] ?? "neutral";
+}
 
 function daysBetween(start?: string, end?: string): number | null {
   if (!start || !end) return null;
@@ -112,74 +113,85 @@ function ownerName(
   return null;
 }
 
-const baseColumns: ColumnDef<Project>[] = [
-  {
-    key: "name",
-    header: "Project",
-    sortable: true,
-    sortAccessor: (p) => p.name,
-    cell: (p) => (
-      <div className="flex flex-col">
-        <span className="font-medium">{p.name}</span>
-        {p.description ? (
-          <span className="truncate text-xs text-muted-foreground">
-            {p.description}
-          </span>
-        ) : null}
-      </div>
-    ),
-  },
-  {
-    key: "mode",
-    header: "Mode",
-    sortable: true,
-    sortAccessor: (p) => p.mode,
-    cell: (p) => (
-      <StatusBadge label={p.mode} tone={MODE_TONE[p.mode] ?? "neutral"} />
-    ),
-  },
-  {
-    key: "startDate",
-    header: "Start",
-    hideBelow: "sm",
-    sortable: true,
-    sortAccessor: (p) => p.startDate ?? "",
-    cell: (p) => (
-      <span className="text-muted-foreground">{formatDate(p.startDate)}</span>
-    ),
-  },
-  {
-    key: "endDate",
-    header: "End",
-    hideBelow: "sm",
-    sortable: true,
-    sortAccessor: (p) => p.endDate ?? "",
-    cell: (p) => (
-      <span className="text-muted-foreground">{formatDate(p.endDate)}</span>
-    ),
-  },
-  {
-    key: "duration",
-    header: "Duration",
-    align: "right",
-    hideBelow: "md",
-    cell: (p) => {
-      const days = daysBetween(p.startDate, p.endDate);
-      return days === null ? "—" : `${days}d`;
-    },
-  },
-];
-
 export default function ProjectsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const { data, isLoading, isError, error, refetch } = useProjects(workspace);
   const { data: memberData } = useWorkspaceMembers(workspace);
+  const { data: typeData } = useProjectTypes(workspace);
   const { data: me } = useMe();
   const { can } = usePermissions(workspace);
   const [open, setOpen] = React.useState(false);
 
   const projects = React.useMemo(() => data ?? [], [data]);
   const members = React.useMemo(() => memberData ?? [], [memberData]);
+  const projectTypes = React.useMemo(() => typeData ?? [], [typeData]);
+
+  const baseColumns = React.useMemo<ColumnDef<Project>[]>(
+    () => [
+      {
+        key: "name",
+        header: "Project",
+        sortable: true,
+        sortAccessor: (p) => p.name,
+        cell: (p) => (
+          <div className="flex flex-col">
+            <span className="font-medium">{p.name}</span>
+            {p.description ? (
+              <span className="truncate text-xs text-muted-foreground">
+                {p.description}
+              </span>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        key: "type",
+        header: "Type",
+        sortable: true,
+        sortAccessor: (p) => p.projectType?.name ?? "",
+        cell: (p) =>
+          p.projectType ? (
+            <StatusBadge
+              label={p.projectType.name}
+              tone={toneForType(p.projectType.id, projectTypes)}
+            />
+          ) : (
+            "—"
+          ),
+      },
+      {
+        key: "startDate",
+        header: "Start",
+        hideBelow: "sm",
+        sortable: true,
+        sortAccessor: (p) => p.startDate ?? "",
+        cell: (p) => (
+          <span className="text-muted-foreground">{formatDate(p.startDate)}</span>
+        ),
+      },
+      {
+        key: "endDate",
+        header: "End",
+        hideBelow: "sm",
+        sortable: true,
+        sortAccessor: (p) => p.endDate ?? "",
+        cell: (p) => (
+          <span className="text-muted-foreground">{formatDate(p.endDate)}</span>
+        ),
+      },
+      {
+        key: "duration",
+        header: "Duration",
+        align: "right",
+        hideBelow: "md",
+        cell: (p) => {
+          const days = daysBetween(p.startDate, p.endDate);
+          return days === null ? "—" : `${days}d`;
+        },
+      },
+    ],
+    [projectTypes],
+  );
 
   // Only show the "Created by" column when the API actually returns owner info.
   const columns = React.useMemo<ColumnDef<Project>[]>(() => {
@@ -194,12 +206,14 @@ export default function ProjectsPage() {
         cell: (p) => ownerName(p, members, me) ?? "—",
       },
     ];
-  }, [projects, members, me]);
+  }, [baseColumns, projects, members, me]);
 
   const stats = [
     { label: "Total Projects", value: projects.length, icon: FolderKanban },
-    { label: "HubSpot", value: projects.filter((p) => p.mode === "HubSpot").length },
-    { label: "Dev", value: projects.filter((p) => p.mode === "Dev").length },
+    ...projectTypes.slice(0, 3).map((type) => ({
+      label: type.name,
+      value: projects.filter((p) => p.projectType?.id === type.id).length,
+    })),
   ];
 
   return (
@@ -238,7 +252,7 @@ export default function ProjectsPage() {
           columns={columns}
           data={projects}
           getRowId={(p) => String(p.id)}
-          searchAccessors={[(p) => p.name, (p) => p.mode]}
+          searchAccessors={[(p) => p.name, (p) => p.projectType?.name ?? ""]}
           searchPlaceholder="Search projects…"
           emptyMessage="No projects yet. Create your first project to get started."
         />
@@ -259,29 +273,63 @@ function NewProjectPanel({
   onDone: () => void;
 }) {
   const createProject = useCreateProject(workspaceSlug);
+  const { data: typeData } = useProjectTypes(workspaceSlug);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
-  const [mode, setMode] = React.useState<ProjectMode>();
+  const [projectTypeId, setProjectTypeId] = React.useState<string>();
+  const [planId, setPlanId] = React.useState<string>();
   const [error, setError] = React.useState<string | null>(null);
+
+  const typeOptions: SelectOption[] = (typeData ?? []).map((type) => ({
+    label: type.name,
+    value: String(type.id),
+  }));
+
+  // Project types with `isPlanAdd` provision plan-scoped quotas/modules —
+  // the API requires an explicit plan for those (it does not fall back to
+  // the workspace's active plan despite what the docs imply).
+  const selectedType = typeData?.find((t) => String(t.id) === projectTypeId);
+  const requiresPlan = Boolean(selectedType?.isPlanAdd);
+  const { data: planData } = usePlans(
+    workspaceSlug,
+    requiresPlan ? projectTypeId : undefined,
+  );
+  const planOptions: SelectOption[] = (planData ?? []).map((plan) => ({
+    label: plan.isActive ? `${plan.name} (Active)` : plan.name,
+    value: String(plan.id),
+  }));
+  // Default to the type's active plan until the user explicitly picks one
+  // (derived, not stored — avoids an effect-driven setState).
+  const activePlanId = planData?.find((plan) => plan.isActive)?.id;
+  const selectedPlanId = planId ?? (activePlanId ? String(activePlanId) : undefined);
+
+  function handleTypeChange(value: string) {
+    setProjectTypeId(value);
+    setPlanId(undefined);
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
     if (!name.trim()) return setError("Enter a project name.");
-    if (!mode) return setError("Select a mode.");
-    if (startDate && endDate && endDate < startDate) {
+    if (!projectTypeId) return setError("Select a project type.");
+    if (requiresPlan && !selectedPlanId) return setError("Select a plan.");
+    if (!startDate) return setError("Choose a start date.");
+    if (!endDate) return setError("Choose an end date.");
+    if (endDate < startDate) {
       return setError("End date can't be before the start date.");
     }
 
     const dto: CreateProjectDto = {
       name: name.trim(),
-      mode,
+      projectTypeId,
+      startDate,
+      endDate,
       description: description.trim() || undefined,
-      startDate: startDate || undefined,
-      endDate: endDate || undefined,
+      planId: requiresPlan ? selectedPlanId : undefined,
     };
 
     // API errors surface via the global error toast; success closes the panel.
@@ -296,7 +344,7 @@ function NewProjectPanel({
       <SheetHeader>
         <SheetTitle className="text-base">New project</SheetTitle>
         <SheetDescription>
-          Add a project and choose its delivery mode.
+          Add a project and choose its project type.
         </SheetDescription>
       </SheetHeader>
 
@@ -318,16 +366,33 @@ function NewProjectPanel({
           </div>
 
           <div className="flex flex-col gap-2">
-            <Label htmlFor="project-mode">Team / mode</Label>
+            <Label htmlFor="project-type">Project type</Label>
             <SelectField
-              id="project-mode"
-              aria-label="Mode"
-              options={MODE_OPTIONS}
-              value={mode}
-              onValueChange={(value) => setMode(value as ProjectMode)}
-              placeholder="Select HubSpot or Dev"
+              id="project-type"
+              aria-label="Project type"
+              options={typeOptions}
+              value={projectTypeId}
+              onValueChange={handleTypeChange}
+              placeholder="Select a project type"
             />
           </div>
+
+          {requiresPlan && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-plan">Plan</Label>
+              <SelectField
+                id="project-plan"
+                aria-label="Plan"
+                options={planOptions}
+                value={selectedPlanId}
+                onValueChange={setPlanId}
+                placeholder="Select a plan"
+              />
+              <p className="text-xs text-muted-foreground">
+                This project type provisions modules from the selected plan.
+              </p>
+            </div>
+          )}
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="project-description">Description</Label>

@@ -22,12 +22,20 @@ import { useTenant } from "@/lib/tenant/tenant-context";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { formatDate } from "@/lib/format";
-import type { ProjectMode } from "@/lib/api/types";
+import type { ProjectType } from "@/lib/api/types";
+import type { Tone } from "@/types/module";
 
-const MODES: ProjectMode[] = ["HubSpot", "Dev"];
+const TONE_CYCLE: Tone[] = ["info", "warning", "success", "neutral"];
+
+function toneForType(typeId: string | undefined, types: ProjectType[]): Tone {
+  if (!typeId) return "neutral";
+  const index = types.findIndex((t) => String(t.id) === typeId);
+  return TONE_CYCLE[index % TONE_CYCLE.length] ?? "neutral";
+}
 
 export default function DashboardPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -35,17 +43,21 @@ export default function DashboardPage() {
   const { data: me } = useMe();
   const { data: projectData, isLoading } = useProjects(workspace);
   const { data: memberData } = useWorkspaceMembers(workspace);
+  const { data: typeData } = useProjectTypes(workspace);
   const { can } = usePermissions(workspace);
 
   const projects = projectData ?? [];
   const members = memberData ?? [];
+  const projectTypes = typeData ?? [];
   const firstName = me?.firstName || me?.username || "there";
 
   const stats = [
     { label: "Projects", value: projects.length, icon: FolderKanban },
     { label: "Members", value: members.length, icon: Users },
-    { label: "HubSpot", value: projects.filter((p) => p.mode === "HubSpot").length },
-    { label: "Dev", value: projects.filter((p) => p.mode === "Dev").length },
+    ...projectTypes.slice(0, 2).map((type) => ({
+      label: type.name,
+      value: projects.filter((p) => p.projectType?.id === type.id).length,
+    })),
   ];
 
   return (
@@ -75,73 +87,84 @@ export default function DashboardPage() {
       {isLoading ? (
         <CardsSkeleton count={2} />
       ) : (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader>
-            <CardTitle>Recent projects</CardTitle>
-            <CardDescription>Latest projects in this workspace</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {projects.length === 0 ? (
-              <EmptyState
-                title="No projects yet"
-                description="Create your first project to get started."
-                icon={FolderKanban}
-                className="py-8"
-                action={
-                  <Button asChild size="sm" variant="outline">
-                    <Link href={`/${workspace}/projects`}>New project</Link>
-                  </Button>
-                }
-              />
-            ) : (
-              <ul className="flex flex-col">
-                {projects.slice(0, 6).map((project, index) => (
-                  <li key={String(project.id)}>
-                    {index > 0 && <Separator className="my-3" />}
-                    <div className="flex items-center justify-between gap-3">
-                      <div className="flex min-w-0 flex-col">
-                        <span className="truncate text-sm font-medium">
-                          {project.name}
-                        </span>
-                        {project.endDate ? (
-                          <span className="text-xs text-muted-foreground">
-                            due {formatDate(project.endDate)}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Card className="lg:col-span-2">
+            <CardHeader>
+              <CardTitle>Recent projects</CardTitle>
+              <CardDescription>Latest projects in this workspace</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {projects.length === 0 ? (
+                <EmptyState
+                  title="No projects yet"
+                  description="Create your first project to get started."
+                  icon={FolderKanban}
+                  className="py-8"
+                  action={
+                    <Button asChild size="sm" variant="outline">
+                      <Link href={`/${workspace}/projects`}>New project</Link>
+                    </Button>
+                  }
+                />
+              ) : (
+                <ul className="flex flex-col">
+                  {projects.slice(0, 6).map((project, index) => (
+                    <li key={String(project.id)}>
+                      {index > 0 && <Separator className="my-3" />}
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 flex-col">
+                          <span className="truncate text-sm font-medium">
+                            {project.name}
                           </span>
-                        ) : null}
+                          {project.endDate ? (
+                            <span className="text-xs text-muted-foreground">
+                              due {formatDate(project.endDate)}
+                            </span>
+                          ) : null}
+                        </div>
+                        {project.projectType && (
+                          <Badge
+                            variant={toneForType(project.projectType.id, projectTypes)}
+                          >
+                            {project.projectType.name}
+                          </Badge>
+                        )}
                       </div>
-                      <Badge
-                        variant={project.mode === "HubSpot" ? "warning" : "info"}
-                      >
-                        {project.mode}
-                      </Badge>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Projects by mode</CardTitle>
-            <CardDescription>Split across delivery modes</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            {MODES.map((mode) => (
-              <div key={mode} className="flex items-center justify-between">
-                <Badge variant={mode === "HubSpot" ? "warning" : "info"}>
-                  {mode}
-                </Badge>
-                <span className="text-sm font-medium">
-                  {projects.filter((p) => p.mode === mode).length}
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      </div>
+          <Card>
+            <CardHeader>
+              <CardTitle>Projects by type</CardTitle>
+              <CardDescription>Split across project types</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {projectTypes.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  No project types configured yet.
+                </p>
+              ) : (
+                projectTypes.map((type) => (
+                  <div
+                    key={String(type.id)}
+                    className="flex items-center justify-between"
+                  >
+                    <Badge variant={toneForType(String(type.id), projectTypes)}>
+                      {type.name}
+                    </Badge>
+                    <span className="text-sm font-medium">
+                      {projects.filter((p) => p.projectType?.id === type.id).length}
+                    </span>
+                  </div>
+                ))
+              )}
+            </CardContent>
+          </Card>
+        </div>
       )}
     </PageContainer>
   );

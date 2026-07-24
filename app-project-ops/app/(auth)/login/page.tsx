@@ -93,6 +93,7 @@ export default function LoginPage() {
         onSuccess: (data) => {
           setOtp("");
           setIsVerified(false);
+          verifyOtp.reset();
           setStep(data?.slug === CREATE_USER_SLUG ? "register" : "verify");
         },
         onError: (err) =>
@@ -122,6 +123,7 @@ export default function LoginPage() {
         onSuccess: () => {
           setOtp("");
           setIsVerified(false);
+          verifyOtp.reset();
           setStep("verify");
         },
         onError: (err) =>
@@ -146,10 +148,12 @@ export default function LoginPage() {
       {
         onSuccess: () => {
           /**
-           * Instead of navigating immediately, display the success state.
-           * The useEffect above will navigate after the animation completes.
+           * `verifyOtp.isSuccess` immediately drives the OtpInput's own
+           * wheel-spin → glowing-check animation (see `otpStatus` below).
+           * Delay flipping `isVerified` so that flourish gets to play
+           * before this view is replaced by the full success screen.
            */
-          setIsVerified(true);
+          window.setTimeout(() => setIsVerified(true), 750);
         },
         onError: (err) =>
           setError(messageFor(err, "That code didn't work. Try again.")),
@@ -158,6 +162,13 @@ export default function LoginPage() {
   }
 
   const isOtpError = Boolean(error);
+  const otpStatus = verifyOtp.isPending
+    ? "loading"
+    : verifyOtp.isSuccess
+      ? "success"
+      : isOtpError
+        ? "error"
+        : "idle";
 
   return (
     <div className="flex w-full max-w-sm flex-col gap-8">
@@ -466,22 +477,10 @@ export default function LoginPage() {
                         <span>Secure verification · {OTP_LENGTH} digits</span>
                       </div>
 
-                      {/* OTP Input */}
-                      <motion.div
-                        animate={
-                          isOtpError
-                            ? {
-                                x: [0, -7, 7, -5, 5, 0],
-                              }
-                            : {
-                                x: 0,
-                              }
-                        }
-                        transition={{
-                          duration: 0.4,
-                        }}
-                        className="flex justify-center"
-                      >
+                      {/* OTP Input — shake-on-error and the success
+                          wheel-spin/glow flourish are handled internally
+                          by OtpInput via the `status` prop. */}
+                      <div className="flex justify-center">
                         <OtpInput
                           value={otp}
                           onChange={(value) => {
@@ -495,12 +494,14 @@ export default function LoginPage() {
                           length={OTP_LENGTH}
                           invalid={Boolean(error)}
                           disabled={verifyOtp.isPending}
+                          status={otpStatus}
                           autoFocus
                           aria-label="Verification code digit"
                         />
-                      </motion.div>
+                      </div>
 
                       {/* OTP progress indicator */}
+                      {otpStatus !== "success" && (
                       <div className="flex items-center justify-center gap-1.5">
                         {Array.from({ length: OTP_LENGTH }).map((_, index) => {
                           const isFilled = index < otp.length;
@@ -528,6 +529,7 @@ export default function LoginPage() {
                           );
                         })}
                       </div>
+                      )}
                     </div>
                   </motion.div>
 
@@ -550,48 +552,53 @@ export default function LoginPage() {
                     ) : null}
                   </AnimatePresence>
 
-                  {/* Verify Button */}
-                  <motion.div
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.25 }}
-                  >
-                    <Button
-                      type="button"
-                      className="h-11 w-full shadow-sm transition-all duration-300"
-                      disabled={
-                        verifyOtp.isPending || otp.length !== OTP_LENGTH
-                      }
-                      onClick={() => verify(otp)}
-                    >
-                      {verifyOtp.isPending ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          <span>Verifying securely…</span>
-                        </>
-                      ) : (
-                        <>
-                          <ShieldCheck className="h-4 w-4" />
-                          <span>Verify and continue</span>
-                        </>
-                      )}
-                    </Button>
-                  </motion.div>
+                  {otpStatus !== "success" && (
+                    <>
+                      {/* Verify Button */}
+                      <motion.div
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.25 }}
+                      >
+                        <Button
+                          type="button"
+                          className="h-11 w-full shadow-sm transition-all duration-300"
+                          disabled={
+                            verifyOtp.isPending || otp.length !== OTP_LENGTH
+                          }
+                          onClick={() => verify(otp)}
+                        >
+                          {verifyOtp.isPending ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Verifying securely…</span>
+                            </>
+                          ) : (
+                            <>
+                              <ShieldCheck className="h-4 w-4" />
+                              <span>Verify and continue</span>
+                            </>
+                          )}
+                        </Button>
+                      </motion.div>
 
-                  {/* Change username */}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setStep("identify");
-                      setOtp("");
-                      setError(null);
-                      setIsVerified(false);
-                    }}
-                    className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                  >
-                    <ArrowLeft className="h-4 w-4" />
-                    Change user name
-                  </button>
+                      {/* Change username */}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStep("identify");
+                          setOtp("");
+                          setError(null);
+                          setIsVerified(false);
+                          verifyOtp.reset();
+                        }}
+                        className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                        Change user name
+                      </button>
+                    </>
+                  )}
                 </motion.div>
               ) : (
                 /* ======================================================== */

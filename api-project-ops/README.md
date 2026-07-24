@@ -205,20 +205,19 @@ Enforced at the service layer before create actions:
 
 ## Project creation side effects
 
-`POST /projects` requires a **`mode`** (`HubSpot` | `Dev`) and runs in a single
-transaction:
+`POST /projects` requires **`name`, `startDate`, `endDate`, `projectTypeId`** and
+**`planId`**, and runs in a single transaction:
 
-1. checks the plan `maxProjects` quota,
-2. creates the project,
-3. adds the creator as an active **Owner** `ProjectMember`,
-4. **only when `mode === HubSpot`:** attaches the **active plan's** default
-   (`isDefault`) modules as `ModuleInstance`s (carrying over `defaultTaskLimit`)
-   and seeds one task per instance named **`{Module Name} - 1`** (e.g.
-   `Pipeline - 1`) with the project's start/end dates and default ticket status.
-   Modules belong to a plan (`Module.planId`), so which modules get attached
-   depends on the workspace's active plan tier.
+1. creates the project (under the chosen project type + plan),
+2. adds the creator as an active **Owner** `ProjectMember`,
+3. **only when the project type's `isPlanAdd` is true:** checks the chosen plan's
+   `maxProjects` quota, then attaches that plan's default (`isDefault`) modules as
+   `ModuleInstance`s (carrying over `defaultTaskLimit`) and seeds one task per
+   instance named **`{Module Name} - 1`** (e.g. `Pipeline - 1`).
 
-`Dev` projects start empty (no auto modules/tasks).
+A project type with `isPlanAdd = false` produces a **bare project** — the plan
+quota check, module attachment and seed tasks are all skipped (the `planId` is
+still recorded on the project).
 
 ## API surface
 
@@ -229,6 +228,7 @@ transaction:
 | Workspaces        | `POST /workspaces`, `GET /workspaces/me`, `GET /workspaces/:id`                                   |
 | Workspace settings| `GET /workspace/settings` (aggregate config bundle)                                              |
 | Priorities        | `GET/POST /priorities`, `PATCH/DELETE /priorities/:id`                                            |
+| Project types     | `GET/POST /project-types`, `PATCH/DELETE /project-types/:id`                                      |
 | Workspace members | `GET/POST /workspace-members`, `PATCH/DELETE /workspace-members/:id`                              |
 | Roles             | `GET/POST /roles`, `PATCH/DELETE /roles/:id`                                                      |
 | Permissions       | `GET /permissions`                                                                                |

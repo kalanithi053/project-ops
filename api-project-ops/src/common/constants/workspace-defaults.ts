@@ -74,6 +74,30 @@ export const DEFAULT_PRIORITIES: Array<{
   { name: 'Urgent', color: '#ef4444', order: 3, isDefault: false },
 ];
 
+/**
+ * Default project types for a new workspace. `isPlanAdd` controls whether
+ * creating a project of this type provisions plan modules + seed tasks. The
+ * seeded plans (Professional/Ultimate/Enterprise) belong to the first isPlanAdd
+ * type.
+ */
+export const DEFAULT_PROJECT_TYPES: Array<{
+  name: string;
+  description: string;
+  isPlanAdd: boolean;
+}> = [
+  {
+    name: 'Standard',
+    description:
+      'Full setup — provisions the active plan modules and seed tasks',
+    isPlanAdd: true,
+  },
+  {
+    name: 'Blank',
+    description: 'Empty project — no modules or seed tasks',
+    isPlanAdd: false,
+  },
+];
+
 export interface PlanTemplate {
   name: string;
   maxProjects: number;
@@ -112,7 +136,7 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
     maxMembers: 100,
     maxTasksPerModule: 100,
     features: SHARED_PLAN_FEATURES,
-    isActive: false,
+    isActive: true,
   },
   {
     name: 'Enterprise',
@@ -120,6 +144,6 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
     maxMembers: 100,
     maxTasksPerModule: 100,
     features: SHARED_PLAN_FEATURES,
-    isActive: false,
+    isActive: true,
   },
 ];

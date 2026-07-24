@@ -1,10 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ProjectMode } from '@prisma/client';
 import {
   IsDateString,
-  IsEnum,
   IsOptional,
   IsString,
+  IsUUID,
   MaxLength,
   MinLength,
 } from 'class-validator';
@@ -16,28 +15,33 @@ export class CreateProjectDto {
   @MaxLength(120)
   name: string;
 
+  @ApiProperty({ example: '2026-01-01T00:00:00.000Z' })
+  @IsDateString()
+  startDate: string;
+
+  @ApiProperty({ example: '2026-03-31T00:00:00.000Z' })
+  @IsDateString()
+  endDate: string;
+
   @ApiProperty({
-    enum: ProjectMode,
-    example: ProjectMode.HubSpot,
     description:
-      'Is this project about HubSpot or Dev? HubSpot projects auto-provision default modules + seed tasks.',
+      'Project type to create. Its isPlanAdd flag decides whether plan modules + seed tasks are provisioned.',
   })
-  @IsEnum(ProjectMode)
-  mode: ProjectMode;
+  @IsUUID()
+  projectTypeId: string;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Plan the project is created under. If omitted, the active plan is used.',
+  })
+  @IsUUID()
+  @IsOptional()
+  planId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
   description?: string;
-
-  @ApiProperty({ required: false, example: '2026-01-01T00:00:00.000Z' })
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @ApiProperty({ required: false, example: '2026-03-31T00:00:00.000Z' })
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
 }

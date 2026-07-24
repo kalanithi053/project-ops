@@ -1,8 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service';
-import { PlansService } from '../plans/plans.service';
 import { PlanLimitException } from '../common/exceptions/plan-limit.exception';
+import { PlansService } from '../plans/plans.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 
@@ -21,25 +25,48 @@ export class ProjectsService {
    *   4. adds the creator as an active Owner ProjectMember.
    */
   async create(workspaceId: string, userId: string, dto: CreateProjectDto) {
-    const plan = await this.plans.getActivePlan(workspaceId);
-    const projectCount = await this.prisma.project.count({
-      where: { workspaceId, deletedAt: null },
+    // The chosen project type decides whether plan-based steps run.
+    const projectType = await this.prisma.projectType.findFirst({
+      where: { id: dto.projectTypeId, workspaceId },
     });
-    if (projectCount >= plan.maxProjects) {
-      throw new PlanLimitException(
-        `Project limit reached (${plan.maxProjects}). Upgrade your plan to add more.`,
-      );
+    const isExistingProject = await this.prisma.project.findMany({
+      where: { name: dto.name, workspaceId },
+    });
+    if (isExistingProject.length) {
+      throw new BadRequestException('Project name already exists');
+    }
+    if (!projectType) {
+      throw new BadRequestException('Project type not found in workspace');
     }
 
-    const startDate = dto.startDate ? new Date(dto.startDate) : null;
-    const endDate = dto.endDate ? new Date(dto.endDate) : null;
+    const plan = await this.plans.getPlan(workspaceId, dto?.planId);
+    // When the type provisions a plan, enforce the chosen plan's project quota.
+    if (projectType.isPlanAdd) {
+      if (!plan) {
+        throw new BadRequestException(
+          'Plan is required for this type of project',
+        );
+      }
+      const projectCount = await this.prisma.project.count({
+        where: { workspaceId, deletedAt: null },
+      });
+      if (projectCount >= plan.maxProjects) {
+        throw new PlanLimitException(
+          `Project limit reached (${plan.maxProjects}). Upgrade your plan to add more.`,
+        );
+      }
+    }
+
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
 
     return this.prisma.$transaction(async (tx) => {
       const project = await tx.project.create({
         data: {
           workspaceId,
           name: dto.name,
-          mode: dto.mode,
+          projectTypeId: projectType.id,
+          planId: plan?.id,
           description: dto.description,
           startDate,
           endDate,
@@ -68,9 +95,9 @@ export class ProjectsService {
         });
       }
 
-      // Only HubSpot projects auto-provision default modules + seed tasks.
-      // Dev projects start empty.
-      if (project.mode === 'HubSpot') {
+      // isPlanAdd types auto-provision the chosen plan's default modules + seed
+      // tasks; otherwise the project starts empty.
+      if (projectType.isPlanAdd) {
         await this.provisionDefaultModules(tx, {
           project,
           workspaceId,
@@ -84,6 +111,8 @@ export class ProjectsService {
       return tx.project.findUnique({
         where: { id: project.id },
         include: {
+          projectType: { select: { id: true, name: true, isPlanAdd: true } },
+          plan: { select: { id: true, name: true } },
           moduleInstances: { include: { module: true } },
           tasks: true,
           members: true,
@@ -132,19 +161,23 @@ export class ProjectsService {
           taskLimit: module.defaultTaskLimit,
         },
       });
-
-      await tx.task.create({
-        data: {
-          projectId: project.id,
-          moduleInstanceId: instance.id,
-          name: `${module.name} - 1`,
-          startDate,
-          dueDate: endDate,
-          statusId: defaultStatus?.id ?? null,
-          createdBy: userId,
-          position: 0,
+      Array.from({ length: module.defaultTaskLimit ?? 1 }).forEach(
+        async (_, index) => {
+          await tx.task.create({
+            data: {
+              projectId: project.id,
+              moduleInstanceId: instance.id,
+              prefix: `${module.name} - ${index + 1}`,
+              name: module.name,
+              startDate,
+              dueDate: endDate,
+              statusId: defaultStatus?.id ?? null,
+              createdBy: userId,
+              position: 0,
+            },
+          });
         },
-      });
+      );
     }
   }
 
@@ -152,7 +185,10 @@ export class ProjectsService {
     return this.prisma.project.findMany({
       where: { workspaceId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { tasks: true, members: true } } },
+      include: {
+        projectType: { select: { id: true, name: true, isPlanAdd: true } },
+        _count: { select: { tasks: true, members: true } },
+      },
     });
   }
 
@@ -160,8 +196,11 @@ export class ProjectsService {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, workspaceId, deletedAt: null },
       include: {
+        projectType: { select: { id: true, name: true, isPlanAdd: true } },
         moduleInstances: { include: { module: true } },
-        members: { include: { user: { select: { id: true, username: true } } } },
+        members: {
+          include: { user: { select: { id: true, username: true } } },
+        },
         _count: { select: { tasks: true } },
       },
     });

@@ -18,6 +18,7 @@ BEGIN;
 -- --- Clean slate (child tables dropped via CASCADE) ------------------------
 DROP TABLE IF EXISTS "task" CASCADE;
 DROP TABLE IF EXISTS "priority" CASCADE;
+DROP TABLE IF EXISTS "project_type" CASCADE;
 DROP TABLE IF EXISTS "module_instance" CASCADE;
 DROP TABLE IF EXISTS "module" CASCADE;
 DROP TABLE IF EXISTS "project_member" CASCADE;
@@ -34,7 +35,6 @@ DROP TABLE IF EXISTS "user" CASCADE;
 
 DROP TYPE IF EXISTS "membership_status";
 DROP TYPE IF EXISTS "status_category";
-DROP TYPE IF EXISTS "project_mode";
 
 -- CreateEnum
 CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
@@ -43,7 +43,6 @@ CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
 CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'ready_qa', 'review', 'done');
 
 -- CreateEnum
-CREATE TYPE "project_mode" AS ENUM ('HubSpot', 'Dev');
 
 -- CreateTable
 CREATE TABLE "user" (
@@ -129,6 +128,7 @@ CREATE TABLE "role_permission" (
 CREATE TABLE "plan" (
     "id" TEXT NOT NULL,
     "workspace_id" TEXT NOT NULL,
+    "project_type_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "max_projects" INTEGER NOT NULL DEFAULT 3,
     "max_members" INTEGER NOT NULL DEFAULT 5,
@@ -144,7 +144,8 @@ CREATE TABLE "project" (
     "id" TEXT NOT NULL,
     "workspace_id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
-    "mode" "project_mode" NOT NULL DEFAULT 'Dev',
+    "project_type_id" TEXT,
+    "plan_id" TEXT,
     "description" TEXT,
     "start_date" TIMESTAMP(3),
     "end_date" TIMESTAMP(3),
@@ -200,6 +201,7 @@ CREATE TABLE "task" (
     "project_id" TEXT NOT NULL,
     "module_instance_id" TEXT,
     "name" TEXT NOT NULL,
+    "prefix" TEXT,
     "description" TEXT,
     "start_date" TIMESTAMP(3),
     "due_date" TIMESTAMP(3),
@@ -238,6 +240,17 @@ CREATE TABLE "priority" (
     "is_default" BOOLEAN NOT NULL DEFAULT false,
 
     CONSTRAINT "priority_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "project_type" (
+    "id" TEXT NOT NULL,
+    "workspace_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "description" TEXT,
+    "is_plan_add" BOOLEAN NOT NULL DEFAULT true,
+
+    CONSTRAINT "project_type_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -286,10 +299,25 @@ CREATE INDEX "plan_workspace_id_idx" ON "plan"("workspace_id");
 CREATE INDEX "plan_workspace_id_is_active_idx" ON "plan"("workspace_id", "is_active");
 
 -- CreateIndex
+CREATE INDEX "plan_project_type_id_idx" ON "plan"("project_type_id");
+
+-- CreateIndex
 CREATE INDEX "project_workspace_id_idx" ON "project"("workspace_id");
 
 -- CreateIndex
 CREATE INDEX "project_owner_id_idx" ON "project"("owner_id");
+
+-- CreateIndex
+CREATE INDEX "project_project_type_id_idx" ON "project"("project_type_id");
+
+-- CreateIndex
+CREATE INDEX "project_plan_id_idx" ON "project"("plan_id");
+
+-- CreateIndex
+CREATE INDEX "project_type_workspace_id_idx" ON "project_type"("workspace_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "project_type_workspace_id_name_key" ON "project_type"("workspace_id", "name");
 
 -- CreateIndex
 CREATE INDEX "project_member_user_id_idx" ON "project_member"("user_id");
@@ -367,10 +395,22 @@ ALTER TABLE "role_permission" ADD CONSTRAINT "role_permission_permission_id_fkey
 ALTER TABLE "plan" ADD CONSTRAINT "plan_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "plan" ADD CONSTRAINT "plan_project_type_id_fkey" FOREIGN KEY ("project_type_id") REFERENCES "project_type"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "project" ADD CONSTRAINT "project_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "project" ADD CONSTRAINT "project_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project" ADD CONSTRAINT "project_plan_id_fkey" FOREIGN KEY ("plan_id") REFERENCES "plan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project" ADD CONSTRAINT "project_project_type_id_fkey" FOREIGN KEY ("project_type_id") REFERENCES "project_type"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "project_type" ADD CONSTRAINT "project_type_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "project_member" ADD CONSTRAINT "project_member_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "project"("id") ON DELETE CASCADE ON UPDATE CASCADE;

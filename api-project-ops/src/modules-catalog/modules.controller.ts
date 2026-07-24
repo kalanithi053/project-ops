@@ -6,9 +6,15 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
@@ -26,9 +32,13 @@ export class ModulesController {
   constructor(private readonly modules: ModulesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List workspace modules' })
-  list(@CurrentWorkspace('workspaceId') workspaceId: string) {
-    return this.modules.list(workspaceId);
+  @ApiOperation({ summary: 'List workspace modules (optionally filtered by plan)' })
+  @ApiQuery({ name: 'planId', required: false })
+  list(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Query('planId') planId?: string,
+  ) {
+    return this.modules.list(workspaceId, planId);
   }
 
   @Post()

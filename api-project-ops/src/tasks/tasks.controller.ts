@@ -31,15 +31,18 @@ export class TasksController {
   @ApiOperation({ summary: 'List tasks in a project' })
   @ApiQuery({ name: 'moduleInstanceId', required: false })
   @ApiQuery({ name: 'statusId', required: false })
+  @ApiQuery({ name: 'priorityId', required: false })
   list(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
     @Query('moduleInstanceId') moduleInstanceId?: string,
     @Query('statusId') statusId?: string,
+    @Query('priorityId') priorityId?: string,
   ) {
     return this.tasks.list(workspaceId, projectId, {
       moduleInstanceId,
       statusId,
+      priorityId,
     });
   }
 

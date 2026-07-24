@@ -19,6 +19,7 @@ export const PERMISSIONS = {
   ROLE_MANAGE: 'role.manage',
   MODULE_MANAGE: 'module.manage',
   TICKETSTATUS_MANAGE: 'ticketstatus.manage',
+  PRIORITY_MANAGE: 'priority.manage',
   PLAN_MANAGE: 'plan.manage',
   PERMISSION_READ: 'permission.read',
   WORKSPACE_MANAGE: 'workspace.manage',
@@ -49,6 +50,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     code: PERMISSIONS.TICKETSTATUS_MANAGE,
     description: 'Manage ticket statuses',
   },
+  { code: PERMISSIONS.PRIORITY_MANAGE, description: 'Manage priorities' },
   { code: PERMISSIONS.PLAN_MANAGE, description: 'Manage the workspace plan' },
   { code: PERMISSIONS.PERMISSION_READ, description: 'View the permission catalog' },
   {
@@ -95,6 +97,7 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.ROLE_MANAGE,
       PERMISSIONS.MODULE_MANAGE,
       PERMISSIONS.TICKETSTATUS_MANAGE,
+      PERMISSIONS.PRIORITY_MANAGE,
       PERMISSIONS.PERMISSION_READ,
     ],
   },

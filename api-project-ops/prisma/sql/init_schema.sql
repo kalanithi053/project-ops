@@ -17,6 +17,7 @@ BEGIN;
 
 -- --- Clean slate (child tables dropped via CASCADE) ------------------------
 DROP TABLE IF EXISTS "task" CASCADE;
+DROP TABLE IF EXISTS "priority" CASCADE;
 DROP TABLE IF EXISTS "module_instance" CASCADE;
 DROP TABLE IF EXISTS "module" CASCADE;
 DROP TABLE IF EXISTS "project_member" CASCADE;
@@ -172,6 +173,7 @@ CREATE TABLE "project_member" (
 CREATE TABLE "module" (
     "id" TEXT NOT NULL,
     "workspace_id" TEXT NOT NULL,
+    "plan_id" TEXT NOT NULL,
     "key" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "default_task_limit" INTEGER NOT NULL DEFAULT 10,
@@ -202,6 +204,7 @@ CREATE TABLE "task" (
     "start_date" TIMESTAMP(3),
     "due_date" TIMESTAMP(3),
     "status_id" TEXT,
+    "priority_id" TEXT,
     "assignee_id" TEXT,
     "created_by" TEXT NOT NULL,
     "position" INTEGER NOT NULL DEFAULT 0,
@@ -223,6 +226,18 @@ CREATE TABLE "ticket_status" (
     "category" "status_category" NOT NULL DEFAULT 'todo',
 
     CONSTRAINT "ticket_status_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "priority" (
+    "id" TEXT NOT NULL,
+    "workspace_id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "color" TEXT,
+    "order" INTEGER NOT NULL DEFAULT 0,
+    "is_default" BOOLEAN NOT NULL DEFAULT false,
+
+    CONSTRAINT "priority_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateIndex
@@ -289,7 +304,10 @@ CREATE UNIQUE INDEX "project_member_project_id_user_id_key" ON "project_member"(
 CREATE INDEX "module_workspace_id_idx" ON "module"("workspace_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "module_workspace_id_key_key" ON "module"("workspace_id", "key");
+CREATE INDEX "module_plan_id_idx" ON "module"("plan_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "module_plan_id_key_key" ON "module"("plan_id", "key");
 
 -- CreateIndex
 CREATE INDEX "module_instance_project_id_idx" ON "module_instance"("project_id");
@@ -307,10 +325,19 @@ CREATE INDEX "task_module_instance_id_idx" ON "task"("module_instance_id");
 CREATE INDEX "task_status_id_idx" ON "task"("status_id");
 
 -- CreateIndex
+CREATE INDEX "task_priority_id_idx" ON "task"("priority_id");
+
+-- CreateIndex
 CREATE INDEX "ticket_status_workspace_id_idx" ON "ticket_status"("workspace_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "ticket_status_workspace_id_name_key" ON "ticket_status"("workspace_id", "name");
+
+-- CreateIndex
+CREATE INDEX "priority_workspace_id_idx" ON "priority"("workspace_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "priority_workspace_id_name_key" ON "priority"("workspace_id", "name");
 
 -- AddForeignKey
 ALTER TABLE "workspace" ADD CONSTRAINT "workspace_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -358,6 +385,9 @@ ALTER TABLE "project_member" ADD CONSTRAINT "project_member_role_id_fkey" FOREIG
 ALTER TABLE "module" ADD CONSTRAINT "module_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "module" ADD CONSTRAINT "module_plan_id_fkey" FOREIGN KEY ("plan_id") REFERENCES "plan"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "module_instance" ADD CONSTRAINT "module_instance_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -380,5 +410,11 @@ ALTER TABLE "task" ADD CONSTRAINT "task_created_by_fkey" FOREIGN KEY ("created_b
 
 -- AddForeignKey
 ALTER TABLE "ticket_status" ADD CONSTRAINT "ticket_status_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "task" ADD CONSTRAINT "task_priority_id_fkey" FOREIGN KEY ("priority_id") REFERENCES "priority"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "priority" ADD CONSTRAINT "priority_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 COMMIT;

@@ -25,7 +25,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
   category: StatusCategory;
 }> = [
   {
-    name: 'Backlog',
+    name: 'Open',
     color: '#94a3b8',
     order: 0,
     isDefault: true,
@@ -59,6 +59,19 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     isDefault: false,
     category: 'done',
   },
+];
+
+/** Default priority list for a new workspace. */
+export const DEFAULT_PRIORITIES: Array<{
+  name: string;
+  color: string;
+  order: number;
+  isDefault: boolean;
+}> = [
+  { name: 'Low', color: '#94a3b8', order: 0, isDefault: false },
+  { name: 'Medium', color: '#3b82f6', order: 1, isDefault: true },
+  { name: 'High', color: '#f59e0b', order: 2, isDefault: false },
+  { name: 'Urgent', color: '#ef4444', order: 3, isDefault: false },
 ];
 
 export interface PlanTemplate {
@@ -99,7 +112,7 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
     maxMembers: 100,
     maxTasksPerModule: 100,
     features: SHARED_PLAN_FEATURES,
-    isActive: true,
+    isActive: false,
   },
   {
     name: 'Enterprise',
@@ -107,6 +120,6 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
     maxMembers: 100,
     maxTasksPerModule: 100,
     features: SHARED_PLAN_FEATURES,
-    isActive: true,
+    isActive: false,
   },
 ];

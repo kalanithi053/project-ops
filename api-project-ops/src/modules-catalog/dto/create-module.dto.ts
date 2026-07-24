@@ -4,12 +4,17 @@ import {
   IsInt,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   Min,
 } from 'class-validator';
 
 export class CreateModuleDto {
+  @ApiProperty({ description: 'Plan this module belongs to' })
+  @IsUUID()
+  planId: string;
+
   @ApiProperty({ example: 'pipeline', description: 'Stable machine key' })
   @IsString()
   @MaxLength(50)

@@ -108,6 +108,7 @@ model Workspace {
   projects       Project[]
   modules        Module[]
   ticketStatuses TicketStatus[]
+  priorities     Priority[]
 
   @@index([ownerId])
   @@map("workspace")
@@ -193,6 +194,7 @@ model Plan {
   isActive          Boolean @default(true) @map("is_active")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  modules   Module[]
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
@@ -253,6 +255,7 @@ model ProjectMember {
 model Module {
   id               String  @id @default(uuid())
   workspaceId      String  @map("workspace_id")
+  planId           String  @map("plan_id")
   key              String
   name             String
   defaultTaskLimit Int     @default(10) @map("default_task_limit")
@@ -260,10 +263,13 @@ model Module {
   isActive         Boolean @default(true) @map("is_active")
 
   workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan      Plan             @relation(fields: [planId], references: [id], onDelete: Cascade)
   instances ModuleInstance[]
 
-  @@unique([workspaceId, key])
+  // A module belongs to a plan; the same key may exist under different plans.
+  @@unique([planId, key])
   @@index([workspaceId])
+  @@index([planId])
   @@map("module")
 }
 
@@ -296,6 +302,7 @@ model Task {
   startDate        DateTime? @map("start_date")
   dueDate          DateTime? @map("due_date")
   statusId         String?   @map("status_id")
+  priorityId       String?   @map("priority_id")
   assigneeId       String?   @map("assignee_id")
   createdBy        String    @map("created_by")
   position         Int       @default(0)
@@ -306,13 +313,35 @@ model Task {
   project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
   moduleInstance ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
   status         TicketStatus?   @relation(fields: [statusId], references: [id])
+  priority       Priority?       @relation(fields: [priorityId], references: [id])
   assignee       User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
   creator        User            @relation("TaskCreator", fields: [createdBy], references: [id])
 
   @@index([projectId])
   @@index([moduleInstanceId])
   @@index([statusId])
+  @@index([priorityId])
   @@map("task")
+}
+
+// ---------------------------------------------------------------------------
+// Priorities (per workspace, configurable list)
+// ---------------------------------------------------------------------------
+
+model Priority {
+  id          String  @id @default(uuid())
+  workspaceId String  @map("workspace_id")
+  name        String
+  color       String?
+  order       Int     @default(0)
+  isDefault   Boolean @default(false) @map("is_default")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tasks     Task[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@map("priority")
 }
 
 // ---------------------------------------------------------------------------

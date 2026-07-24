@@ -15,7 +15,7 @@ export class TasksService {
   async list(
     workspaceId: string,
     projectId: string,
-    filters: { moduleInstanceId?: string; statusId?: string },
+    filters: { moduleInstanceId?: string; statusId?: string; priorityId?: string },
   ) {
     await this.assertProject(workspaceId, projectId);
     return this.prisma.task.findMany({
@@ -24,10 +24,12 @@ export class TasksService {
         deletedAt: null,
         moduleInstanceId: filters.moduleInstanceId ?? undefined,
         statusId: filters.statusId ?? undefined,
+        priorityId: filters.priorityId ?? undefined,
       },
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
       include: {
         status: { select: { id: true, name: true, category: true } },
+        priority: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, username: true } },
       },
     });
@@ -45,6 +47,7 @@ export class TasksService {
       await this.assertInstanceCapacity(projectId, dto.moduleInstanceId);
     }
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
+    if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
 
     const position = dto.position ?? (await this.nextPosition(projectId));
@@ -58,6 +61,7 @@ export class TasksService {
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         statusId: dto.statusId ?? null,
+        priorityId: dto.priorityId ?? null,
         assigneeId: dto.assigneeId ?? null,
         createdBy: userId,
         position,
@@ -86,6 +90,7 @@ export class TasksService {
       await this.assertInstanceCapacity(projectId, dto.moduleInstanceId);
     }
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
+    if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
 
     return this.prisma.task.update({
@@ -97,6 +102,7 @@ export class TasksService {
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         statusId: dto.statusId ?? undefined,
+        priorityId: dto.priorityId ?? undefined,
         assigneeId: dto.assigneeId ?? undefined,
         position: dto.position ?? undefined,
       },
@@ -150,6 +156,15 @@ export class TasksService {
     if (!status) throw new BadRequestException('Status not found in workspace');
   }
 
+  private async assertPriority(workspaceId: string, priorityId: string) {
+    const priority = await this.prisma.priority.findFirst({
+      where: { id: priorityId, workspaceId },
+    });
+    if (!priority) {
+      throw new BadRequestException('Priority not found in workspace');
+    }
+  }
+
   private async assertAssignee(workspaceId: string, userId: string) {
     const member = await this.prisma.workspaceMember.findFirst({
       where: { workspaceId, userId, status: { not: 'removed' } },
@@ -178,6 +193,7 @@ export class TasksService {
       where: { id: taskId, projectId, deletedAt: null },
       include: {
         status: { select: { id: true, name: true, category: true } },
+        priority: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, username: true } },
       },
     });

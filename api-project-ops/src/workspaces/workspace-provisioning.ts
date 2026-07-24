@@ -5,6 +5,7 @@ import {
 } from '../common/constants/permissions';
 import {
   DEFAULT_MODULES,
+  DEFAULT_PRIORITIES,
   DEFAULT_TICKET_STATUSES,
   PLAN_TEMPLATES,
 } from '../common/constants/workspace-defaults';
@@ -70,19 +71,42 @@ export async function provisionWorkspaceDefaults(
     }
   }
 
-  // 3. Modules catalog
-  await tx.module.createMany({
-    data: DEFAULT_MODULES.map((m) => ({
+  // 3. Plan catalog (Professional/Ultimate/Enterprise). Exactly one is active.
+  //    Created before modules because each module belongs to a plan.
+  await tx.plan.createMany({
+    data: PLAN_TEMPLATES.map((plan) => ({
       workspaceId,
-      key: m.key,
-      name: m.name,
-      defaultTaskLimit: m.defaultTaskLimit,
-      isDefault: m.isDefault,
+      name: plan.name,
+      maxProjects: plan.maxProjects,
+      maxMembers: plan.maxMembers,
+      maxTasksPerModule: plan.maxTasksPerModule,
+      features: plan.features as Prisma.InputJsonValue,
+      isActive: plan.isActive,
     })),
+  });
+
+  const plans = await tx.plan.findMany({
+    where: { workspaceId },
+    select: { id: true },
+  });
+
+  // 4. Modules catalog — the default modules are seeded per plan, so each tier
+  //    starts with the same set but can diverge independently.
+  await tx.module.createMany({
+    data: plans.flatMap((plan) =>
+      DEFAULT_MODULES.map((m) => ({
+        workspaceId,
+        planId: plan.id,
+        key: m.key,
+        name: m.name,
+        defaultTaskLimit: m.defaultTaskLimit,
+        isDefault: m.isDefault,
+      })),
+    ),
     skipDuplicates: true,
   });
 
-  // 4. Ticket statuses
+  // 5. Ticket statuses
   await tx.ticketStatus.createMany({
     data: DEFAULT_TICKET_STATUSES.map((s) => ({
       workspaceId,
@@ -95,17 +119,16 @@ export async function provisionWorkspaceDefaults(
     skipDuplicates: true,
   });
 
-  // 5. Plan catalog (Professional/Ultimate/Enterprise). Exactly one is active.
-  await tx.plan.createMany({
-    data: PLAN_TEMPLATES.map((plan) => ({
+  // 6. Priorities
+  await tx.priority.createMany({
+    data: DEFAULT_PRIORITIES.map((p) => ({
       workspaceId,
-      name: plan.name,
-      maxProjects: plan.maxProjects,
-      maxMembers: plan.maxMembers,
-      maxTasksPerModule: plan.maxTasksPerModule,
-      features: plan.features as Prisma.InputJsonValue,
-      isActive: plan.isActive,
+      name: p.name,
+      color: p.color,
+      order: p.order,
+      isDefault: p.isDefault,
     })),
+    skipDuplicates: true,
   });
 
   return { roleIdsByName, ownerRoleId, defaultRoleId };

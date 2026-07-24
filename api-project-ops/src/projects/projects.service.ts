@@ -74,6 +74,7 @@ export class ProjectsService {
         await this.provisionDefaultModules(tx, {
           project,
           workspaceId,
+          planId: plan.id,
           userId,
           startDate,
           endDate,
@@ -91,18 +92,22 @@ export class ProjectsService {
     });
   }
 
-  /** Attaches the workspace's default modules to a project and seeds one task each. */
+  /**
+   * Attaches the active plan's default modules to a project and seeds one task
+   * each. Which modules get attached depends on the workspace's active plan.
+   */
   private async provisionDefaultModules(
     tx: Prisma.TransactionClient,
     ctx: {
       project: { id: string };
       workspaceId: string;
+      planId: string;
       userId: string;
       startDate: Date | null;
       endDate: Date | null;
     },
   ) {
-    const { project, workspaceId, userId, startDate, endDate } = ctx;
+    const { project, workspaceId, planId, userId, startDate, endDate } = ctx;
 
     // Default workspace ticket status for seed tasks.
     const defaultStatus =
@@ -114,8 +119,9 @@ export class ProjectsService {
         orderBy: { order: 'asc' },
       }));
 
+    // Only the active plan's default modules.
     const defaultModules = await tx.module.findMany({
-      where: { workspaceId, isDefault: true, isActive: true },
+      where: { workspaceId, planId, isDefault: true, isActive: true },
     });
 
     for (const module of defaultModules) {

@@ -46,6 +46,11 @@ export class CreateTaskDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsUUID()
+  priorityId?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  @IsUUID()
   assigneeId?: string;
 
   @ApiProperty({ required: false, minimum: 0 })

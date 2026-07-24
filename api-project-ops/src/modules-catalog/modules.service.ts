@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -7,28 +8,35 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateModuleDto } from './dto/create-module.dto';
 import { UpdateModuleDto } from './dto/update-module.dto';
 
-/** CRUD over the per-workspace module catalog. */
+/** CRUD over the per-workspace, per-plan module catalog. */
 @Injectable()
 export class ModulesService {
   constructor(private readonly prisma: PrismaService) {}
 
-  list(workspaceId: string) {
+  /** Lists modules, optionally scoped to a single plan. */
+  list(workspaceId: string, planId?: string) {
     return this.prisma.module.findMany({
-      where: { workspaceId },
-      orderBy: { name: 'asc' },
+      where: { workspaceId, planId: planId ?? undefined },
+      orderBy: [{ planId: 'asc' }, { name: 'asc' }],
+      include: { plan: { select: { id: true, name: true } } },
     });
   }
 
   async create(workspaceId: string, dto: CreateModuleDto) {
+    await this.assertPlan(workspaceId, dto.planId);
+
     const existing = await this.prisma.module.findFirst({
-      where: { workspaceId, key: dto.key },
+      where: { planId: dto.planId, key: dto.key },
     });
     if (existing) {
-      throw new ConflictException(`A module with key "${dto.key}" already exists.`);
+      throw new ConflictException(
+        `A module with key "${dto.key}" already exists in this plan.`,
+      );
     }
     return this.prisma.module.create({
       data: {
         workspaceId,
+        planId: dto.planId,
         key: dto.key,
         name: dto.name,
         defaultTaskLimit: dto.defaultTaskLimit ?? 10,
@@ -71,5 +79,13 @@ export class ModulesService {
     });
     if (!module) throw new NotFoundException('Module not found');
     return module;
+  }
+
+  private async assertPlan(workspaceId: string, planId: string) {
+    const plan = await this.prisma.plan.findFirst({
+      where: { id: planId, workspaceId },
+    });
+    if (!plan) throw new BadRequestException('Plan not found in workspace');
+    return plan;
   }
 }

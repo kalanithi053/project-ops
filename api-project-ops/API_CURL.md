@@ -51,17 +51,43 @@ curl -s -X POST "$BASE/auth/token/refresh" \
   -d '{"refreshToken":"<refreshToken>"}'
 ```
 
+## workspace settings (Bearer + x-workspace-slug)
+
+```bash
+# Full workspace config bundle: details, plans (with modules), ticket statuses,
+# priorities, roles (with permissions) and the permission catalog.
+curl -s "$BASE/workspace/settings" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## my permissions (Bearer + x-workspace-slug)
+
+```bash
+# Permissions allowed to the current user in the active workspace (workspace role)
+curl -s "$BASE/workspace/permission" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Permissions allowed to the current user for a specific project (project role).
+# Returns { isMember, role, permissions[] }; isMember=false + [] if not on the project.
+curl -s "$BASE/project/<projectId>/permission" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
 ## users (Bearer)
 
 ```bash
-# Get my profile
+# Get my profile. Without the workspace header: { workspace: null, permissions: [] }.
 curl -s "$BASE/users/me" -H "Authorization: Bearer $TOKEN"
+
+# With x-workspace-slug: also returns the active workspace, my role in it, and my permission codes.
+curl -s "$BASE/users/me" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
 # Update my profile
 curl -s -X PATCH "$BASE/users/me" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"email":"jane@acme.com","phone":"+15551234567"}'
+  -d '{"firstName":"Jane","lastName":"Doe","email":"jane@acme.com"}'
 ```
 
 ## workspaces (Bearer — no slug header needed)
@@ -169,16 +195,16 @@ curl -s -X PATCH "$BASE/plans/active" \
 ## modules (Bearer + x-workspace-slug)
 
 ```bash
-# List modules
-curl -s "$BASE/modules" \
+# List modules (optionally filter by plan)
+curl -s "$BASE/modules?planId=<planId>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Create a module
+# Create a module — planId is required (a module belongs to a plan)
 curl -s -X POST "$BASE/modules" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"key":"pipeline","name":"Pipeline","defaultTaskLimit":10,"isDefault":false,"isActive":true}'
+  -d '{"planId":"<planId>","key":"pipeline","name":"Pipeline","defaultTaskLimit":10,"isDefault":false,"isActive":true}'
 
 # Update a module (key is immutable)
 curl -s -X PATCH "$BASE/modules/<moduleId>" \
@@ -199,12 +225,12 @@ curl -s -X DELETE "$BASE/modules/<moduleId>" \
 curl -s "$BASE/ticket-statuses" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Create a ticket status  (category: todo|in_progress|done)
+# Create a ticket status  (category: todo|in_progress|ready_qa|review|done)
 curl -s -X POST "$BASE/ticket-statuses" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"In Review","color":"#f59e0b","order":2,"category":"in_progress","isDefault":false}'
+  -d '{"name":"In Review","color":"#f59e0b","order":2,"category":"review","isDefault":false}'
 
 # Update a ticket status
 curl -s -X PATCH "$BASE/ticket-statuses/<id>" \
@@ -215,6 +241,32 @@ curl -s -X PATCH "$BASE/ticket-statuses/<id>" \
 
 # Delete a ticket status
 curl -s -X DELETE "$BASE/ticket-statuses/<id>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## priorities (Bearer + x-workspace-slug)
+
+```bash
+# List priorities
+curl -s "$BASE/priorities" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Create a priority
+curl -s -X POST "$BASE/priorities" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Critical","color":"#7c3aed","order":4,"isDefault":false}'
+
+# Update a priority
+curl -s -X PATCH "$BASE/priorities/<id>" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Blocker","order":5}'
+
+# Delete a priority
+curl -s -X DELETE "$BASE/priorities/<id>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```
 
@@ -304,8 +356,8 @@ curl -s -X DELETE "$BASE/projects/<projectId>/modules/<instanceId>" \
 ## tasks (Bearer + x-workspace-slug)
 
 ```bash
-# List tasks (optional filters: moduleInstanceId, statusId)
-curl -s "$BASE/projects/<projectId>/tasks?moduleInstanceId=<id>&statusId=<id>" \
+# List tasks (optional filters: moduleInstanceId, statusId, priorityId)
+curl -s "$BASE/projects/<projectId>/tasks?moduleInstanceId=<id>&statusId=<id>&priorityId=<id>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
 # Create a task (enforces module task limit)
@@ -313,7 +365,7 @@ curl -s -X POST "$BASE/projects/<projectId>/tasks" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Design landing page","description":"hero + CTA","moduleInstanceId":"<id>","startDate":"2026-01-05T00:00:00.000Z","dueDate":"2026-01-12T00:00:00.000Z","statusId":"<id>","assigneeId":"<userId>","position":0}'
+  -d '{"name":"Design landing page","description":"hero + CTA","moduleInstanceId":"<id>","startDate":"2026-01-05T00:00:00.000Z","dueDate":"2026-01-12T00:00:00.000Z","statusId":"<id>","priorityId":"<id>","assigneeId":"<userId>","position":0}'
 
 # Get a task
 curl -s "$BASE/projects/<projectId>/tasks/<taskId>" \
@@ -324,7 +376,7 @@ curl -s -X PATCH "$BASE/projects/<projectId>/tasks/<taskId>" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Design landing page v2","statusId":"<id>"}'
+  -d '{"name":"Design landing page v2","statusId":"<id>","priorityId":"<id>"}'
 
 # Soft-delete a task
 curl -s -X DELETE "$BASE/projects/<projectId>/tasks/<taskId>" \

@@ -112,10 +112,11 @@ npm run prisma:studio
 ```
 
 The **seed** creates a demo user `demo.owner`, a `Demo Workspace`, the four default
-roles (Owner/Admin/Member/Viewer) with permissions, the module catalog
-(Pipeline → limit 10, Custom Properties → limit 20), the ticket pipeline
-(Backlog/In Progress/Ready for QA/Review/Done) and the plan catalog
-(Professional/Ultimate/Enterprise, with **Professional** active). It is idempotent.
+roles (Owner/Admin/Member/Viewer) with permissions, the plan catalog
+(Professional/Ultimate/Enterprise, with **Professional** active), the module
+catalog **per plan** (Pipeline → limit 10, Custom Properties → limit 20 under each
+tier), and the ticket pipeline (Backlog/In Progress/Ready for QA/Review/Done).
+It is idempotent.
 
 ## Running
 
@@ -210,10 +211,12 @@ transaction:
 1. checks the plan `maxProjects` quota,
 2. creates the project,
 3. adds the creator as an active **Owner** `ProjectMember`,
-4. **only when `mode === HubSpot`:** attaches every default (`isDefault`) workspace
-   module as a `ModuleInstance` (carrying over `defaultTaskLimit`) and seeds one
-   task per instance named **`{Module Name} - 1`** (e.g. `Pipeline - 1`) with the
-   project's start/end dates and the workspace default ticket status.
+4. **only when `mode === HubSpot`:** attaches the **active plan's** default
+   (`isDefault`) modules as `ModuleInstance`s (carrying over `defaultTaskLimit`)
+   and seeds one task per instance named **`{Module Name} - 1`** (e.g.
+   `Pipeline - 1`) with the project's start/end dates and default ticket status.
+   Modules belong to a plan (`Module.planId`), so which modules get attached
+   depends on the workspace's active plan tier.
 
 `Dev` projects start empty (no auto modules/tasks).
 
@@ -224,6 +227,8 @@ transaction:
 | Auth              | `POST /auth/otp/request`, `/auth/register`, `/auth/otp/verify`, `/auth/token/refresh`            |
 | Users             | `GET/PATCH /users/me`                                                                             |
 | Workspaces        | `POST /workspaces`, `GET /workspaces/me`, `GET /workspaces/:id`                                   |
+| Workspace settings| `GET /workspace/settings` (aggregate config bundle)                                              |
+| Priorities        | `GET/POST /priorities`, `PATCH/DELETE /priorities/:id`                                            |
 | Workspace members | `GET/POST /workspace-members`, `PATCH/DELETE /workspace-members/:id`                              |
 | Roles             | `GET/POST /roles`, `PATCH/DELETE /roles/:id`                                                      |
 | Permissions       | `GET /permissions`                                                                                |

@@ -15,6 +15,9 @@ import { ProjectMembersModule } from './project-members/project-members.module';
 import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TicketStatusModule } from './ticket-status/ticket-status.module';
+import { PrioritiesModule } from './priorities/priorities.module';
+import { SettingsModule } from './settings/settings.module';
+import { AccessModule } from './access/access.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -34,6 +37,9 @@ import { AppService } from './app.service';
     ModulesCatalogModule,
     TasksModule,
     TicketStatusModule,
+    PrioritiesModule,
+    SettingsModule,
+    AccessModule,
   ],
   controllers: [AppController],
   providers: [

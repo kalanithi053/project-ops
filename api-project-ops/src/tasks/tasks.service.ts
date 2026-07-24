@@ -57,6 +57,7 @@ export class TasksService {
         projectId,
         moduleInstanceId: dto.moduleInstanceId ?? null,
         name: dto.name,
+        prefix: dto.prefix ?? null,
         description: dto.description,
         startDate: dto.startDate ? new Date(dto.startDate) : null,
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
@@ -97,6 +98,7 @@ export class TasksService {
       where: { id: taskId },
       data: {
         name: dto.name ?? undefined,
+        prefix: dto.prefix ?? undefined,
         description: dto.description ?? undefined,
         moduleInstanceId: dto.moduleInstanceId ?? undefined,
         startDate: dto.startDate ? new Date(dto.startDate) : undefined,

@@ -17,6 +17,16 @@ export class CreateTaskDto {
   @MaxLength(200)
   name: string;
 
+  @ApiProperty({
+    required: false,
+    example: 'Pipeline',
+    description: 'Name prefix (e.g. the module name the task belongs to)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  prefix?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

@@ -6,6 +6,7 @@ import {
 import {
   DEFAULT_MODULES,
   DEFAULT_PRIORITIES,
+  DEFAULT_PROJECT_TYPES,
   DEFAULT_TICKET_STATUSES,
   PLAN_TEMPLATES,
 } from '../common/constants/workspace-defaults';
@@ -71,11 +72,30 @@ export async function provisionWorkspaceDefaults(
     }
   }
 
-  // 3. Plan catalog (Professional/Ultimate/Enterprise). Exactly one is active.
-  //    Created before modules because each module belongs to a plan.
+  // 3. Project types. Created before plans because every plan belongs to one.
+  await tx.projectType.createMany({
+    data: DEFAULT_PROJECT_TYPES.map((t) => ({
+      workspaceId,
+      name: t.name,
+      description: t.description,
+      isPlanAdd: t.isPlanAdd,
+    })),
+    skipDuplicates: true,
+  });
+
+  const projectTypes = await tx.projectType.findMany({
+    where: { workspaceId },
+    select: { id: true, isPlanAdd: true },
+  });
+  // Seeded plans belong to the first plan-adding project type.
+  const planProjectTypeId =
+    projectTypes.find((t) => t.isPlanAdd)?.id ?? projectTypes[0]?.id;
+
+  // 4. Plan catalog (Professional/Ultimate/Enterprise). Exactly one is active.
   await tx.plan.createMany({
     data: PLAN_TEMPLATES.map((plan) => ({
       workspaceId,
+      projectTypeId: planProjectTypeId,
       name: plan.name,
       maxProjects: plan.maxProjects,
       maxMembers: plan.maxMembers,
@@ -90,7 +110,7 @@ export async function provisionWorkspaceDefaults(
     select: { id: true },
   });
 
-  // 4. Modules catalog — the default modules are seeded per plan, so each tier
+  // 5. Modules catalog — the default modules are seeded per plan, so each tier
   //    starts with the same set but can diverge independently.
   await tx.module.createMany({
     data: plans.flatMap((plan) =>
@@ -106,7 +126,7 @@ export async function provisionWorkspaceDefaults(
     skipDuplicates: true,
   });
 
-  // 5. Ticket statuses
+  // 6. Ticket statuses
   await tx.ticketStatus.createMany({
     data: DEFAULT_TICKET_STATUSES.map((s) => ({
       workspaceId,
@@ -119,7 +139,7 @@ export async function provisionWorkspaceDefaults(
     skipDuplicates: true,
   });
 
-  // 6. Priorities
+  // 7. Priorities
   await tx.priority.createMany({
     data: DEFAULT_PRIORITIES.map((p) => ({
       workspaceId,

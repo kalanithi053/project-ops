@@ -11,8 +11,15 @@ export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getSettings(workspaceId: string) {
-    const [workspace, plans, ticketStatuses, priorities, roles, permissions] =
-      await Promise.all([
+    const [
+      workspace,
+      plans,
+      ticketStatuses,
+      priorities,
+      projectTypes,
+      roles,
+      permissions,
+    ] = await Promise.all([
         this.prisma.workspace.findUnique({
           where: { id: workspaceId },
           select: {
@@ -49,6 +56,13 @@ export class SettingsService {
           where: { workspaceId },
           orderBy: { order: 'asc' },
         }),
+        this.prisma.projectType.findMany({
+          where: { workspaceId },
+          orderBy: { name: 'asc' },
+          include: {
+            plans: { select: { id: true, name: true, isActive: true } },
+          },
+        }),
         this.prisma.userRole.findMany({
           where: { workspaceId },
           orderBy: { name: 'asc' },
@@ -75,6 +89,7 @@ export class SettingsService {
       plans,
       ticketStatuses,
       priorities,
+      projectTypes,
       roles: roles.map((r) => ({
         id: r.id,
         name: r.name,

@@ -176,6 +176,14 @@ curl -s "$BASE/permissions" \
 curl -s "$BASE/plans" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
+# Create a new plan tier. projectTypeId is REQUIRED (a plan belongs to a project type).
+# isActive:true deactivates the other plans.
+curl -s -X POST "$BASE/plans" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"projectTypeId":"<projectTypeId>","name":"Starter","maxProjects":5,"maxMembers":3,"maxTasksPerModule":20,"features":{},"isActive":false}'
+
 # Get active plan
 curl -s "$BASE/plans/active" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
@@ -270,16 +278,43 @@ curl -s -X DELETE "$BASE/priorities/<id>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```
 
+## project-types (Bearer + x-workspace-slug)
+
+```bash
+# List project types (chosen at project creation)
+curl -s "$BASE/project-types" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Create a project type. isPlanAdd=false -> projects of this type skip plan/module/task steps.
+# A project type owns many plans (create plans under it via POST /plans with this id).
+curl -s -X POST "$BASE/project-types" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Marketing","description":"HubSpot-style","isPlanAdd":true}'
+
+# Update a project type
+curl -s -X PATCH "$BASE/project-types/<id>" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"isPlanAdd":false}'
+
+# Delete a project type
+curl -s -X DELETE "$BASE/project-types/<id>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
 ## projects (Bearer + x-workspace-slug)
 
 ```bash
-# Create a project. mode is required: "HubSpot" | "Dev".
-# HubSpot projects auto-attach default modules + seed tasks; Dev projects start empty.
+# Create a project. Required: name, startDate, endDate, projectTypeId, planId.
+# If the type's isPlanAdd is true -> attach the chosen plan's modules + seed tasks; if false -> bare project.
 curl -s -X POST "$BASE/projects" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Website Revamp","mode":"HubSpot","description":"Q1 site rebuild","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z"}'
+  -d '{"name":"Website Revamp","startDate":"2026-01-01T00:00:00.000Z","endDate":"2026-03-31T00:00:00.000Z","projectTypeId":"<projectTypeId>","planId":"<planId>","description":"Q1 site rebuild"}'
 
 # List projects
 curl -s "$BASE/projects" \

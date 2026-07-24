@@ -16,6 +16,7 @@ import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
 import { TasksModule } from './tasks/tasks.module';
 import { TicketStatusModule } from './ticket-status/ticket-status.module';
 import { PrioritiesModule } from './priorities/priorities.module';
+import { ProjectTypesModule } from './project-types/project-types.module';
 import { SettingsModule } from './settings/settings.module';
 import { AccessModule } from './access/access.module';
 import { AppController } from './app.controller';
@@ -38,6 +39,7 @@ import { AppService } from './app.service';
     TasksModule,
     TicketStatusModule,
     PrioritiesModule,
+    ProjectTypesModule,
     SettingsModule,
     AccessModule,
   ],

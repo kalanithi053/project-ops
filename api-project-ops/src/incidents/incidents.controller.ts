@@ -52,4 +52,28 @@ export class IncidentsController {
   ) {
     return this.incidents.findOne(workspaceId, projectId, incidentId);
   }
+
+  @Get(':incidentId/activity')
+  @RequirePermission(PERMISSIONS.PROJECT_READ)
+  @ApiOperation({ summary: "Get an incident's activity log" })
+  getActivity(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('incidentId') incidentId: string,
+  ) {
+    return this.incidents.getActivity(workspaceId, projectId, incidentId);
+  }
+
+  @Post(':incidentId/notify')
+  @RequirePermission(PERMISSIONS.PROJECT_READ)
+  @ApiOperation({
+    summary: "Email the assignee the incident's current status",
+  })
+  notifyAssignee(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('incidentId') incidentId: string,
+  ) {
+    return this.incidents.notifyAssignee(workspaceId, projectId, incidentId);
+  }
 }

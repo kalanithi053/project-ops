@@ -169,6 +169,7 @@ export class ProjectsService {
               statusId: defaultStatus?.id ?? null,
               createdBy: userId,
               position: 0,
+              assigneeId: userId,
             },
           });
         },

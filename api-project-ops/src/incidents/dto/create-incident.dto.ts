@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  MinLength,
+} from 'class-validator';
 
 export class CreateIncidentDto {
   @ApiProperty({ example: 'Pipeline stage order is wrong' })
@@ -16,4 +22,9 @@ export class CreateIncidentDto {
   @IsString()
   @MaxLength(4000)
   description?: string;
+
+  @ApiProperty({ required: false, description: 'Workspace member to assign' })
+  @IsOptional()
+  @IsUUID()
+  assigneeId?: string;
 }

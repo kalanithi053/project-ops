@@ -5,14 +5,15 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { randomInt } from 'crypto';
 import * as bcrypt from 'bcrypt';
+import { randomInt } from 'crypto';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 /**
  * Passwordless OTP: generate a 6-digit code, store only its bcrypt hash, and
- * verify against the latest unconsumed challenge for an email. Delivery is
- * stubbed (logged in dev) — wire an SMS/email provider in `deliver()`.
+ * verify against the latest unconsumed challenge for an email. Delivery goes
+ * out via `MailService`.
  */
 @Injectable()
 export class OtpService {
@@ -23,6 +24,7 @@ export class OtpService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: ConfigService,
+    private readonly mail: MailService,
   ) {
     this.ttlSeconds = Number(this.config.get('OTP_TTL_SECONDS', 300));
     this.maxAttempts = Number(this.config.get('OTP_MAX_ATTEMPTS', 5));
@@ -34,12 +36,7 @@ export class OtpService {
    * random 6-digit code.
    */
   async issue(email: string): Promise<{ expiresAt: Date }> {
-    const user = await this.prisma.user.findUnique({
-      where: { email },
-      select: { staticOtp: true },
-    });
-    const code =
-      user?.staticOtp ?? randomInt(0, 1_000_000).toString().padStart(6, '0');
+    const code = randomInt(0, 1_000_000).toString().padStart(6, '0');
     const otpCodeHash = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + this.ttlSeconds * 1000);
 
@@ -47,7 +44,7 @@ export class OtpService {
       data: { email, otpCodeHash, expiresAt },
     });
 
-    this.deliver(email, code);
+    await this.deliver(email, code);
     return { expiresAt };
   }
 
@@ -89,8 +86,10 @@ export class OtpService {
     });
   }
 
-  /** Stub delivery — replace with a real SMS/email transport in production. */
-  private deliver(email: string, code: string): void {
-    this.logger.log(`[OTP] email=${email} code=${code}`);
+  private async deliver(email: string, code: string): Promise<void> {
+    if (this.config.get('NODE_ENV') !== 'production') {
+      this.logger.log(`[OTP] email=${email} code=${code}`);
+    }
+    await this.mail.sendOtpEmail(email, code, this.ttlSeconds);
   }
 }

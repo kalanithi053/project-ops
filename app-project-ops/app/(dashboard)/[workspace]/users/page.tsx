@@ -1,29 +1,30 @@
 "use client";
 
-import * as React from "react";
+import { Loader2, Users } from "lucide-react";
 import { useParams } from "next/navigation";
-import { Loader2, UserPlus, Users } from "lucide-react";
+import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/shared/page-header";
-import { StatsGrid } from "@/components/shared/stats-grid";
 import { DataTable } from "@/components/shared/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { PageHeader } from "@/components/shared/page-header";
 import { QueryState } from "@/components/shared/query-state";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
-  Dialog,
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
+import { StatsGrid } from "@/components/shared/stats-grid";
+import { StatusBadge } from "@/components/shared/status-badge";
+import { Button } from "@/components/ui/button";
+import {
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { TableSkeleton } from "@/components/shared/skeletons";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   useInviteMember,
   useRoles,
@@ -52,7 +53,7 @@ function memberEmail(m: WorkspaceMember): string {
 
 function roleName(m: WorkspaceMember): string {
   if (!m.role) return "—";
-  return typeof m.role === "string" ? m.role : m.role.name ?? "—";
+  return typeof m.role === "string" ? m.role : (m.role.name ?? "—");
 }
 
 const columns: ColumnDef<WorkspaceMember>[] = [
@@ -84,7 +85,9 @@ const columns: ColumnDef<WorkspaceMember>[] = [
       m.status ? (
         <StatusBadge
           label={String(m.status)}
-          tone={String(m.status).toLowerCase() === "active" ? "success" : "neutral"}
+          tone={
+            String(m.status).toLowerCase() === "active" ? "success" : "neutral"
+          }
         />
       ) : (
         "—"
@@ -115,11 +118,8 @@ export default function UsersPage() {
   return (
     <PageContainer className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title="Users"
-          description="Add people to this workspace and manage their roles."
-        />
-        {canInvite && (
+        <PageHeader title="Users" description="" />
+        {/* {canInvite && (
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button className="w-full sm:w-auto">
@@ -132,7 +132,7 @@ export default function UsersPage() {
               onDone={() => setOpen(false)}
             />
           </Dialog>
-        )}
+        )} */}
       </div>
 
       <StatsGrid stats={stats} />

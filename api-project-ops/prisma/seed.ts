@@ -13,7 +13,7 @@ import { provisionWorkspaceDefaults } from '../src/workspaces/workspace-provisio
 
 const prisma = new PrismaClient();
 
-const DEMO_EMAIL = 'demo.owner@amwhiz.com';
+const DEMO_EMAIL = 'kalanithi@amwhiz.com';
 const DEMO_WORKSPACE_SLUG = 'amwhizcom';
 
 async function main() {

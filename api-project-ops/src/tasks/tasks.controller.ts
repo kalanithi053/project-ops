@@ -9,7 +9,12 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+} from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
@@ -76,34 +81,64 @@ export class TasksController {
       "Update ONLY a task's status (narrow permission, e.g. the Client role)",
   })
   updateStatus(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @CurrentWorkspace() ws: { workspaceId: string; userId: string },
     @Param('projectId') projectId: string,
     @Param('taskId') taskId: string,
     @Body() dto: UpdateTaskStatusDto,
   ) {
-    return this.tasks.updateStatus(workspaceId, projectId, taskId, dto.statusId);
+    return this.tasks.updateStatus(
+      ws.workspaceId,
+      projectId,
+      taskId,
+      ws.userId,
+      dto.statusId,
+    );
   }
 
   @Patch(':taskId')
   @RequirePermission(PERMISSIONS.TASK_UPDATE)
   @ApiOperation({ summary: 'Update a task' })
   update(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @CurrentWorkspace() ws: { workspaceId: string; userId: string },
     @Param('projectId') projectId: string,
     @Param('taskId') taskId: string,
     @Body() dto: UpdateTaskDto,
   ) {
-    return this.tasks.update(workspaceId, projectId, taskId, dto);
+    return this.tasks.update(ws.workspaceId, projectId, taskId, ws.userId, dto);
   }
 
   @Delete(':taskId')
   @RequirePermission(PERMISSIONS.TASK_DELETE)
   @ApiOperation({ summary: 'Soft-delete a task' })
   remove(
+    @CurrentWorkspace() ws: { workspaceId: string; userId: string },
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.tasks.remove(ws.workspaceId, projectId, taskId, ws.userId);
+  }
+
+  @Get(':taskId/activity')
+  @RequirePermission(PERMISSIONS.TASK_READ)
+  @ApiOperation({ summary: "Get a task's activity log" })
+  getActivity(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
     @Param('taskId') taskId: string,
   ) {
-    return this.tasks.remove(workspaceId, projectId, taskId);
+    return this.tasks.getActivity(workspaceId, projectId, taskId);
+  }
+
+  @Post(':taskId/notify')
+  @RequirePermission(PERMISSIONS.TASK_READ)
+  @ApiOperation({
+    summary: "Email the assignee the task's current status",
+  })
+  notifyAssignee(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+  ) {
+    return this.tasks.notifyAssignee(workspaceId, projectId, taskId);
   }
 }

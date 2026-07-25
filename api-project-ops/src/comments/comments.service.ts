@@ -3,6 +3,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
 
@@ -17,7 +18,10 @@ const AUTHOR_SELECT = {
  */
 @Injectable()
 export class CommentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   async createForTask(
     workspaceId: string,
@@ -29,7 +33,7 @@ export class CommentsService {
     await this.assertTask(workspaceId, projectId, taskId);
     const mentionIds = await this.resolveMentions(workspaceId, dto.mentions);
     return this.createComment(
-      { workspaceId, taskId, authorId },
+      { workspaceId, projectId, taskId, authorId },
       dto.body,
       mentionIds,
     );
@@ -45,7 +49,7 @@ export class CommentsService {
     await this.assertIncident(workspaceId, projectId, incidentId);
     const mentionIds = await this.resolveMentions(workspaceId, dto.mentions);
     return this.createComment(
-      { workspaceId, incidentId, authorId },
+      { workspaceId, projectId, incidentId, authorId },
       dto.body,
       mentionIds,
     );
@@ -68,28 +72,51 @@ export class CommentsService {
   // --- internals ---
 
   private async createComment(
-    where: { workspaceId: string; taskId?: string; incidentId?: string; authorId: string },
+    where: {
+      workspaceId: string;
+      projectId: string;
+      taskId?: string;
+      incidentId?: string;
+      authorId: string;
+    },
     body: string,
     mentionIds: string[],
   ) {
-    return this.prisma.comment.create({
-      data: {
-        workspaceId: where.workspaceId,
-        taskId: where.taskId ?? null,
-        incidentId: where.incidentId ?? null,
-        authorId: where.authorId,
-        body,
-        mentions: {
-          createMany: {
-            data: mentionIds.map((userId) => ({ userId })),
-            skipDuplicates: true,
+    return this.prisma.$transaction(async (tx) => {
+      const comment = await tx.comment.create({
+        data: {
+          workspaceId: where.workspaceId,
+          taskId: where.taskId ?? null,
+          incidentId: where.incidentId ?? null,
+          authorId: where.authorId,
+          body,
+          mentions: {
+            createMany: {
+              data: mentionIds.map((userId) => ({ userId })),
+              skipDuplicates: true,
+            },
           },
         },
-      },
-      include: {
-        author: AUTHOR_SELECT,
-        mentions: { include: { user: AUTHOR_SELECT } },
-      },
+        include: {
+          author: AUTHOR_SELECT,
+          mentions: { include: { user: AUTHOR_SELECT } },
+        },
+      });
+
+      await this.activityLog.log(
+        {
+          workspaceId: where.workspaceId,
+          projectId: where.projectId,
+          entityType: where.taskId ? 'task' : 'incident',
+          entityId: where.taskId ?? where.incidentId,
+          action: 'comment_added',
+          userId: where.authorId,
+          metadata: { commentId: comment.id, preview: body.slice(0, 200) },
+        },
+        tx,
+      );
+
+      return comment;
     });
   }
 

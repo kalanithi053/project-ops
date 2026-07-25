@@ -2,15 +2,22 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 
 @Injectable()
 export class ProjectMembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProjectMembersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   async list(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
@@ -34,8 +41,8 @@ export class ProjectMembersService {
     invitedBy: string,
     dto: InviteProjectMemberDto,
   ) {
-    await this.assertProject(workspaceId, projectId);
-    await this.assertRole(workspaceId, dto.roleId);
+    const project = await this.assertProject(workspaceId, projectId);
+    const role = await this.assertRole(workspaceId, dto.roleId);
 
     const user = await this.prisma.user.upsert({
       where: { email: dto.email },
@@ -58,7 +65,7 @@ export class ProjectMembersService {
         userId: user.id,
         roleId: dto.roleId,
         invitedBy,
-        status: 'invited',
+        status: 'active',
       },
       include: {
         user: { select: { id: true, email: true } },
@@ -66,7 +73,17 @@ export class ProjectMembersService {
       },
     });
 
-    // Stub notification.
+    await this.mail
+      .sendProjectInviteEmail(user.email, {
+        projectName: project.name,
+        roleName: role.name,
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send project invite email to=${user.email}: ${(err as Error).message}`,
+        ),
+      );
+
     return { ...member, message: 'Member invited' };
   }
 

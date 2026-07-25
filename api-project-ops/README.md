@@ -1,7 +1,7 @@
 # Project Ops API
 
 Multi-tenant project-management backend built with **NestJS 11 + Prisma + PostgreSQL**.
-Authentication is passwordless (**username + OTP**). Every workspace is an isolated
+Authentication is passwordless (**email + OTP**). Every workspace is an isolated
 tenant; a single user can belong to many workspaces and switch between them without
 re-authenticating.
 
@@ -142,18 +142,19 @@ per-request with the **`x-workspace-slug`** header — no per-workspace token.
 ```bash
 BASE=http://localhost:3000/api/v1
 
-# 1. request an OTP. Unknown usernames are NOT created — the response returns
+# 1. request an OTP. Unknown emails are NOT created — the response returns
 #    { "slug": "Create-User" }; register first (step 1a). Existing users get an OTP.
 curl -X POST $BASE/auth/otp/request -H 'Content-Type: application/json' \
-  -d '{"username":"demo.owner"}'
+  -d '{"email":"demo.owner@amwhiz.com"}'
 
 # 1a. (only if step 1 returned Create-User) create the user, which also sends an OTP
 curl -X POST $BASE/auth/register -H 'Content-Type: application/json' \
-  -d '{"username":"demo.owner","firstName":"Demo","lastName":"Owner","email":"demo@acme.com"}'
+  -d '{"email":"demo.owner@amwhiz.com","firstName":"Demo","lastName":"Owner"}'
 
 # 2. verify -> access + refresh token pair (token carries userId only)
+# Dev default OTP is 123456 (User.staticOtp); override per user for a different fixed code.
 curl -X POST $BASE/auth/otp/verify -H 'Content-Type: application/json' \
-  -d '{"username":"demo.owner","otp":"123456"}'
+  -d '{"email":"demo.owner@amwhiz.com","otp":"123456"}'
 # -> data.accessToken, data.refreshToken
 
 # 3. list workspaces you belong to (token only)
@@ -243,13 +244,20 @@ Full request/response schemas are in Swagger at `/api/doc`.
 Confirmed with the product owner:
 
 - **Prisma** for the data layer (headline stack), replacing the scaffold's TypeORM.
-- **Unknown usernames are not auto-created** on OTP request: the response returns
+- **Email is the sole login identifier** (no username field). `User.email` is
+  required + unique.
+- **Unknown emails are not auto-created** on OTP request: the response returns
   `{ slug: "Create-User" }`, and a separate `POST /auth/register` creates the user
-  (username, firstName, lastName, email) and sends the first OTP. _(Note: workspace
-  and project invite endpoints still create a bare user row by username on demand.)_
+  (email, firstName, lastName) and sends the first OTP. Registering also completes
+  a stub user pre-created by a workspace/project invite (email only, no firstName
+  yet). _(Note: workspace and project invite endpoints still create a bare user row
+  by email on demand.)_
+- **`User.staticOtp`**: a fixed per-user OTP code (defaults to the dev value
+  `123456`). `OtpService` uses it instead of generating a random code whenever it's
+  set — override a user's row for a predictable demo/test login code.
 - **Project invite auto-invites to the workspace**: if the invitee is not yet a
-  workspace member, a `WorkspaceMember` (status `invited`) is created (respecting
-  the plan member quota), then the `ProjectMember`.
+  workspace member, a `WorkspaceMember` (status `invited`) is created, then the
+  `ProjectMember`.
 - **One active Plan per workspace** (no plan-history table).
 - Seed task naming pattern: **`{Module Name} - 1`**.
 

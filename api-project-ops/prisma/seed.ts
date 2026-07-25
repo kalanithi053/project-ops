@@ -13,18 +13,17 @@ import { provisionWorkspaceDefaults } from '../src/workspaces/workspace-provisio
 
 const prisma = new PrismaClient();
 
-const DEMO_USERNAME = 'amwhizcom.owner';
+const DEMO_EMAIL = 'demo.owner@amwhiz.com';
 const DEMO_WORKSPACE_SLUG = 'amwhizcom';
 
 async function main() {
   const owner = await prisma.user.upsert({
-    where: { username: DEMO_USERNAME },
+    where: { email: DEMO_EMAIL },
     update: {},
     create: {
-      username: DEMO_USERNAME,
+      email: DEMO_EMAIL,
       firstName: 'Demo',
       lastName: 'Owner',
-      email: 'demo.owner@amwhiz.com',
     },
   });
 
@@ -62,10 +61,10 @@ async function main() {
   });
 
   console.log('Seed complete:');
-  console.log(`  Demo user      : ${owner.username} (${owner.id})`);
+  console.log(`  Demo user      : ${owner.email} (${owner.id})`);
   console.log(`  Demo workspace : ${workspace.name} (${workspace.id})`);
   console.log(
-    `  Login flow     : POST /api/v1/auth/otp/request { "username": "${DEMO_USERNAME}" }`,
+    `  Login flow     : POST /api/v1/auth/otp/request { "email": "${DEMO_EMAIL}" }`,
   );
   console.log(
     '  Watch the server console for the OTP code, then verify + select the workspace.',

@@ -18,7 +18,6 @@ export class UsersService {
       where: { id: userId },
       select: {
         id: true,
-        username: true,
         firstName: true,
         lastName: true,
         email: true,
@@ -39,7 +38,6 @@ export class UsersService {
       data: dto,
       select: {
         id: true,
-        username: true,
         firstName: true,
         lastName: true,
         email: true,

@@ -33,7 +33,7 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignee: { select: { id: true, username: true } },
+        assignee: { select: { id: true, email: true } },
       },
     });
   }
@@ -138,6 +138,28 @@ export class TasksService {
         priorityId: dto.priorityId ?? undefined,
         assigneeId: dto.assigneeId ?? undefined,
         position: dto.position ?? undefined,
+      },
+    });
+  }
+
+  /**
+   * Status-only update, guarded by the narrow `task.status.update` permission
+   * (e.g. the Client role). Touches nothing but statusId.
+   */
+  async updateStatus(
+    workspaceId: string,
+    projectId: string,
+    taskId: string,
+    statusId: string,
+  ) {
+    await this.getTask(workspaceId, projectId, taskId);
+    await this.assertStatus(workspaceId, statusId);
+
+    return this.prisma.task.update({
+      where: { id: taskId },
+      data: { statusId },
+      include: {
+        status: { select: { id: true, name: true, category: true } },
       },
     });
   }
@@ -297,7 +319,7 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignee: { select: { id: true, username: true } },
+        assignee: { select: { id: true, email: true } },
       },
     });
     if (!task) throw new NotFoundException('Task not found');

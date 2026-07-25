@@ -17,7 +17,7 @@ export class ProjectMembersService {
     return this.prisma.projectMember.findMany({
       where: { projectId },
       include: {
-        user: { select: { id: true, username: true } },
+        user: { select: { id: true, email: true } },
         role: { select: { id: true, name: true } },
       },
     });
@@ -25,7 +25,7 @@ export class ProjectMembersService {
 
   /**
    * Invites a user to a project. If the invitee is not yet a workspace member
-   * they are auto-invited to the workspace too. Unknown usernames are
+   * they are auto-invited to the workspace too. Unknown emails are
    * self-registered.
    */
   async invite(
@@ -38,9 +38,9 @@ export class ProjectMembersService {
     await this.assertRole(workspaceId, dto.roleId);
 
     const user = await this.prisma.user.upsert({
-      where: { username: dto.username },
+      where: { email: dto.email },
       update: {},
-      create: { username: dto.username },
+      create: { email: dto.email },
     });
 
     await this.ensureWorkspaceMembership(workspaceId, user.id);
@@ -49,9 +49,7 @@ export class ProjectMembersService {
       where: { projectId_userId: { projectId, userId: user.id } },
     });
     if (existing) {
-      throw new ConflictException(
-        'User is already a member of this project.',
-      );
+      throw new ConflictException('User is already a member of this project.');
     }
 
     const member = await this.prisma.projectMember.create({
@@ -63,7 +61,7 @@ export class ProjectMembersService {
         status: 'invited',
       },
       include: {
-        user: { select: { id: true, username: true } },
+        user: { select: { id: true, email: true } },
         role: { select: { id: true, name: true } },
       },
     });
@@ -96,9 +94,7 @@ export class ProjectMembersService {
       select: { ownerId: true },
     });
     if (project?.ownerId === member.userId) {
-      throw new BadRequestException(
-        'The project owner cannot be removed.',
-      );
+      throw new BadRequestException('The project owner cannot be removed.');
     }
     await this.prisma.projectMember.update({
       where: { id: memberId },
@@ -117,7 +113,7 @@ export class ProjectMembersService {
       if (membership.status === 'removed') {
         await this.prisma.workspaceMember.update({
           where: { id: membership.id },
-          data: { status: 'invited' },
+          data: { status: 'active' },
         });
       }
       return;
@@ -137,7 +133,7 @@ export class ProjectMembersService {
         workspaceId,
         userId,
         roleId: defaultRole.id,
-        status: 'invited',
+        status: 'active',
       },
     });
   }

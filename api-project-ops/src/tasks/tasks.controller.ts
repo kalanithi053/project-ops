@@ -18,6 +18,7 @@ import { PERMISSIONS } from '../common/constants/permissions';
 import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -66,6 +67,21 @@ export class TasksController {
     @Param('taskId') taskId: string,
   ) {
     return this.tasks.findOne(workspaceId, projectId, taskId);
+  }
+
+  @Patch(':taskId/status')
+  @RequirePermission(PERMISSIONS.TASK_STATUS_UPDATE)
+  @ApiOperation({
+    summary:
+      "Update ONLY a task's status (narrow permission, e.g. the Client role)",
+  })
+  updateStatus(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Body() dto: UpdateTaskStatusDto,
+  ) {
+    return this.tasks.updateStatus(workspaceId, projectId, taskId, dto.statusId);
   }
 
   @Patch(':taskId')

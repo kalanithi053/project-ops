@@ -20,19 +20,20 @@ export class AuthService {
   /**
    * Step 1 — request an OTP.
    *
-   * Unknown usernames are NOT auto-created. Instead the response signals the
-   * client to run a create-user step first, via `{ slug: 'Create-User' }`.
-   * Existing (active) users get an OTP.
+   * Unknown emails (and stub users created only via an invite, with no
+   * firstName yet) are NOT issued an OTP. Instead the response signals the
+   * client to run the register step first, via `{ slug: 'Create-User' }`.
+   * Existing, complete, active users get an OTP.
    */
   async requestOtp(
-    username: string,
+    email: string,
   ): Promise<
     | { message: string; expiresAt: Date }
     | { slug: 'Create-User'; message: string }
   > {
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user || !user?.email || !user.firstName) {
+    if (!user || !user.firstName) {
       return {
         slug: 'Create-User',
         message: 'User not found. Create the user to continue.',
@@ -43,74 +44,67 @@ export class AuthService {
       throw new ForbiddenException('This account is deactivated.');
     }
 
-    const { expiresAt } = await this.otp.issue(username);
+    const { expiresAt } = await this.otp.issue(email);
     return { message: 'OTP sent', expiresAt };
   }
 
   /**
    * Create-user step — registers a new user (collected after the requestOtp
-   * `Create-User` signal) and immediately issues an OTP.
+   * `Create-User` signal), or completes a stub user pre-created by a workspace/
+   * project invite (email only, no firstName), then immediately issues an OTP.
    */
   async register(dto: RegisterDto): Promise<{
     message: string;
     expiresAt: Date;
-    user: { id: string; username: string };
+    user: { id: string; email: string };
   }> {
     const existing = await this.prisma.user.findUnique({
-      where: { username: dto.username },
+      where: { email: dto.email },
     });
-    if (existing?.email) {
-      throw new ConflictException('Username already exists.');
+    if (existing?.firstName) {
+      throw new ConflictException('User already exists.');
     }
-    let user;
-    if (existing) {
-      user = await this.prisma.user.update({
-        where: {
-          username: dto.username,
-        },
-        data: {
-          email: dto.email,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-        },
-      });
-    } else {
-      user = await this.prisma.user.create({
-        data: {
-          username: dto.username,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          email: dto.email,
-        },
-      });
 
-      const { expiresAt } = await this.otp.issue(user.username);
-      return {
-        message: 'User created, OTP sent',
-        expiresAt,
-        user: { id: user.id, username: user.username },
-      };
-    }
+    const user = existing
+      ? await this.prisma.user.update({
+          where: { email: dto.email },
+          data: { firstName: dto.firstName, lastName: dto.lastName },
+        })
+      : await this.prisma.user.create({
+          data: {
+            email: dto.email,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+          },
+        });
+
+    const { expiresAt } = await this.otp.issue(user.email);
+    return {
+      message: 'User created, OTP sent',
+      expiresAt,
+      user: { id: user.id, email: user.email },
+    };
   }
+
   /**
    * Step 2 — verify the OTP and issue the access/refresh token pair. The token
    * carries only the user id; the active workspace is chosen per-request via the
    * `x-workspace-slug` header.
    */
   async verifyOtp(
-    username: string,
+    email: string,
     otp: string,
-  ): Promise<AuthTokens & { user: { id: string; username: string } }> {
-    await this.otp.verify(username, otp);
+  ): Promise<AuthTokens & { user: { id: string; email: string } }> {
+    await this.otp.verify(email, otp);
 
-    const user = await this.prisma.user.findUnique({ where: { username } });
+    const user = await this.prisma.user.findUnique({ where: { email } });
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Account not found or deactivated.');
     }
 
     return {
       ...this.tokens.signAuthTokens(user.id),
-      user: { id: user.id, username: user.username },
+      user: { id: user.id, email: user.email },
     };
   }
 

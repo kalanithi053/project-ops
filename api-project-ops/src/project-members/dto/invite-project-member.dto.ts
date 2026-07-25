@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsUUID } from 'class-validator';
+import { IsEmail, IsUUID } from 'class-validator';
 
 export class InviteProjectMemberDto {
-  @ApiProperty({ example: 'john.doe', description: 'Username to invite' })
-  @IsString()
-  username: string;
+  @ApiProperty({ example: 'john@acme.com', description: 'Email to invite' })
+  @IsEmail()
+  email: string;
 
   @ApiProperty({ description: 'Role to assign within the project' })
   @IsUUID()

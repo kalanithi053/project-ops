@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsString, IsUUID } from 'class-validator';
+import { IsEmail, IsOptional, IsUUID } from 'class-validator';
 
 export class InviteWorkspaceMemberDto {
-  @ApiProperty({ example: 'john.doe' })
-  @IsString()
-  username: string;
+  @ApiProperty({ example: 'john@acme.com' })
+  @IsEmail()
+  email: string;
 
   @ApiProperty({
     required: false,

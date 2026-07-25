@@ -40,16 +40,28 @@ enum StatusCategory {
   @@map("status_category")
 }
 
+enum IncidentStatus {
+  open
+  in_progress
+  resolved
+
+  @@map("incident_status")
+}
+
 // ---------------------------------------------------------------------------
 // Identity (global, not workspace-scoped)
 // ---------------------------------------------------------------------------
 
 model User {
   id        String   @id @default(uuid())
-  username  String   @unique
+  // Login identifier. Required + unique — replaces the old username field.
+  email     String   @unique
   firstName String?  @map("first_name")
   lastName  String?  @map("last_name")
-  email     String? // intentionally NOT unique
+  // Fixed OTP code for this user (defaults to the dev static code). When set,
+  // OtpService issues this value instead of a random one — override per user
+  // to give a tester/demo account a predictable login code.
+  staticOtp String?  @default("123456") @map("static_otp")
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -60,22 +72,24 @@ model User {
   ownedProjects    Project[]         @relation("ProjectOwner")
   assignedTasks    Task[]            @relation("TaskAssignee")
   createdTasks     Task[]            @relation("TaskCreator")
+  reportedIncidents Incident[]       @relation("IncidentReporter")
+  comments          Comment[]        @relation("CommentAuthor")
+  commentMentions   CommentMention[] @relation("CommentMentions")
 
-  @@index([username])
   @@map("user")
 }
 
 // OTP challenge records for passwordless login.
 model OtpRequest {
   id           String    @id @default(uuid())
-  username     String
+  email        String
   otpCodeHash  String    @map("otp_code_hash")
   expiresAt    DateTime  @map("expires_at")
   consumedAt   DateTime? @map("consumed_at")
   attemptCount Int       @default(0) @map("attempt_count")
   createdAt    DateTime  @default(now()) @map("created_at")
 
-  @@index([username, createdAt])
+  @@index([email, createdAt])
   @@map("otp_request")
 }
 
@@ -101,6 +115,8 @@ model Workspace {
   ticketStatuses TicketStatus[]
   priorities     Priority[]
   projectTypes   ProjectType[]
+  incidents      Incident[]
+  comments       Comment[]
 
   @@index([ownerId])
   @@map("workspace")
@@ -219,6 +235,7 @@ model Project {
   members         ProjectMember[]
   moduleInstances ModuleInstance[]
   tasks           Task[]
+  incidents       Incident[]
 
   @@index([workspaceId])
   @@index([ownerId])
@@ -339,12 +356,79 @@ model Task {
   priority       Priority?       @relation(fields: [priorityId], references: [id])
   assignee       User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
   creator        User            @relation("TaskCreator", fields: [createdBy], references: [id])
+  comments       Comment[]
 
   @@index([projectId])
   @@index([moduleInstanceId])
   @@index([statusId])
   @@index([priorityId])
   @@map("task")
+}
+
+// ---------------------------------------------------------------------------
+// Incidents (standalone tickets for implementation flaws — scoped to a
+// project, not bound to any task)
+// ---------------------------------------------------------------------------
+
+model Incident {
+  id          String         @id @default(uuid())
+  workspaceId String         @map("workspace_id")
+  projectId   String         @map("project_id")
+  title       String
+  description String?
+  status      IncidentStatus @default(open)
+  reportedBy  String         @map("reported_by")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  reporter  User      @relation("IncidentReporter", fields: [reportedBy], references: [id])
+  comments  Comment[]
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@map("incident")
+}
+
+// ---------------------------------------------------------------------------
+// Comments (on tasks and incidents, with @mentions by email)
+// ---------------------------------------------------------------------------
+
+model Comment {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  // Exactly one parent is set: a task comment or an incident comment.
+  taskId      String?  @map("task_id")
+  incidentId  String?  @map("incident_id")
+  body        String
+  authorId    String   @map("author_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workspace Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  task      Task?            @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  incident  Incident?        @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author    User             @relation("CommentAuthor", fields: [authorId], references: [id])
+  mentions  CommentMention[]
+
+  @@index([workspaceId])
+  @@index([taskId])
+  @@index([incidentId])
+  @@map("comment")
+}
+
+// Users tagged in a comment (resolved from their email at creation time).
+model CommentMention {
+  commentId String @map("comment_id")
+  userId    String @map("user_id")
+
+  comment Comment @relation(fields: [commentId], references: [id], onDelete: Cascade)
+  user    User    @relation("CommentMentions", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([commentId, userId])
+  @@index([userId])
+  @@map("comment_mention")
 }
 
 // ---------------------------------------------------------------------------

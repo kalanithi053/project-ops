@@ -16,7 +16,7 @@ WORKSPACE_SLUG="amwhizcom"
 Workspace-scoped routes return **400** if `x-workspace-slug` is missing, **404** if
 the slug is unknown, and **403** if you are not an active member.
 
-Seed data (dev): user **`amwhizcom.owner`**, workspace **`amwhizcom`**, OTP **`123456`**.
+Seed data (dev): user **`demo.owner@amwhiz.com`**, workspace **`amwhizcom`**, OTP **`123456`**.
 
 ---
 
@@ -30,22 +30,25 @@ curl -s "$BASE/health"
 ## auth (Public)
 
 ```bash
-# Request OTP. Unknown users are NOT created — the response returns
+# Request OTP. Unknown emails are NOT created — the response returns
 # { "slug": "Create-User" }, prompting you to register first (below).
-# For existing users an OTP is sent (logged to the server console in dev).
+# For existing (complete) users an OTP is sent (logged to the server console in dev,
+# or the user's staticOtp value when set).
 curl -s -X POST "$BASE/auth/otp/request" \
   -H "Content-Type: application/json" \
-  -d '{"username":"jane.doe"}'
+  -d '{"email":"jane@acme.com"}'
 
-# Create a user (after a Create-User response) -> creates the user and sends an OTP
+# Create a user (after a Create-User response) -> creates the user and sends an OTP.
+# Also completes a stub user pre-created by a workspace/project invite (email only).
 curl -s -X POST "$BASE/auth/register" \
   -H "Content-Type: application/json" \
-  -d '{"username":"jane.doe","firstName":"Jane","lastName":"Doe","email":"jane@acme.com"}'
+  -d '{"email":"jane@acme.com","firstName":"Jane","lastName":"Doe"}'
 
-# Verify OTP -> access + refresh token pair
+# Verify OTP -> access + refresh token pair. Dev default OTP is 123456
+# (User.staticOtp; override per user in the DB for a different fixed code).
 curl -s -X POST "$BASE/auth/otp/verify" \
   -H "Content-Type: application/json" \
-  -d '{"username":"jane.doe","otp":"123456"}'
+  -d '{"email":"jane@acme.com","otp":"123456"}'
 
 # Refresh the token pair (no new OTP)
 curl -s -X POST "$BASE/auth/token/refresh" \
@@ -123,7 +126,7 @@ curl -s -X POST "$BASE/workspace-members" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"username":"john.doe","roleId":"33333333-3333-3333-3333-333333333333"}'
+  -d '{"email":"john@acme.com","roleId":"33333333-3333-3333-3333-333333333333"}'
 
 # Update a member role/status  (status: invited|active|removed)
 curl -s -X PATCH "$BASE/workspace-members/<memberId>" \
@@ -353,7 +356,7 @@ curl -s -X POST "$BASE/projects/<projectId>/members" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"username":"john.doe","roleId":"<roleId>"}'
+  -d '{"email":"john@acme.com","roleId":"<roleId>"}'
 
 # Update a project member role/status
 curl -s -X PATCH "$BASE/projects/<projectId>/members/<memberId>" \
@@ -417,6 +420,14 @@ curl -s -X POST "$BASE/projects/<projectId>/tasks" \
   -H "Content-Type: application/json" \
   -d '{"name":"Design landing page","description":"hero + CTA","moduleInstanceId":"<id>","startDate":"2026-01-05T00:00:00.000Z","dueDate":"2026-01-12T00:00:00.000Z","statusId":"<id>","priorityId":"<id>","assigneeId":"<userId>","position":0}'
 
+# Update ONLY a task's status. Needs the narrow task.status.update permission —
+# held by Owner/Admin/Member and the Client role (which lacks full task.update).
+curl -s -X PATCH "$BASE/projects/<projectId>/tasks/<taskId>/status" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"statusId":"<statusId>"}'
+
 # Get a task
 curl -s "$BASE/projects/<projectId>/tasks/<taskId>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
@@ -430,5 +441,55 @@ curl -s -X PATCH "$BASE/projects/<projectId>/tasks/<taskId>" \
 
 # Soft-delete a task
 curl -s -X DELETE "$BASE/projects/<projectId>/tasks/<taskId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## incidents (Bearer + x-workspace-slug)
+
+Incidents are **standalone project-level tickets** — they are not tied to a task.
+
+```bash
+# Create an incident ticket on a project.
+# Needs incident.create — held by Owner/Admin and the Client role.
+curl -s -X POST "$BASE/projects/<projectId>/incidents" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Sync fails after go-live","description":"Contacts are not syncing"}'
+
+# List the project's incident tickets (needs project.read)
+curl -s "$BASE/projects/<projectId>/incidents" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Get one incident (needs project.read)
+curl -s "$BASE/projects/<projectId>/incidents/<incidentId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## comments (Bearer + x-workspace-slug)
+
+```bash
+# Comment on a task. Needs comment.create (Owner/Admin/Member/Client).
+# mentions: tag other users by email — each must be a member of the workspace,
+# otherwise 400 listing the offending emails.
+curl -s -X POST "$BASE/projects/<projectId>/tasks/<taskId>/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Stage order is wrong, please check","mentions":["john@acme.com"]}'
+
+# List comments on a task (needs task.read)
+curl -s "$BASE/projects/<projectId>/tasks/<taskId>/comments" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Comment on an incident ticket (same body shape / permissions)
+curl -s -X POST "$BASE/projects/<projectId>/incidents/<incidentId>/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"On it — fix lands tomorrow","mentions":["client@customer.com"]}'
+
+# List comments on an incident ticket (needs task.read)
+curl -s "$BASE/projects/<projectId>/incidents/<incidentId>/comments" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```

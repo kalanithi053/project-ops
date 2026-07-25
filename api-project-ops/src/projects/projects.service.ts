@@ -194,7 +194,7 @@ export class ProjectsService {
         projectType: { select: { id: true, name: true, isPlanAdd: true } },
         moduleInstances: { include: { module: true } },
         members: {
-          include: { user: { select: { id: true, username: true } } },
+          include: { user: { select: { id: true, email: true } } },
         },
         _count: { select: { tasks: true } },
       },

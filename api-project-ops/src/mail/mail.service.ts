@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { incidentCreatedEmailTemplate } from './templates/incident-created-email.template';
+import { otpEmailTemplate } from './templates/otp-email.template';
 import { projectInviteEmailTemplate } from './templates/project-invite-email.template';
 import { statusNotificationEmailTemplate } from './templates/status-notification-email.template';
 import { taskStatusEmailTemplate } from './templates/task-status-email.template';
@@ -42,12 +43,12 @@ export class MailService implements OnModuleInit {
     ttlSeconds: number,
   ): Promise<void> {
     const ttlMinutes = Math.max(1, Math.round(ttlSeconds / 60));
-    // await this.transporter.sendMail({
-    //   from: this.from,
-    //   to,
-    //   subject: 'Your ProjectHub sign-in code',
-    //   html: otpEmailTemplate(code, ttlMinutes),
-    // });
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: 'Your ProjectHub sign-in code',
+      html: otpEmailTemplate(code, ttlMinutes),
+    });
     this.logger.log(`OTP email sent to=${to} code=${code}`);
   }
 

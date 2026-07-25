@@ -241,6 +241,10 @@ export class ActivityLogService {
         return 'changed the start date';
       case 'dueDate':
         return 'changed the due date';
+      case 'estimateHours':
+        return `set the estimate to ${diff.to as number}h`;
+      case 'completedHours':
+        return `logged ${diff.to as number}h completed`;
       default:
         return `updated ${field}`;
     }
@@ -261,6 +265,10 @@ export class ActivityLogService {
         return 'start date';
       case 'dueDate':
         return 'due date';
+      case 'estimateHours':
+        return 'estimate';
+      case 'completedHours':
+        return 'completed hours';
       default:
         return field;
     }

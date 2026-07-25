@@ -54,6 +54,8 @@ export class IncidentsService {
           description: dto.description,
           reportedBy: userId,
           assigneeId: dto.assigneeId ?? null,
+          estimateHours: dto.estimateHours ?? null,
+          completedHours: dto.completedHours ?? null,
         },
         include: { reporter: PERSON_SELECT, assignee: PERSON_SELECT },
       });

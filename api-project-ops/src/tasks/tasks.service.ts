@@ -21,6 +21,8 @@ const TASK_UPDATE_FIELDS = [
   'priorityId',
   'assigneeId',
   'position',
+  'estimateHours',
+  'completedHours',
 ] as const;
 
 @Injectable()
@@ -120,6 +122,8 @@ export class TasksService {
           assigneeId: dto.assigneeId ?? null,
           createdBy: userId,
           position,
+          estimateHours: dto.estimateHours ?? null,
+          completedHours: dto.completedHours ?? null,
         },
       });
 
@@ -186,6 +190,8 @@ export class TasksService {
           priorityId: dto.priorityId ?? undefined,
           assigneeId: dto.assigneeId ?? undefined,
           position: dto.position ?? undefined,
+          estimateHours: dto.estimateHours ?? undefined,
+          completedHours: dto.completedHours ?? undefined,
         },
         include: {
           status: { select: { id: true, name: true, category: true } },

@@ -53,6 +53,8 @@ export class ProjectsService {
 
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
+    this.assertFutureDate(startDate, 'startDate');
+    this.assertFutureDate(endDate, 'endDate');
 
     return this.prisma.$transaction(async (tx) => {
       const project = await tx.project.create({
@@ -232,5 +234,19 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Project not found');
     return project;
+  }
+
+  /** Rejects dates that fall on today or earlier (UTC) — must be strictly after today. */
+  private assertFutureDate(date: Date, field: string) {
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const tomorrowUtc = new Date(todayUtc);
+    tomorrowUtc.setUTCDate(tomorrowUtc.getUTCDate() + 1);
+
+    if (date.getTime() < tomorrowUtc.getTime()) {
+      throw new BadRequestException(`${field} must be after today`);
+    }
   }
 }

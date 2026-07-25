@@ -1,9 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   MinLength,
 } from 'class-validator';
 
@@ -27,4 +29,16 @@ export class CreateIncidentDto {
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @ApiProperty({ required: false, minimum: 0, example: 4 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  estimateHours?: number;
+
+  @ApiProperty({ required: false, minimum: 0, example: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  completedHours?: number;
 }

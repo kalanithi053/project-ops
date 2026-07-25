@@ -350,6 +350,8 @@ model Task {
   assigneeId       String?   @map("assignee_id")
   createdBy        String    @map("created_by")
   position         Int       @default(0)
+  estimateHours    Float?    @map("estimate_hours")
+  completedHours   Float?    @map("completed_hours")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
@@ -383,6 +385,8 @@ model Incident {
   status      IncidentStatus @default(open)
   reportedBy  String         @map("reported_by")
   assigneeId  String?        @map("assignee_id")
+  estimateHours  Float?      @map("estimate_hours")
+  completedHours Float?      @map("completed_hours")
   createdAt   DateTime       @default(now()) @map("created_at")
   updatedAt   DateTime       @updatedAt @map("updated_at")
 

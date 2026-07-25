@@ -10,14 +10,24 @@ export const DEFAULT_MODULES: Array<{
   defaultTaskLimit: number;
   isDefault: boolean;
 }> = [
-  { key: 'pipelines', name: 'Pipelines', defaultTaskLimit: 10, isDefault: true },
+  {
+    key: 'pipelines',
+    name: 'Pipelines',
+    defaultTaskLimit: 10,
+    isDefault: true,
+  },
   {
     key: 'custom_properties',
     name: 'Custom Properties',
     defaultTaskLimit: 20,
     isDefault: true,
   },
-  { key: 'workflows', name: 'Workflows', defaultTaskLimit: 15, isDefault: true },
+  {
+    key: 'workflows',
+    name: 'Workflows',
+    defaultTaskLimit: 15,
+    isDefault: true,
+  },
   { key: 'forms', name: 'Forms', defaultTaskLimit: 10, isDefault: false },
   {
     key: 'email_templates',
@@ -59,6 +69,13 @@ export const DEFAULT_TICKET_STATUSES: Array<{
   isDefault: boolean;
   category: StatusCategory;
 }> = [
+  {
+    name: 'New',
+    color: '#e4f468ff',
+    order: 0,
+    isDefault: true,
+    category: 'todo',
+  },
   {
     name: 'Open',
     color: '#94a3b8',

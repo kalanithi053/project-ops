@@ -21,6 +21,7 @@ import { SettingsModule } from './settings/settings.module';
 import { AccessModule } from './access/access.module';
 import { IncidentsModule } from './incidents/incidents.module';
 import { CommentsModule } from './comments/comments.module';
+import { ReportsModule } from './reports/reports.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -46,6 +47,7 @@ import { AppService } from './app.service';
     AccessModule,
     IncidentsModule,
     CommentsModule,
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [

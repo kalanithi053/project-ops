@@ -108,26 +108,4 @@ export class WorkspacesService {
       });
     });
   }
-
-  private slugify(input: string): string {
-    return input
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 60);
-  }
-
-  private async buildUniqueSlug(source: string): Promise<string> {
-    const base = this.slugify(source) || 'workspace';
-    let candidate = base;
-    let suffix = 1;
-    while (
-      await this.prisma.workspace.findUnique({ where: { slug: candidate } })
-    ) {
-      suffix += 1;
-      candidate = `${base}-${suffix}`;
-    }
-    return candidate;
-  }
 }

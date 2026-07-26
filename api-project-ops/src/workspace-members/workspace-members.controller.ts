@@ -5,18 +5,16 @@ import {
   Get,
   Param,
   Patch,
-  Post,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
-import { PermissionsGuard } from '../common/guards/permissions.guard';
-import { RequirePermission } from '../common/decorators/require-permission.decorator';
-import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
 import { PERMISSIONS } from '../common/constants/permissions';
-import { WorkspaceMembersService } from './workspace-members.service';
-import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
+import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
+import { WorkspaceMembersService } from './workspace-members.service';
 
 @ApiTags('workspace-members')
 @ApiBearerAuth()
@@ -29,16 +27,6 @@ export class WorkspaceMembersController {
   @ApiOperation({ summary: 'List workspace members' })
   list(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.members.list(workspaceId);
-  }
-
-  @Post()
-  @RequirePermission(PERMISSIONS.MEMBER_INVITE)
-  @ApiOperation({ summary: 'Invite a user to the workspace' })
-  invite(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Body() dto: InviteWorkspaceMemberDto,
-  ) {
-    return this.members.invite(workspaceId, dto);
   }
 
   @Patch(':memberId')

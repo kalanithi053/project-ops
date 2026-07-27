@@ -1,30 +1,43 @@
 "use client";
 
-import * as React from "react";
+import {
+  Boxes,
+  ChevronRight,
+  Loader2,
+  Package,
+  Pencil,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Boxes, ChevronRight, Loader2, Package, Pencil, Plus } from "lucide-react";
+import * as React from "react";
 
-import { cn } from "@/lib/utils";
+import {
+  SettingsField,
+  SettingsSection,
+} from "@/components/settings/settings-section";
+import { EmptyState } from "@/components/shared/empty-state";
+import { FormPanel } from "@/components/shared/form-panel";
+import { QueryState } from "@/components/shared/query-state";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { CardsSkeleton } from "@/components/shared/skeletons";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { FormPanel } from "@/components/shared/form-panel";
 import { Input } from "@/components/ui/input";
-import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { SettingsField, SettingsSection } from "@/components/settings/settings-section";
-import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import {
   useActivatePlan,
   useCreatePlan,
   useUpdatePlan,
 } from "@/lib/api/hooks/use-plans";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { PlanWithModules, ProjectType } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 
 export default function PlansPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -35,7 +48,10 @@ export default function PlansPage() {
   const canManage = can(PERMISSIONS.PLAN_MANAGE);
   // Memoized so the `?? []` fallbacks keep a stable identity across renders
   // and don't invalidate the grouping below on every pass.
-  const plans = React.useMemo(() => settings.data?.plans ?? [], [settings.data]);
+  const plans = React.useMemo(
+    () => settings.data?.plans ?? [],
+    [settings.data],
+  );
   const projectTypes = React.useMemo(
     () => settings.data?.projectTypes ?? [],
     [settings.data],
@@ -63,16 +79,17 @@ export default function PlansPage() {
     (plan) => plan.projectTypeId === selectedTypeId,
   );
 
-  const addButton = canManage ? (
-    <Button
-      size="sm"
-      onClick={() => setCreating(true)}
-      disabled={projectTypes.length === 0}
-    >
-      <Plus className="h-4 w-4" />
-      Add Plan
-    </Button>
-  ) : null;
+  const addButton =
+    canManage && selectedType?.isPlanAdd ? (
+      <Button
+        size="sm"
+        onClick={() => setCreating(true)}
+        disabled={projectTypes.length === 0}
+      >
+        <Plus className="h-4 w-4" />
+        Add Plan
+      </Button>
+    ) : null;
 
   return (
     <SettingsSection
@@ -108,7 +125,8 @@ export default function PlansPage() {
             {selectedType && (
               <p className="text-xs text-muted-foreground">
                 {visiblePlans.length} plan
-                {visiblePlans.length === 1 ? "" : "s"} under {selectedType.name}.
+                {visiblePlans.length === 1 ? "" : "s"} under {selectedType.name}
+                .
               </p>
             )}
           </div>
@@ -275,7 +293,8 @@ function CreatePlanDialog({
   );
   const [error, setError] = React.useState<string | null>(null);
 
-  const typeOptions: SelectOption[] = projectTypes.map((type) => ({
+  const typeOptions: any[] = projectTypes.map((type) => ({
+    ...type,
     label: type.name,
     value: type.id,
   }));
@@ -348,7 +367,7 @@ function CreatePlanDialog({
         <SelectField
           id="plan-project-type"
           aria-label="Project type"
-          options={typeOptions}
+          options={typeOptions?.filter((type) => type.isPlanAdd)}
           value={projectTypeId}
           onValueChange={setProjectTypeId}
           placeholder="Select a project type"
@@ -388,7 +407,10 @@ function RenamePlanPanel({
     }
     if (trimmed === plan.name) return onClose();
 
-    update.mutate({ id: plan.id, dto: { name: trimmed } }, { onSuccess: onClose });
+    update.mutate(
+      { id: plan.id, dto: { name: trimmed } },
+      { onSuccess: onClose },
+    );
   }
 
   return (

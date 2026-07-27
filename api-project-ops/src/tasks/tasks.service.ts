@@ -103,8 +103,7 @@ export class TasksService {
 
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
-    await this.assertAssignees(workspaceId, dto.assigneeIds);
-    this.assertWithinProjectDates(project, dto.startDate, dto.dueDate);
+    if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
 
     const position = dto.position ?? (await this.nextPosition(projectId));
 
@@ -120,7 +119,7 @@ export class TasksService {
           dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
           statusId: dto.statusId ?? null,
           priorityId: dto.priorityId ?? null,
-          assigneeId: dto.assigneeId ?? null,
+          assigneeId: dto.assigneeId ?? userId ?? null,
           createdBy: userId,
           position,
           estimateHours: dto.estimateHours ?? null,
@@ -172,16 +171,7 @@ export class TasksService {
     }
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
-    await this.assertAssignees(workspaceId, dto.assigneeIds);
-
-    // Validate the dates the task will end up with, not just the ones sent,
-    // so shifting only one end still can't push it outside the project.
-    const project = await this.assertProject(workspaceId, projectId);
-    this.assertWithinProjectDates(
-      project,
-      dto.startDate ?? task.startDate?.toISOString(),
-      dto.dueDate ?? task.dueDate?.toISOString(),
-    );
+    if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
 
     const statusChanged = !!dto.statusId && dto.statusId !== task.statusId;
     const changes = this.computeTaskChanges(task, dto);
@@ -262,7 +252,9 @@ export class TasksService {
         include: {
           status: { select: { id: true, name: true, category: true } },
           priority: { select: { id: true, name: true, color: true } },
-          assignee: { select: { id: true, email: true } },
+          assignee: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
           creator: { select: { id: true, email: true } },
         },
       });
@@ -468,71 +460,12 @@ export class TasksService {
     }
   }
 
-  /**
-   * Every assignee must still be a workspace member. Checked as a set so one
-   * bad id rejects the whole request rather than silently assigning a subset.
-   */
-  private async assertAssignees(workspaceId: string, userIds?: string[]) {
-    if (!userIds?.length) return;
-
-    const unique = [...new Set(userIds)];
-    const members = await this.prisma.workspaceMember.findMany({
-      where: {
-        workspaceId,
-        userId: { in: unique },
-        status: { not: 'removed' },
-      },
-      select: { userId: true },
+  private async assertAssignee(workspaceId: string, userId: string) {
+    const member = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId, status: { not: 'removed' } },
     });
-
-    if (members.length !== unique.length) {
-      throw new BadRequestException(
-        'One or more assignees are not workspace members',
-      );
-    }
-  }
-
-  /**
-   * Keeps a task's dates inside its project's window. Without this a task
-   * could be scheduled to start before the project does or run past its end,
-   * which makes every project-level date rollup meaningless.
-   */
-  private assertWithinProjectDates(
-    project: { name: string; startDate: Date | null; endDate: Date | null },
-    startDate?: string | null,
-    dueDate?: string | null,
-  ) {
-    const start = startDate ? new Date(startDate) : null;
-    const due = dueDate ? new Date(dueDate) : null;
-
-    if (start && due && due < start) {
-      throw new BadRequestException(
-        'Task due date cannot be before its start date.',
-      );
-    }
-
-    // Compare against the day boundaries so a task dated on the project's
-    // first or last day is accepted rather than rejected on time-of-day.
-    const projectStart = project.startDate
-      ? startOfDay(project.startDate)
-      : null;
-    const projectEnd = project.endDate ? endOfDay(project.endDate) : null;
-
-    for (const [label, value] of [
-      ['start date', start],
-      ['due date', due],
-    ] as const) {
-      if (!value) continue;
-      if (projectStart && value < projectStart) {
-        throw new BadRequestException(
-          `Task ${label} is before the project start date.`,
-        );
-      }
-      if (projectEnd && value > projectEnd) {
-        throw new BadRequestException(
-          `Task ${label} is after the project end date.`,
-        );
-      }
+    if (!member) {
+      throw new BadRequestException('Assignee is not a workspace member');
     }
   }
 
@@ -632,18 +565,4 @@ export class TasksService {
       ),
     );
   }
-}
-
-/** Midnight at the start of a date, in UTC. */
-function startOfDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setUTCHours(0, 0, 0, 0);
-  return copy;
-}
-
-/** The last millisecond of a date, in UTC. */
-function endOfDay(date: Date): Date {
-  const copy = new Date(date);
-  copy.setUTCHours(23, 59, 59, 999);
-  return copy;
 }

@@ -1,9 +1,20 @@
 "use client";
 
-import * as React from "react";
-import { useParams } from "next/navigation";
 import { Loader2, UserPlus, Users } from "lucide-react";
+import { useParams } from "next/navigation";
+import * as React from "react";
 
+import { isValidEmail } from "@/app/(auth)/login/page";
+import { SettingsField } from "@/components/settings/settings-section";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { EmptyState } from "@/components/shared/empty-state";
+import { FormPanel } from "@/components/shared/form-panel";
+import { QueryState } from "@/components/shared/query-state";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
 import { Badge, type BadgeProps } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,13 +27,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { QueryState } from "@/components/shared/query-state";
-import { TableSkeleton } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { FormPanel } from "@/components/shared/form-panel";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { SettingsField } from "@/components/settings/settings-section";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import {
   useInviteProjectMember,
   useProjectMembers,
@@ -30,10 +35,9 @@ import {
   useUpdateProjectMember,
 } from "@/lib/api/hooks/use-project-members";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
-import { formatDate } from "@/lib/format";
 import type { MembershipStatus, ProjectMember } from "@/lib/api/types";
+import { formatDate } from "@/lib/format";
 
 const STATUS_TONE: Record<MembershipStatus, BadgeProps["variant"]> = {
   invited: "warning",
@@ -124,18 +128,23 @@ export default function ProjectUsersPage() {
                     const busy =
                       updateMember.isPending &&
                       updateMember.variables?.id === member.id;
-
+                    const name =
+                      ([member?.user?.firstName, member?.user?.lastName]
+                        .join(" ")
+                        ?.trim() ||
+                        member?.user?.email?.split("@")[0]) ??
+                      "Unknown";
                     return (
                       <TableRow key={member.id}>
-                        <TableCell className="font-medium">
-                          {member.user?.username ?? "Unknown"}
+                        <TableCell className="font-medium first-letter:capitalize">
+                          {name}
                         </TableCell>
 
                         <TableCell>
                           {canInvite ? (
                             <div className="flex items-center gap-2">
                               <SelectField
-                                aria-label={`Role for ${member.user?.username ?? "member"}`}
+                                aria-label={`Role for ${name}`}
                                 options={roleOptions}
                                 value={member.roleId}
                                 onValueChange={(roleId) =>
@@ -201,7 +210,13 @@ export default function ProjectUsersPage() {
       <ConfirmDialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${removing?.user?.username ?? "this member"}?`}
+        title={`Remove ${
+          ([removing?.user?.firstName, removing?.user?.lastName]
+            .join(" ")
+            ?.trim() ||
+            removing?.user?.email?.split("@")[0]) ??
+          "this member"
+        }?`}
         description="They lose access to this project's board and tasks. Their workspace membership is unaffected."
         confirmLabel="Remove from project"
         destructive
@@ -245,10 +260,11 @@ function AddProjectMemberPanel({
     setError(null);
 
     const trimmed = username.trim();
-    if (!trimmed) return setError("Enter the user's username.");
+    if (!trimmed) return setError("Enter the user's email.");
+    if (!isValidEmail(trimmed)) return setError("Enter valid email.");
     if (!roleId) return setError("Choose a role for this project.");
 
-    invite.mutate({ username: trimmed, roleId }, { onSuccess: onClose });
+    invite.mutate({ email: trimmed, roleId }, { onSuccess: onClose });
   }
 
   return (
@@ -284,12 +300,11 @@ function AddProjectMemberPanel({
         </>
       }
     >
-      <SettingsField label="Username" htmlFor="project-member-username">
+      <SettingsField label="Email" htmlFor="project-member-username">
         <Input
           id="project-member-username"
           value={username}
           onChange={(event) => setUsername(event.target.value)}
-          placeholder="jordan.rivera"
           autoFocus
         />
       </SettingsField>

@@ -63,9 +63,7 @@ export interface ProjectModuleInstance {
 
 /** GET /projects/:id — richer than the list shape. Note: no tasks. */
 export interface ProjectDetail extends Project {
-  moduleInstances?: Array<
-    ProjectModuleInstance & { module: WorkspaceModule }
-  >;
+  moduleInstances?: Array<ProjectModuleInstance & { module: WorkspaceModule }>;
   members?: Array<{
     id: string;
     userId: string;
@@ -145,18 +143,17 @@ export interface Me {
 // ---- Request DTOs ----
 
 export interface RequestOtpDto {
-  username: string;
+  email: string;
 }
 
 export interface RegisterDto {
-  username: string;
   firstName: string;
   lastName?: string;
-  email?: string;
+  email: string;
 }
 
 export interface VerifyOtpDto {
-  username: string;
+  email: string;
   otp: string;
 }
 
@@ -211,22 +208,26 @@ export interface UpdateModuleDto {
  * rather than a free-text label.
  */
 export const STATUS_CATEGORIES = [
+  "new",
   "todo",
   "in_progress",
   "ready_qa",
   "review",
   "done",
+  "blocked",
 ] as const;
 
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number];
 
 /** Human labels for `StatusCategory`, for selects and table cells. */
 export const STATUS_CATEGORY_LABELS: Record<StatusCategory, string> = {
+  new: "New",
   todo: "To Do",
   in_progress: "In Progress",
   ready_qa: "Ready for QA",
   review: "Review",
   done: "Done",
+  blocked: "Blocked",
 };
 
 export interface TicketStatus {
@@ -312,7 +313,12 @@ export interface ProjectMember {
   invitedBy?: string | null;
   status: MembershipStatus;
   joinedAt?: string;
-  user?: { id: string; username: string };
+  user?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+  };
   role?: { id: string; name: string };
   [key: string]: unknown;
 }
@@ -322,7 +328,7 @@ export interface ProjectMember {
  * `roleId` is required — there's no default-role fallback on this route.
  */
 export interface InviteProjectMemberDto {
-  username: string;
+  email: string;
   roleId: string;
 }
 

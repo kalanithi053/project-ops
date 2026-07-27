@@ -79,17 +79,17 @@ Requires **Node 18+** and a reachable **PostgreSQL** instance.
 
 ## Environment variables
 
-| Variable                  | Purpose                                              | Example                                                        |
-| ------------------------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| `PORT`                    | HTTP port                                            | `3000`                                                         |
-| `CORS`                    | Semicolon-separated allowed origins                  | `http://localhost:4000;http://localhost:3000`                  |
-| `DATABASE_URL`            | Prisma Postgres connection string                    | `postgresql://postgres:postgres@localhost:5432/project_ops`    |
-| `JWT_SECRET`              | Signing secret for all tokens                        | `change_me_in_production`                                      |
-| `JWT_IDENTITY_EXPIRATION` | Identity token TTL                                   | `15m`                                                          |
-| `JWT_ACCESS_EXPIRATION`   | Session access token TTL                             | `15m`                                                          |
-| `JWT_REFRESH_EXPIRATION`  | Session refresh token TTL                            | `7d`                                                           |
-| `OTP_TTL_SECONDS`         | OTP validity window                                  | `300`                                                          |
-| `OTP_MAX_ATTEMPTS`        | Max verify attempts per OTP                          | `5`                                                            |
+| Variable                  | Purpose                             | Example                                                     |
+| ------------------------- | ----------------------------------- | ----------------------------------------------------------- |
+| `PORT`                    | HTTP port                           | `3000`                                                      |
+| `CORS`                    | Semicolon-separated allowed origins | `http://localhost:4000;http://localhost:3000`               |
+| `DATABASE_URL`            | Prisma Postgres connection string   | `postgresql://postgres:postgres@localhost:5432/project_ops` |
+| `JWT_SECRET`              | Signing secret for all tokens       | `change_me_in_production`                                   |
+| `JWT_IDENTITY_EXPIRATION` | Identity token TTL                  | `15m`                                                       |
+| `JWT_ACCESS_EXPIRATION`   | Session access token TTL            | `15m`                                                       |
+| `JWT_REFRESH_EXPIRATION`  | Session refresh token TTL           | `7d`                                                        |
+| `OTP_TTL_SECONDS`         | OTP validity window                 | `300`                                                       |
+| `OTP_MAX_ATTEMPTS`        | Max verify attempts per OTP         | `5`                                                         |
 
 `DATABASE_URL` is what Prisma reads; the legacy `DB_*` values are kept only so you
 can compose the URL by hand.
@@ -98,7 +98,7 @@ can compose the URL by hand.
 
 ```bash
 # create/apply migrations in dev (also runs the seed)
-npm run prisma:migrate
+npx prisma migrate reset --force && npm run prisma:migrate
 
 # apply committed migrations in prod
 npm run prisma:migrate:deploy
@@ -218,24 +218,24 @@ attachment and seed tasks are skipped.
 
 ## API surface
 
-| Area              | Route                                                                                            |
-| ----------------- | ------------------------------------------------------------------------------------------------ |
-| Auth              | `POST /auth/otp/request`, `/auth/register`, `/auth/otp/verify`, `/auth/token/refresh`            |
-| Users             | `GET/PATCH /users/me`                                                                             |
-| Workspaces        | `POST /workspaces`, `GET /workspaces/me`, `GET /workspaces/:id`                                   |
-| Workspace settings| `GET /workspace/settings` (aggregate config bundle)                                              |
-| Priorities        | `GET/POST /priorities`, `PATCH/DELETE /priorities/:id`                                            |
-| Project types     | `GET/POST /project-types`, `PATCH/DELETE /project-types/:id`                                      |
-| Workspace members | `GET/POST /workspace-members`, `PATCH/DELETE /workspace-members/:id`                              |
-| Roles             | `GET/POST /roles`, `PATCH/DELETE /roles/:id`                                                      |
-| Permissions       | `GET /permissions`                                                                                |
-| Plans             | `GET /plans`, `GET /plans/active`, `POST /plans/:planId/activate`, `PATCH /plans/active`          |
-| Projects          | `GET/POST /projects`, `GET/PATCH/DELETE /projects/:id`                                            |
-| Project members   | `GET/POST /projects/:projectId/members`, `PATCH/DELETE /projects/:projectId/members/:memberId`   |
-| Modules (catalog) | `GET/POST /modules`, `PATCH/DELETE /modules/:id`                                                  |
-| Module instances  | `GET/POST /projects/:projectId/modules`, `PATCH/DELETE /projects/:projectId/modules/:instanceId` |
-| Tasks             | `GET/POST /projects/:projectId/tasks`, `GET/PATCH/DELETE /projects/:projectId/tasks/:taskId`     |
-| Ticket statuses   | `GET/POST /ticket-statuses`, `PATCH/DELETE /ticket-statuses/:id`                                  |
+| Area               | Route                                                                                            |
+| ------------------ | ------------------------------------------------------------------------------------------------ |
+| Auth               | `POST /auth/otp/request`, `/auth/register`, `/auth/otp/verify`, `/auth/token/refresh`            |
+| Users              | `GET/PATCH /users/me`                                                                            |
+| Workspaces         | `POST /workspaces`, `GET /workspaces/me`, `GET /workspaces/:id`                                  |
+| Workspace settings | `GET /workspace/settings` (aggregate config bundle)                                              |
+| Priorities         | `GET/POST /priorities`, `PATCH/DELETE /priorities/:id`                                           |
+| Project types      | `GET/POST /project-types`, `PATCH/DELETE /project-types/:id`                                     |
+| Workspace members  | `GET/POST /workspace-members`, `PATCH/DELETE /workspace-members/:id`                             |
+| Roles              | `GET/POST /roles`, `PATCH/DELETE /roles/:id`                                                     |
+| Permissions        | `GET /permissions`                                                                               |
+| Plans              | `GET /plans`, `GET /plans/active`, `POST /plans/:planId/activate`, `PATCH /plans/active`         |
+| Projects           | `GET/POST /projects`, `GET/PATCH/DELETE /projects/:id`                                           |
+| Project members    | `GET/POST /projects/:projectId/members`, `PATCH/DELETE /projects/:projectId/members/:memberId`   |
+| Modules (catalog)  | `GET/POST /modules`, `PATCH/DELETE /modules/:id`                                                 |
+| Module instances   | `GET/POST /projects/:projectId/modules`, `PATCH/DELETE /projects/:projectId/modules/:instanceId` |
+| Tasks              | `GET/POST /projects/:projectId/tasks`, `GET/PATCH/DELETE /projects/:projectId/tasks/:taskId`     |
+| Ticket statuses    | `GET/POST /ticket-statuses`, `PATCH/DELETE /ticket-statuses/:id`                                 |
 
 Full request/response schemas are in Swagger at `/api/doc`.
 

@@ -45,11 +45,14 @@ function messageFor(error: unknown, fallback: string) {
  * OTP verification includes an animated enterprise-style success state
  * before navigating to the workspace selection screen.
  */
+export const isValidEmail = (email: string): boolean => {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+};
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [step, setStep] = useState<Step>("identify");
-  const [username, setUsername] = useState("");
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [email, setEmail] = useState("");
@@ -80,14 +83,18 @@ export default function LoginPage() {
 
     setError(null);
 
-    if (!username.trim()) {
-      setError("Enter your user name to continue.");
+    if (!email.trim()) {
+      setError("Enter your Email to continue.");
+      return;
+    }
+    if (!isValidEmail(email)) {
+      setError("Enter your valid email.");
       return;
     }
 
     requestOtp.mutate(
       {
-        username: username.trim(),
+        email: email.trim(),
       },
       {
         onSuccess: (data) => {
@@ -111,13 +118,15 @@ export default function LoginPage() {
       setError("Enter your first name.");
       return;
     }
-
+    if (!isValidEmail(email)) {
+      setError("Enter your valid email.");
+      return;
+    }
     register.mutate(
       {
-        username: username.trim(),
         firstName: firstName.trim(),
         lastName: lastName.trim() || undefined,
-        email: email.trim().toLowerCase() || undefined,
+        email: email.trim().toLowerCase(),
       },
       {
         onSuccess: () => {
@@ -142,7 +151,7 @@ export default function LoginPage() {
 
     verifyOtp.mutate(
       {
-        username: username.trim(),
+        email: email.trim(),
         otp: code,
       },
       {
@@ -215,15 +224,14 @@ export default function LoginPage() {
               className="flex flex-col gap-4"
             >
               <div className="flex flex-col gap-2">
-                <Label htmlFor="username">User name</Label>
+                <Label htmlFor="username">Email</Label>
 
                 <Input
                   id="username"
-                  name="username"
-                  autoComplete="username"
-                  placeholder="jane.doe"
-                  value={username}
-                  onChange={(event) => setUsername(event.target.value)}
+                  name="email"
+                  autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                   aria-invalid={Boolean(error) || undefined}
                   autoFocus
                 />
@@ -279,8 +287,8 @@ export default function LoginPage() {
               </h1>
 
               <p className="text-sm text-muted-foreground">
-                <span className="font-medium text-foreground">{username}</span>{" "}
-                is new here. Add a few details to get started.
+                <span className="font-medium text-foreground">{email}</span> is
+                new here. Add a few details to get started.
               </p>
             </div>
 
@@ -289,18 +297,6 @@ export default function LoginPage() {
               noValidate
               className="flex flex-col gap-4"
             >
-              <div className="flex flex-col gap-2">
-                <Label htmlFor="reg-username">User name</Label>
-
-                <Input
-                  id="reg-username"
-                  value={username}
-                  readOnly
-                  aria-readonly
-                  className="cursor-not-allowed bg-muted text-muted-foreground"
-                />
-              </div>
-
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div className="flex flex-col gap-2">
                   <Label htmlFor="firstName">First name</Label>
@@ -441,7 +437,7 @@ export default function LoginPage() {
                       <p className="text-sm leading-6 text-muted-foreground">
                         Enter the {OTP_LENGTH}-digit verification code sent for{" "}
                         <span className="font-semibold text-foreground">
-                          {username}
+                          {email}
                         </span>
                         .
                       </p>
@@ -502,33 +498,35 @@ export default function LoginPage() {
 
                       {/* OTP progress indicator */}
                       {otpStatus !== "success" && (
-                      <div className="flex items-center justify-center gap-1.5">
-                        {Array.from({ length: OTP_LENGTH }).map((_, index) => {
-                          const isFilled = index < otp.length;
+                        <div className="flex items-center justify-center gap-1.5">
+                          {Array.from({ length: OTP_LENGTH }).map(
+                            (_, index) => {
+                              const isFilled = index < otp.length;
 
-                          return (
-                            <motion.div
-                              key={index}
-                              initial={{ scale: 0.6, opacity: 0 }}
-                              animate={{
-                                scale: isFilled ? 1 : 0.8,
-                                opacity: isFilled ? 1 : 0.35,
-                              }}
-                              transition={{
-                                type: "spring",
-                                stiffness: 400,
-                                damping: 20,
-                                delay: index * 0.03,
-                              }}
-                              className={`h-1.5 rounded-full transition-all duration-300 ${
-                                isFilled
-                                  ? "w-5 bg-primary"
-                                  : "w-1.5 bg-muted-foreground/30"
-                              }`}
-                            />
-                          );
-                        })}
-                      </div>
+                              return (
+                                <motion.div
+                                  key={index}
+                                  initial={{ scale: 0.6, opacity: 0 }}
+                                  animate={{
+                                    scale: isFilled ? 1 : 0.8,
+                                    opacity: isFilled ? 1 : 0.35,
+                                  }}
+                                  transition={{
+                                    type: "spring",
+                                    stiffness: 400,
+                                    damping: 20,
+                                    delay: index * 0.03,
+                                  }}
+                                  className={`h-1.5 rounded-full transition-all duration-300 ${
+                                    isFilled
+                                      ? "w-5 bg-primary"
+                                      : "w-1.5 bg-muted-foreground/30"
+                                  }`}
+                                />
+                              );
+                            },
+                          )}
+                        </div>
                       )}
                     </div>
                   </motion.div>

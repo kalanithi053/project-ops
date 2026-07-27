@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 type ReportTask = {
   moduleInstanceId: string | null;
   assigneeId: string | null;
-  status: { name: string; category: string } | null;
+  status: { name: string; category: string; isDefault: boolean } | null;
   priority: { name: string } | null;
   estimateHours: number | null;
   completedHours: number | null;
@@ -52,7 +52,7 @@ export class ReportsService {
         select: {
           moduleInstanceId: true,
           assigneeId: true,
-          status: { select: { name: true, category: true } },
+          status: { select: { name: true, category: true, isDefault: true } },
           priority: { select: { name: true } },
           estimateHours: true,
           completedHours: true,
@@ -100,9 +100,7 @@ export class ReportsService {
       const moduleTasks = tasks.filter(
         (t) => t.moduleInstanceId === instance.id,
       );
-      const used = moduleTasks.filter(
-        (t) => (t.status?.name ?? '').toLowerCase() !== 'new',
-      ).length;
+      const used = moduleTasks.filter((t) => !t.status.isDefault).length;
       return {
         module: instance.module.name,
         used,
@@ -116,7 +114,7 @@ export class ReportsService {
   private buildStatusBreakdown(tasks: ReportTask[]) {
     return {
       blocked: tasks.filter(
-        (t) => (t.status?.name ?? '').toLowerCase() === 'blocked',
+        (t) => (t.status?.category ?? '').toLowerCase() === 'blocked',
       ).length,
       done: tasks.filter((t) => t.status?.category === 'done').length,
       review: tasks.filter((t) => t.status?.category === 'review').length,

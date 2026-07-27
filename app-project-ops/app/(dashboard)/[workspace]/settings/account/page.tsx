@@ -1,19 +1,19 @@
 "use client";
 
-import * as React from "react";
 import { useParams } from "next/navigation";
+import * as React from "react";
 
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
 import {
   SettingsField,
   SettingsFormCard,
   SettingsSection,
 } from "@/components/settings/settings-section";
-import { useMe, useUpdateMe } from "@/lib/api/hooks/use-users";
+import { QueryState } from "@/components/shared/query-state";
+import { CardsSkeleton } from "@/components/shared/skeletons";
+import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useMe, useUpdateMe } from "@/lib/api/hooks/use-users";
 import type { Me } from "@/lib/api/types";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -123,20 +123,6 @@ function ProfileForm({ saved, roleName }: { saved: Me; roleName?: string }) {
             placeholder="Baker"
             maxLength={80}
             autoComplete="family-name"
-          />
-        </SettingsField>
-
-        <SettingsField
-          label="Username"
-          htmlFor="user-username"
-          hint="Your username identifies you at sign-in and can't be changed."
-        >
-          <Input
-            id="user-username"
-            value={saved.username}
-            readOnly
-            disabled
-            className="bg-muted"
           />
         </SettingsField>
 

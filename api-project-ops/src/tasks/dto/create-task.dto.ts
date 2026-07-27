@@ -1,14 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  ArrayUnique,
-  IsArray,
   IsDateString,
   IsInt,
   IsNumber,
   IsOptional,
   IsString,
   IsUUID,
-  Max,
   MaxLength,
   Min,
   MinLength,
@@ -65,29 +62,10 @@ export class CreateTaskDto {
   @IsUUID()
   priorityId?: string;
 
-  @ApiProperty({
-    required: false,
-    type: [String],
-    description:
-      'Users assigned to this task. On update the array replaces the whole set; omit the key to leave assignees untouched.',
-  })
+  @ApiProperty({ required: false })
   @IsOptional()
-  @IsArray()
-  @ArrayUnique()
-  @IsUUID('all', { each: true })
-  assigneeIds?: string[];
-
-  @ApiProperty({
-    required: false,
-    minimum: 0,
-    maximum: 10000,
-    description: 'Estimated effort in whole hours.',
-  })
-  @IsOptional()
-  @IsInt()
-  @Min(0)
-  @Max(10000)
-  etaHours?: number;
+  @IsUUID()
+  assigneeId?: string;
 
   @ApiProperty({ required: false, minimum: 0 })
   @IsOptional()

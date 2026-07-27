@@ -3,14 +3,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
-import { useAuthStore } from "@/lib/store/auth-store";
-import { toast } from "@/lib/toast/toast-store";
 import type {
   InviteProjectMemberDto,
   ProjectMember,
   ProjectPermissions,
   UpdateProjectMemberDto,
 } from "@/lib/api/types";
+import { useAuthStore } from "@/lib/store/auth-store";
+import { toast } from "@/lib/toast/toast-store";
 
 /** Query key for a project's member list. */
 export function projectMembersKey(workspaceSlug: string, projectId: string) {
@@ -64,7 +64,9 @@ function useMemberInvalidation(workspaceSlug: string, projectId: string) {
     });
     // The project header shows a member count, and the caller's own access
     // may have changed if they edited their own membership.
-    queryClient.invalidateQueries({ queryKey: ["project", workspaceSlug, projectId] });
+    queryClient.invalidateQueries({
+      queryKey: ["project", workspaceSlug, projectId],
+    });
     queryClient.invalidateQueries({
       queryKey: ["my-project-permissions", workspaceSlug, projectId],
     });
@@ -89,7 +91,7 @@ export function useInviteProjectMember(
       }),
     onSuccess: (member) => {
       invalidate();
-      toast.success("Member added", member?.user?.username);
+      toast.success("Member added", member?.user?.email);
     },
   });
 }

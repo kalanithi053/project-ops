@@ -1,23 +1,23 @@
 "use client";
 
-import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
 import { Check, Copy } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import * as React from "react";
 
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
 import {
   SettingsField,
   SettingsFormCard,
   SettingsSection,
 } from "@/components/settings/settings-section";
+import { QueryState } from "@/components/shared/query-state";
+import { CardsSkeleton } from "@/components/shared/skeletons";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import {
   useUpdateWorkspace,
   useWorkspaceSettings,
 } from "@/lib/api/hooks/use-settings";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { WorkspaceSettings } from "@/lib/api/types";
 
@@ -62,8 +62,6 @@ export default function WorkspaceSettingsPage() {
               canManage={can(PERMISSIONS.WORKSPACE_MANAGE)}
             />
           )}
-
-          <WorkspaceIdCard workspaceId={saved?.id} />
         </div>
       </QueryState>
     </SettingsSection>
@@ -135,7 +133,9 @@ function WorkspaceIdentityForm({
       onDiscard={discard}
       error={error}
       disabled={!canManage}
-      footerNote={dirty ? "You have unsaved changes." : "Everything is up to date."}
+      footerNote={
+        dirty ? "You have unsaved changes." : "Everything is up to date."
+      }
     >
       <SettingsField label="Name" htmlFor="workspace-name">
         <Input

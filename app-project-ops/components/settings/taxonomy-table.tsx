@@ -1,8 +1,9 @@
 "use client";
 
-import * as React from "react";
 import { Pencil, Trash2 } from "lucide-react";
+import * as React from "react";
 
+import { EmptyState } from "@/components/shared/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -14,7 +15,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { EmptyState } from "@/components/shared/empty-state";
 
 /**
  * The shape ticket statuses and priorities have in common. Both are ordered,
@@ -74,7 +74,7 @@ export function TaxonomyTable<T extends TaxonomyRow>({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Name</TableHead>
+              <TableHead className="w-60">Name</TableHead>
               <TableHead className="w-20">Order</TableHead>
               {extraColumn && (
                 <TableHead className="w-40">{extraColumn.header}</TableHead>
@@ -103,7 +103,9 @@ export function TaxonomyTable<T extends TaxonomyRow>({
                   {row.order}
                 </TableCell>
 
-                {extraColumn && <TableCell>{extraColumn.render(row)}</TableCell>}
+                {extraColumn && (
+                  <TableCell>{extraColumn.render(row)}</TableCell>
+                )}
 
                 <TableCell>
                   {row.color ? (

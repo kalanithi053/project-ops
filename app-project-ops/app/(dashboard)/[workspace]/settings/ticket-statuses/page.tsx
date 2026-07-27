@@ -1,28 +1,33 @@
 "use client";
 
-import * as React from "react";
-import { useParams } from "next/navigation";
 import { ListChecks, Loader2, Plus } from "lucide-react";
+import { useParams } from "next/navigation";
+import * as React from "react";
 
-import { Badge, type BadgeProps } from "@/components/ui/badge";
+import {
+  SettingsField,
+  SettingsSection,
+} from "@/components/settings/settings-section";
+import { TaxonomyTable } from "@/components/settings/taxonomy-table";
+import { ColorPicker, isValidHex } from "@/components/shared/color-picker";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { FormPanel } from "@/components/shared/form-panel";
+import { QueryState } from "@/components/shared/query-state";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { FormPanel } from "@/components/shared/form-panel";
-import { QueryState } from "@/components/shared/query-state";
-import { TableSkeleton } from "@/components/shared/skeletons";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { ColorPicker, isValidHex } from "@/components/shared/color-picker";
-import { ConfirmDialog } from "@/components/shared/confirm-dialog";
-import { SettingsField, SettingsSection } from "@/components/settings/settings-section";
-import { TaxonomyTable } from "@/components/settings/taxonomy-table";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import {
   useCreateTicketStatus,
   useDeleteTicketStatus,
   useUpdateTicketStatus,
 } from "@/lib/api/hooks/use-ticket-statuses";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import {
   STATUS_CATEGORIES,
@@ -30,15 +35,6 @@ import {
   type StatusCategory,
   type TicketStatus,
 } from "@/lib/api/types";
-
-/** Maps a workflow category to a semantic badge tone. */
-const CATEGORY_TONE: Record<StatusCategory, BadgeProps["variant"]> = {
-  todo: "neutral",
-  in_progress: "info",
-  ready_qa: "warning",
-  review: "secondary",
-  done: "success",
-};
 
 const CATEGORY_OPTIONS: SelectOption[] = STATUS_CATEGORIES.map((category) => ({
   label: STATUS_CATEGORY_LABELS[category],
@@ -81,14 +77,6 @@ export default function TicketStatusesPage() {
         <TaxonomyTable
           rows={statuses}
           canManage={canManage}
-          extraColumn={{
-            header: "Category",
-            render: (status) => (
-              <Badge variant={CATEGORY_TONE[status.category]}>
-                {STATUS_CATEGORY_LABELS[status.category]}
-              </Badge>
-            ),
-          }}
           onEdit={setEditing}
           onDelete={setDeleting}
           emptyTitle="No ticket statuses"
@@ -147,7 +135,8 @@ function StatusDialog({
   const pending = create.isPending || update.isPending;
 
   // A new status goes to the end of the list by default.
-  const nextOrder = existing.reduce((max, item) => Math.max(max, item.order), -1) + 1;
+  const nextOrder =
+    existing.reduce((max, item) => Math.max(max, item.order), -1) + 1;
 
   const [name, setName] = React.useState(status?.name ?? "");
   const [category, setCategory] = React.useState<StatusCategory>(
@@ -197,7 +186,12 @@ function StatusDialog({
       busy={pending}
       footer={
         <>
-          <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={pending}
+          >
             Cancel
           </Button>
           <Button type="submit" disabled={pending}>

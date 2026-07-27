@@ -2,22 +2,31 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 
 @Injectable()
 export class ProjectMembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(ProjectMembersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   async list(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
     return this.prisma.projectMember.findMany({
       where: { projectId },
       include: {
-        user: { select: { id: true, username: true } },
+        user: {
+          select: { id: true, email: true, firstName: true, lastName: true },
+        },
         role: { select: { id: true, name: true } },
       },
     });
@@ -25,7 +34,7 @@ export class ProjectMembersService {
 
   /**
    * Invites a user to a project. If the invitee is not yet a workspace member
-   * they are auto-invited to the workspace too. Unknown usernames are
+   * they are auto-invited to the workspace too. Unknown emails are
    * self-registered.
    */
   async invite(
@@ -34,13 +43,13 @@ export class ProjectMembersService {
     invitedBy: string,
     dto: InviteProjectMemberDto,
   ) {
-    await this.assertProject(workspaceId, projectId);
-    await this.assertRole(workspaceId, dto.roleId);
+    const project = await this.assertProject(workspaceId, projectId);
+    const role = await this.assertRole(workspaceId, dto.roleId);
 
     const user = await this.prisma.user.upsert({
-      where: { username: dto.username },
+      where: { email: dto.email },
       update: {},
-      create: { username: dto.username },
+      create: { email: dto.email },
     });
 
     await this.ensureWorkspaceMembership(workspaceId, user.id);
@@ -49,9 +58,7 @@ export class ProjectMembersService {
       where: { projectId_userId: { projectId, userId: user.id } },
     });
     if (existing) {
-      throw new ConflictException(
-        'User is already a member of this project.',
-      );
+      throw new ConflictException('User is already a member of this project.');
     }
 
     const member = await this.prisma.projectMember.create({
@@ -60,15 +67,25 @@ export class ProjectMembersService {
         userId: user.id,
         roleId: dto.roleId,
         invitedBy,
-        status: 'invited',
+        status: 'active',
       },
       include: {
-        user: { select: { id: true, username: true } },
+        user: { select: { id: true, email: true } },
         role: { select: { id: true, name: true } },
       },
     });
 
-    // Stub notification.
+    await this.mail
+      .sendProjectInviteEmail(user.email, {
+        projectName: project.name,
+        roleName: role.name,
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send project invite email to=${user.email}: ${(err as Error).message}`,
+        ),
+      );
+
     return { ...member, message: 'Member invited' };
   }
 
@@ -96,9 +113,7 @@ export class ProjectMembersService {
       select: { ownerId: true },
     });
     if (project?.ownerId === member.userId) {
-      throw new BadRequestException(
-        'The project owner cannot be removed.',
-      );
+      throw new BadRequestException('The project owner cannot be removed.');
     }
     await this.prisma.projectMember.update({
       where: { id: memberId },
@@ -117,7 +132,7 @@ export class ProjectMembersService {
       if (membership.status === 'removed') {
         await this.prisma.workspaceMember.update({
           where: { id: membership.id },
-          data: { status: 'invited' },
+          data: { status: 'active' },
         });
       }
       return;
@@ -137,7 +152,7 @@ export class ProjectMembersService {
         workspaceId,
         userId,
         roleId: defaultRole.id,
-        status: 'invited',
+        status: 'active',
       },
     });
   }

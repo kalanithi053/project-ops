@@ -19,7 +19,6 @@ export class WorkspaceMembersService {
         user: {
           select: {
             id: true,
-            username: true,
             email: true,
             firstName: true,
             lastName: true,
@@ -31,14 +30,14 @@ export class WorkspaceMembersService {
     });
   }
 
-  /** Directly invite a user to the workspace (self-registers unknown usernames). */
+  /** Directly invite a user to the workspace (self-registers unknown emails). */
   async invite(workspaceId: string, dto: InviteWorkspaceMemberDto) {
     const roleId = await this.resolveRoleId(workspaceId, dto.roleId);
 
     const user = await this.prisma.user.upsert({
-      where: { username: dto.username },
+      where: { email: dto.email },
       update: {},
-      create: { username: dto.username },
+      create: { email: dto.email },
     });
 
     const existing = await this.prisma.workspaceMember.findUnique({
@@ -58,7 +57,7 @@ export class WorkspaceMembersService {
     return this.prisma.workspaceMember.create({
       data: { workspaceId, userId: user.id, roleId, status: 'active' },
       include: {
-        user: { select: { id: true, username: true } },
+        user: { select: { id: true, email: true } },
         role: { select: { id: true, name: true } },
       },
     });

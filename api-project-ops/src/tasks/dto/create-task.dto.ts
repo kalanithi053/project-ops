@@ -4,6 +4,7 @@ import {
   IsArray,
   IsDateString,
   IsInt,
+  IsNumber,
   IsOptional,
   IsString,
   IsUUID,
@@ -93,4 +94,16 @@ export class CreateTaskDto {
   @IsInt()
   @Min(0)
   position?: number;
+
+  @ApiProperty({ required: false, minimum: 0, example: 8 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  estimateHours?: number;
+
+  @ApiProperty({ required: false, minimum: 0, example: 0 })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  completedHours?: number;
 }

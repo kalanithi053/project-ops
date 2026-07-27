@@ -16,6 +16,9 @@
 BEGIN;
 
 -- --- Clean slate (child tables dropped via CASCADE) ------------------------
+DROP TABLE IF EXISTS "comment_mention" CASCADE;
+DROP TABLE IF EXISTS "comment" CASCADE;
+DROP TABLE IF EXISTS "incident" CASCADE;
 DROP TABLE IF EXISTS "task" CASCADE;
 DROP TABLE IF EXISTS "priority" CASCADE;
 DROP TABLE IF EXISTS "project_type" CASCADE;
@@ -35,6 +38,7 @@ DROP TABLE IF EXISTS "user" CASCADE;
 
 DROP TYPE IF EXISTS "membership_status";
 DROP TYPE IF EXISTS "status_category";
+DROP TYPE IF EXISTS "incident_status";
 
 -- CreateEnum
 CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
@@ -43,14 +47,17 @@ CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
 CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'ready_qa', 'review', 'done');
 
 -- CreateEnum
+CREATE TYPE "incident_status" AS ENUM ('open', 'in_progress', 'resolved');
+
+-- CreateEnum
 
 -- CreateTable
 CREATE TABLE "user" (
     "id" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
     "first_name" TEXT,
     "last_name" TEXT,
-    "email" TEXT,
+    "static_otp" TEXT DEFAULT '123456',
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
@@ -61,7 +68,7 @@ CREATE TABLE "user" (
 -- CreateTable
 CREATE TABLE "otp_request" (
     "id" TEXT NOT NULL,
-    "username" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
     "otp_code_hash" TEXT NOT NULL,
     "expires_at" TIMESTAMP(3) NOT NULL,
     "consumed_at" TIMESTAMP(3),
@@ -251,14 +258,66 @@ CREATE TABLE "project_type" (
     CONSTRAINT "project_type_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "user_username_key" ON "user"("username");
+-- CreateTable
+CREATE TABLE "incident" (
+    "id" TEXT NOT NULL,
+    "workspace_id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
+    "title" TEXT NOT NULL,
+    "description" TEXT,
+    "status" "incident_status" NOT NULL DEFAULT 'open',
+    "reported_by" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "incident_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "comment" (
+    "id" TEXT NOT NULL,
+    "workspace_id" TEXT NOT NULL,
+    "task_id" TEXT,
+    "incident_id" TEXT,
+    "body" TEXT NOT NULL,
+    "author_id" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "comment_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "comment_mention" (
+    "comment_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+
+    CONSTRAINT "comment_mention_pkey" PRIMARY KEY ("comment_id","user_id")
+);
 
 -- CreateIndex
-CREATE INDEX "user_username_idx" ON "user"("username");
+CREATE INDEX "incident_workspace_id_idx" ON "incident"("workspace_id");
 
 -- CreateIndex
-CREATE INDEX "otp_request_username_created_at_idx" ON "otp_request"("username", "created_at");
+CREATE INDEX "incident_project_id_idx" ON "incident"("project_id");
+
+-- CreateIndex
+CREATE INDEX "comment_workspace_id_idx" ON "comment"("workspace_id");
+
+-- CreateIndex
+CREATE INDEX "comment_task_id_idx" ON "comment"("task_id");
+
+-- CreateIndex
+CREATE INDEX "comment_incident_id_idx" ON "comment"("incident_id");
+
+-- CreateIndex
+CREATE INDEX "comment_mention_user_id_idx" ON "comment_mention"("user_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "user_email_key" ON "user"("email");
+
+-- CreateIndex
+CREATE INDEX "otp_request_email_created_at_idx" ON "otp_request"("email", "created_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "workspace_slug_key" ON "workspace"("slug");
@@ -442,6 +501,33 @@ ALTER TABLE "task" ADD CONSTRAINT "task_created_by_fkey" FOREIGN KEY ("created_b
 
 -- AddForeignKey
 ALTER TABLE "ticket_status" ADD CONSTRAINT "ticket_status_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "incident" ADD CONSTRAINT "incident_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "incident" ADD CONSTRAINT "incident_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "project"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "incident" ADD CONSTRAINT "incident_reported_by_fkey" FOREIGN KEY ("reported_by") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment" ADD CONSTRAINT "comment_workspace_id_fkey" FOREIGN KEY ("workspace_id") REFERENCES "workspace"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment" ADD CONSTRAINT "comment_task_id_fkey" FOREIGN KEY ("task_id") REFERENCES "task"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment" ADD CONSTRAINT "comment_incident_id_fkey" FOREIGN KEY ("incident_id") REFERENCES "incident"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment" ADD CONSTRAINT "comment_author_id_fkey" FOREIGN KEY ("author_id") REFERENCES "user"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment_mention" ADD CONSTRAINT "comment_mention_comment_id_fkey" FOREIGN KEY ("comment_id") REFERENCES "comment"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "comment_mention" ADD CONSTRAINT "comment_mention_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "user"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "task" ADD CONSTRAINT "task_priority_id_fkey" FOREIGN KEY ("priority_id") REFERENCES "priority"("id") ON DELETE SET NULL ON UPDATE CASCADE;

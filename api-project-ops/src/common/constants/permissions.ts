@@ -12,6 +12,13 @@ export const PERMISSIONS = {
   TASK_READ: 'task.read',
   TASK_UPDATE: 'task.update',
   TASK_DELETE: 'task.delete',
+  // Narrow permission: change ONLY a task's status (for Client-style roles that
+  // must not edit anything else on the task).
+  TASK_STATUS_UPDATE: 'task.status.update',
+
+  INCIDENT_CREATE: 'incident.create',
+
+  COMMENT_CREATE: 'comment.create',
 
   MEMBER_INVITE: 'member.invite',
   MEMBER_REMOVE: 'member.remove',
@@ -43,6 +50,18 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { code: PERMISSIONS.TASK_READ, description: 'View tasks' },
   { code: PERMISSIONS.TASK_UPDATE, description: 'Edit tasks' },
   { code: PERMISSIONS.TASK_DELETE, description: 'Delete tasks' },
+  {
+    code: PERMISSIONS.TASK_STATUS_UPDATE,
+    description: 'Update the status of a task',
+  },
+  {
+    code: PERMISSIONS.INCIDENT_CREATE,
+    description: 'Create an incident ticket on a flawed task',
+  },
+  {
+    code: PERMISSIONS.COMMENT_CREATE,
+    description: 'Comment on tasks and incidents (with @mentions)',
+  },
   { code: PERMISSIONS.MEMBER_INVITE, description: 'Invite members' },
   { code: PERMISSIONS.MEMBER_REMOVE, description: 'Remove members' },
   {
@@ -100,6 +119,9 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.TASK_READ,
       PERMISSIONS.TASK_UPDATE,
       PERMISSIONS.TASK_DELETE,
+      PERMISSIONS.TASK_STATUS_UPDATE,
+      PERMISSIONS.INCIDENT_CREATE,
+      PERMISSIONS.COMMENT_CREATE,
       PERMISSIONS.MEMBER_INVITE,
       PERMISSIONS.MEMBER_REMOVE,
       PERMISSIONS.ROLE_MANAGE,
@@ -120,6 +142,8 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.TASK_READ,
       PERMISSIONS.TASK_UPDATE,
       PERMISSIONS.TASK_DELETE,
+      PERMISSIONS.TASK_STATUS_UPDATE,
+      PERMISSIONS.COMMENT_CREATE,
     ],
   },
   {
@@ -127,5 +151,19 @@ export const DEFAULT_ROLES: Array<{
     isDefault: false,
     isSystem: false,
     permissions: [PERMISSIONS.PROJECT_READ, PERMISSIONS.TASK_READ],
+  },
+  {
+    // External customer role: can follow the work, move task statuses, and
+    // raise an incident ticket when a delivered task has an implementation flaw.
+    name: 'Client',
+    isDefault: false,
+    isSystem: false,
+    permissions: [
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.TASK_READ,
+      PERMISSIONS.TASK_STATUS_UPDATE,
+      PERMISSIONS.INCIDENT_CREATE,
+      PERMISSIONS.COMMENT_CREATE,
+    ],
   },
 ];

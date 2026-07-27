@@ -27,10 +27,10 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Request an OTP for a username. Unknown users are not created — the response returns { slug: "Create-User" } so the client can register first.',
+      'Request an OTP for an email. Unknown users are not created — the response returns { slug: "Create-User" } so the client can register first.',
   })
   requestOtp(@Body() dto: RequestOtpDto) {
-    return this.auth.requestOtp(dto.username);
+    return this.auth.requestOtp(dto.email);
   }
 
   @Public()
@@ -41,7 +41,7 @@ export class AuthController {
       'Verify an OTP and receive the access/refresh token pair. Pass the chosen workspace via the x-workspace-slug header on subsequent requests.',
   })
   async verifyOtp(@Body() dto: VerifyOtpDto) {
-    const result = await this.auth.verifyOtp(dto.username, dto.otp);
+    const result = await this.auth.verifyOtp(dto.email, dto.otp);
     return { ...result, message: 'OTP verified' };
   }
 

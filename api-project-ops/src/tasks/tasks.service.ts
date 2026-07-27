@@ -1,15 +1,39 @@
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ActivityLogService } from '../activity-log/activity-log.service';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 
+const TASK_UPDATE_FIELDS = [
+  'name',
+  'prefix',
+  'description',
+  'moduleInstanceId',
+  'startDate',
+  'dueDate',
+  'statusId',
+  'priorityId',
+  'assigneeId',
+  'position',
+  'estimateHours',
+  'completedHours',
+] as const;
+
 @Injectable()
 export class TasksService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(TasksService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   async list(
     workspaceId: string,
@@ -33,9 +57,7 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignees: {
-          select: { user: { select: { id: true, username: true } } },
-        },
+        assignee: { select: { id: true, email: true } },
       },
     });
   }
@@ -86,29 +108,44 @@ export class TasksService {
 
     const position = dto.position ?? (await this.nextPosition(projectId));
 
-    return this.prisma.task.create({
-      data: {
-        projectId,
-        moduleInstanceId: resolvedInstanceId,
-        name: dto.name,
-        prefix,
-        description: dto.description,
-        startDate: dto.startDate ? new Date(dto.startDate) : null,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-        statusId: dto.statusId ?? null,
-        priorityId: dto.priorityId ?? null,
-        etaHours: dto.etaHours ?? null,
-        createdBy: userId,
-        position,
-        assignees: dto.assigneeIds?.length
-          ? { create: dto.assigneeIds.map((userId) => ({ userId })) }
-          : undefined,
-      },
-      include: {
-        assignees: {
-          select: { user: { select: { id: true, username: true } } },
+    return this.prisma.$transaction(async (tx) => {
+      const task = await tx.task.create({
+        data: {
+          projectId,
+          moduleInstanceId: resolvedInstanceId,
+          name: dto.name,
+          prefix,
+          description: dto.description,
+          startDate: dto.startDate ? new Date(dto.startDate) : null,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
+          statusId: dto.statusId ?? null,
+          priorityId: dto.priorityId ?? null,
+          assigneeId: dto.assigneeId ?? null,
+          createdBy: userId,
+          position,
+          estimateHours: dto.estimateHours ?? null,
+          completedHours: dto.completedHours ?? null,
         },
-      },
+      });
+
+      await this.activityLog.log(
+        {
+          workspaceId,
+          projectId,
+          entityType: 'task',
+          entityId: task.id,
+          action: 'created',
+          userId,
+          metadata: {
+            name: task.name,
+            statusId: task.statusId,
+            assigneeId: task.assigneeId,
+          },
+        },
+        tx,
+      );
+
+      return task;
     });
   }
 
@@ -121,6 +158,7 @@ export class TasksService {
     workspaceId: string,
     projectId: string,
     taskId: string,
+    userId: string,
     dto: UpdateTaskDto,
   ) {
     const task = await this.getTask(workspaceId, projectId, taskId);
@@ -145,43 +183,172 @@ export class TasksService {
       dto.dueDate ?? task.dueDate?.toISOString(),
     );
 
-    return this.prisma.task.update({
-      where: { id: taskId },
-      data: {
-        name: dto.name ?? undefined,
-        prefix: dto.prefix ?? undefined,
-        description: dto.description ?? undefined,
-        moduleInstanceId: dto.moduleInstanceId ?? undefined,
-        startDate: dto.startDate ? new Date(dto.startDate) : undefined,
-        dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
-        statusId: dto.statusId ?? undefined,
-        priorityId: dto.priorityId ?? undefined,
-        etaHours: dto.etaHours ?? undefined,
-        position: dto.position ?? undefined,
-        // Replace-all: whatever array arrives becomes the assignee set.
-        // Omitting the key leaves the existing assignees untouched.
-        assignees: dto.assigneeIds
-          ? {
-              deleteMany: {},
-              create: dto.assigneeIds.map((userId) => ({ userId })),
-            }
-          : undefined,
-      },
-      include: {
-        assignees: {
-          select: { user: { select: { id: true, username: true } } },
+    const statusChanged = !!dto.statusId && dto.statusId !== task.statusId;
+    const changes = this.computeTaskChanges(task, dto);
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.task.update({
+        where: { id: taskId },
+        data: {
+          name: dto.name ?? undefined,
+          prefix: dto.prefix ?? undefined,
+          description: dto.description ?? undefined,
+          moduleInstanceId: dto.moduleInstanceId ?? undefined,
+          startDate: dto.startDate ? new Date(dto.startDate) : undefined,
+          dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
+          statusId: dto.statusId ?? undefined,
+          priorityId: dto.priorityId ?? undefined,
+          assigneeId: dto.assigneeId ?? undefined,
+          position: dto.position ?? undefined,
+          estimateHours: dto.estimateHours ?? undefined,
+          completedHours: dto.completedHours ?? undefined,
         },
-      },
+        include: {
+          status: { select: { id: true, name: true, category: true } },
+          priority: { select: { id: true, name: true, color: true } },
+          assignee: { select: { id: true, email: true } },
+          creator: { select: { id: true, email: true } },
+        },
+      });
+
+      if (Object.keys(changes).length > 0) {
+        await this.activityLog.log(
+          {
+            workspaceId,
+            projectId,
+            entityType: 'task',
+            entityId: taskId,
+            action: 'updated',
+            userId,
+            metadata: { changes },
+          },
+          tx,
+        );
+      }
+
+      return result;
     });
+
+    if (statusChanged) {
+      await this.notifyStatusChange(
+        updated,
+        task.status?.name ?? 'None',
+        updated.status?.name ?? 'None',
+      );
+    }
+
+    return updated;
   }
 
-  async remove(workspaceId: string, projectId: string, taskId: string) {
+  /**
+   * Status-only update, guarded by the narrow `task.status.update` permission
+   * (e.g. the Client role). Touches nothing but statusId.
+   */
+  async updateStatus(
+    workspaceId: string,
+    projectId: string,
+    taskId: string,
+    userId: string,
+    statusId: string,
+  ) {
+    const task = await this.getTask(workspaceId, projectId, taskId);
+    await this.assertStatus(workspaceId, statusId);
+    const statusChanged = statusId !== task.statusId;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const result = await tx.task.update({
+        where: { id: taskId },
+        data: { statusId },
+        include: {
+          status: { select: { id: true, name: true, category: true } },
+          priority: { select: { id: true, name: true, color: true } },
+          assignee: { select: { id: true, email: true } },
+          creator: { select: { id: true, email: true } },
+        },
+      });
+
+      if (statusChanged) {
+        await this.activityLog.log(
+          {
+            workspaceId,
+            projectId,
+            entityType: 'task',
+            entityId: taskId,
+            action: 'status_changed',
+            userId,
+            metadata: { from: task.statusId, to: statusId },
+          },
+          tx,
+        );
+      }
+
+      return result;
+    });
+
+    if (statusChanged) {
+      await this.notifyStatusChange(
+        updated,
+        task.status?.name ?? 'None',
+        updated.status?.name ?? 'None',
+      );
+    }
+
+    return updated;
+  }
+
+  async remove(
+    workspaceId: string,
+    projectId: string,
+    taskId: string,
+    userId: string,
+  ) {
     await this.getTask(workspaceId, projectId, taskId);
-    await this.prisma.task.update({
-      where: { id: taskId },
-      data: { deletedAt: new Date() },
+    await this.prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: { deletedAt: new Date() },
+      });
+      await this.activityLog.log(
+        {
+          workspaceId,
+          projectId,
+          entityType: 'task',
+          entityId: taskId,
+          action: 'deleted',
+          userId,
+        },
+        tx,
+      );
     });
     return { id: taskId, deleted: true };
+  }
+
+  /** Activity log entries for one task, newest first. */
+  async getActivity(workspaceId: string, projectId: string, taskId: string) {
+    await this.getTask(workspaceId, projectId, taskId);
+    return this.activityLog.getTimeline(workspaceId, taskId, 'task');
+  }
+
+  /** On-demand nudge — emails the assignee with the task's current status. */
+  async notifyAssignee(workspaceId: string, projectId: string, taskId: string) {
+    const task = await this.getTask(workspaceId, projectId, taskId);
+    if (!task.assignee) {
+      throw new BadRequestException('Task has no assignee to notify');
+    }
+
+    const project = await this.prisma.project.findUnique({
+      where: { id: task.projectId },
+      select: { name: true },
+    });
+
+    await this.mail.sendStatusNotificationEmail(task.assignee.email, {
+      entityLabel: 'task',
+      entityName: task.prefix ? `${task.prefix} · ${task.name}` : task.name,
+      projectName: project?.name ?? 'Unknown project',
+      statusName: task.status?.name ?? 'None',
+    });
+
+    return { notified: true, assignee: task.assignee.email };
   }
 
   // --- helpers ---
@@ -378,6 +545,31 @@ export class TasksService {
     return (last?.position ?? -1) + 1;
   }
 
+  /** Diffs a patch against the current task, field by field, for the audit log. */
+  private computeTaskChanges(
+    task: Record<string, unknown>,
+    dto: UpdateTaskDto,
+  ): Record<string, { from: unknown; to: unknown }> {
+    const changes: Record<string, { from: unknown; to: unknown }> = {};
+    for (const field of TASK_UPDATE_FIELDS) {
+      const patchValue = dto[field];
+      if (patchValue === undefined) continue;
+
+      const isDateField = field === 'startDate' || field === 'dueDate';
+      const before = isDateField
+        ? ((task[field] as Date | null)?.toISOString() ?? null)
+        : task[field];
+      const after = isDateField
+        ? new Date(patchValue).toISOString()
+        : patchValue;
+
+      if (before !== after) {
+        changes[field] = { from: before, to: after };
+      }
+    }
+    return changes;
+  }
+
   private async getTask(
     workspaceId: string,
     projectId: string,
@@ -389,13 +581,56 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignees: {
-          select: { user: { select: { id: true, username: true } } },
-        },
+        assignee: { select: { id: true, email: true } },
+        creator: { select: { id: true, email: true } },
       },
     });
     if (!task) throw new NotFoundException('Task not found');
     return task;
+  }
+
+  /**
+   * Notifies the task's creator and assignee (deduped, skipping unset
+   * assignee) that its status changed. Best-effort — a mail failure never
+   * fails the status update itself.
+   */
+  private async notifyStatusChange(
+    task: {
+      name: string;
+      prefix: string | null;
+      projectId: string;
+      creator: { id: string; email: string };
+      assignee: { id: string; email: string } | null;
+    },
+    oldStatusName: string,
+    newStatusName: string,
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: task.projectId },
+      select: { name: true },
+    });
+
+    const recipients = new Map<string, string>([
+      [task.creator.id, task.creator.email],
+    ]);
+    if (task.assignee) recipients.set(task.assignee.id, task.assignee.email);
+    await Promise.all(
+      [...recipients.values()].map((email) =>
+        this.mail
+          .sendTaskStatusChangedEmail(email, {
+            taskName: task.name,
+            taskPrefix: task.prefix,
+            projectName: project?.name ?? 'Unknown project',
+            oldStatusName,
+            newStatusName,
+          })
+          .catch((err) =>
+            this.logger.error(
+              `Failed to send task status email to=${email}: ${(err as Error).message}`,
+            ),
+          ),
+      ),
+    );
   }
 }
 

@@ -1,27 +1,30 @@
 "use client";
 
-import * as React from "react";
+import { Loader2, Users } from "lucide-react";
 import { useParams } from "next/navigation";
-import { Loader2, UserPlus, Users } from "lucide-react";
+import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { PageHeader } from "@/components/shared/page-header";
-import { StatsGrid } from "@/components/shared/stats-grid";
 import { DataTable } from "@/components/shared/data-table";
-import { StatusBadge } from "@/components/shared/status-badge";
+import { FormPanel } from "@/components/shared/form-panel";
+import { PageHeader } from "@/components/shared/page-header";
 import { QueryState } from "@/components/shared/query-state";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
+import { StatsGrid } from "@/components/shared/stats-grid";
+import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FormPanel } from "@/components/shared/form-panel";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { TableSkeleton } from "@/components/shared/skeletons";
 import {
   useInviteMember,
   useWorkspaceMembers,
 } from "@/lib/api/hooks/use-members";
-import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { MemberUser, WorkspaceMember } from "@/lib/api/types";
 import type { ColumnDef } from "@/types/module";
@@ -44,7 +47,7 @@ function memberEmail(m: WorkspaceMember): string {
 
 function roleName(m: WorkspaceMember): string {
   if (!m.role) return "—";
-  return typeof m.role === "string" ? m.role : m.role.name ?? "—";
+  return typeof m.role === "string" ? m.role : (m.role.name ?? "—");
 }
 
 const columns: ColumnDef<WorkspaceMember>[] = [
@@ -76,7 +79,9 @@ const columns: ColumnDef<WorkspaceMember>[] = [
       m.status ? (
         <StatusBadge
           label={String(m.status)}
-          tone={String(m.status).toLowerCase() === "active" ? "success" : "neutral"}
+          tone={
+            String(m.status).toLowerCase() === "active" ? "success" : "neutral"
+          }
         />
       ) : (
         "—"
@@ -107,16 +112,21 @@ export default function UsersPage() {
   return (
     <PageContainer className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title="Users"
-          description="Add people to this workspace and manage their roles."
-        />
-        {canInvite && (
-          <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
-            <UserPlus className="h-4 w-4" />
-            Add User
-          </Button>
-        )}
+        <PageHeader title="Users" description="" />
+        {/* {canInvite && (
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button className="w-full sm:w-auto">
+                <UserPlus className="h-4 w-4" />
+                Add User
+              </Button>
+            </DialogTrigger>
+            <AddUserDialog
+              workspaceSlug={workspace}
+              onDone={() => setOpen(false)}
+            />
+          </Dialog>
+        )} */}
       </div>
 
       <StatsGrid stats={stats} />
@@ -143,10 +153,7 @@ export default function UsersPage() {
       </QueryState>
 
       {open && (
-        <AddUserPanel
-          workspaceSlug={workspace}
-          onDone={() => setOpen(false)}
-        />
+        <AddUserPanel workspaceSlug={workspace} onDone={() => setOpen(false)} />
       )}
     </PageContainer>
   );

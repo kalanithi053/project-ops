@@ -128,11 +128,7 @@ export class PlansService {
     }
 
     return this.prisma.$transaction(async (tx) => {
-      await tx.plan.updateMany({
-        where: { workspaceId, isActive: true },
-        data: { isActive: false },
-      });
-      return tx.plan.update({
+      return await tx.plan.update({
         where: { id: planId },
         data: { isActive: true },
       });

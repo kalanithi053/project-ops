@@ -53,88 +53,96 @@ export class ProjectsService {
 
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
+    this.assertFutureDate(startDate, 'startDate');
+    this.assertFutureDate(endDate, 'endDate');
 
-    return this.prisma.$transaction(async (tx) => {
-      const project = await tx.project.create({
-        data: {
-          workspaceId,
-          name: dto.name,
-          projectTypeId: projectType.id,
-          planId: planIds,
-          description: dto.description,
-          startDate,
-          endDate,
-          ownerId: userId,
-        },
-      });
+    return this.prisma.$transaction(
 
-      // Owner role for the creator's ProjectMember record.
-      const ownerRole =
-        (await tx.userRole.findFirst({
-          where: { workspaceId, name: 'Owner' },
-        })) ??
-        (await tx.userRole.findFirst({
-          where: { workspaceId, isDefault: true },
-        }));
-
-      if (ownerRole) {
-        await tx.projectMember.create({
-          data: {
-            projectId: project.id,
-            userId,
-            roleId: ownerRole.id,
-            status: 'active',
-            invitedBy: userId,
-          },
+        async (tx) => {
+          const project = await tx.project.create({
+            data: {
+              workspaceId,
+              name: dto.name,
+              projectTypeId: projectType.id,
+              planId: planIds,
+              description: dto.description,
+              startDate,
+              endDate,
+              ownerId: userId,
+            },
         });
-      }
 
-      // isPlanAdd types auto-provision each chosen plan's default modules +
-      // seed tasks; otherwise the project starts empty.
-      if (projectType.isPlanAdd) {
-        // `position` runs continuously across plans so the seeded board has a
-        // stable, distinct ordering instead of every task sitting at 0.
-        let position = 0;
-        // Two plans can each contribute a module of the same name, so prefixes
-        // are numbered per module *name* across the whole project — matching
-        // how TasksService numbers tasks added later.
-        const prefixCounts = new Map<string, number>();
-        // Collected across every plan and written in one statement: a plan set
-        // can seed ~90 tasks, and that many round-trips would push the
-        // interactive transaction toward its timeout.
-        const taskRows: Prisma.TaskCreateManyInput[] = [];
+          // Owner role for the creator's ProjectMember record.
+          const ownerRole =
+            (await tx.userRole.findFirst({
+              where: { workspaceId, name: 'Owner' },
+            })) ??
+            (await tx.userRole.findFirst({
+              where: { workspaceId, isDefault: true },
+          }));
 
-        for (const plan of selectedPlans) {
-          position = await this.provisionDefaultModules(tx, {
-            project,
-            workspaceId,
-            planId: plan.id,
-            userId,
-            startDate,
-            endDate,
-            startPosition: position,
-            prefixCounts,
-            taskRows,
+          if (ownerRole) {
+            await tx.projectMember.create({
+              data: {
+                projectId: project.id,
+                userId,
+                roleId: ownerRole.id,
+                status: 'active',
+                invitedBy: userId,
+              },
+            });
+        }
+
+          // isPlanAdd types auto-provision each chosen plan's default modules +
+          // seed tasks; otherwise the project starts empty.
+          if (projectType.isPlanAdd) {
+            // `position` runs continuously across plans so the seeded board has a
+            // stable, distinct ordering instead of every task sitting at 0.
+            let position = 0;
+            // Two plans can each contribute a module of the same name, so prefixes
+            // are numbered per module *name* across the whole project — matching
+            // how TasksService numbers tasks added later.
+            const prefixCounts = new Map<string, number>();
+            // Collected across every plan and written in one statement: a plan set
+            // can seed ~90 tasks, and that many round-trips would push the
+            // interactive transaction toward its timeout.
+          const taskRows: Prisma.TaskCreateManyInput[] = [];
+
+            for (const plan of selectedPlans) {
+              position = await this.provisionDefaultModules(tx, {
+                project,
+                workspaceId,
+                planId: plan.id,
+                userId,
+                startDate,
+                endDate,
+                startPosition: position,
+                prefixCounts,
+                taskRows,
+              });
+          }
+
+            if (taskRows.length) {
+              await tx.task.createMany({ data: taskRows });
+            }
+        }
+
+          return tx.project.findUnique({
+            where: { id: project.id },
+            include: {
+              projectType: { select: { id: true, name: true, isPlanAdd: true } },
+              moduleInstances: { include: { module: true } },
+              tasks: true,
+              members: true,
+            },
           });
-        }
+          // Above Prisma's 5s default: provisioning several plans means a module
 
-        if (taskRows.length) {
-          await tx.task.createMany({ data: taskRows });
-        }
-      }
-
-      return tx.project.findUnique({
-        where: { id: project.id },
-        include: {
-          projectType: { select: { id: true, name: true, isPlanAdd: true } },
-          moduleInstances: { include: { module: true } },
-          tasks: true,
-          members: true,
-        },
-      });
-      // Above Prisma's 5s default: provisioning several plans means a module
-      // instance per module plus a bulk insert of every seeded task.
-    }, { timeout: 20_000 });
+       // instance per mo,
+ dule plus a bulk insert of every seeded task.
+      },
+      { timeout: 20_000 },
+    );
   }
 
   /**
@@ -243,6 +251,24 @@ export class ProjectsService {
       }
 
       prefixCounts.set(module.name, seededSoFar);
+      Array.from({ length: module.defaultTaskLimit ?? 1 }).forEach(
+        async (_, index) => {
+          await tx.task.create({
+            data: {
+              projectId: project.id,
+              moduleInstanceId: instance.id,
+              prefix: `${module.name} - ${index + 1}`,
+              name: module.name,
+              startDate,
+              dueDate: endDate,
+              statusId: defaultStatus?.id ?? null,
+              createdBy: userId,
+              position: 0,
+              assigneeId: userId,
+            },
+          });
+        },
+      );
     }
 
     return position;
@@ -266,7 +292,7 @@ export class ProjectsService {
         projectType: { select: { id: true, name: true, isPlanAdd: true } },
         moduleInstances: { include: { module: true } },
         members: {
-          include: { user: { select: { id: true, username: true } } },
+          include: { user: { select: { id: true, email: true } } },
         },
         _count: { select: { tasks: true } },
       },
@@ -303,5 +329,19 @@ export class ProjectsService {
     });
     if (!project) throw new NotFoundException('Project not found');
     return project;
+  }
+
+  /** Rejects dates that fall on today or earlier (UTC) — must be strictly after today. */
+  private assertFutureDate(date: Date, field: string) {
+    const now = new Date();
+    const todayUtc = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
+    );
+    const tomorrowUtc = new Date(todayUtc);
+    tomorrowUtc.setUTCDate(tomorrowUtc.getUTCDate() + 1);
+
+    if (date.getTime() < tomorrowUtc.getTime()) {
+      throw new BadRequestException(`${field} must be after today`);
+    }
   }
 }

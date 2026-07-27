@@ -18,6 +18,7 @@ export const PERMISSIONS = {
   MODULE_MANAGE: "module.manage",
   TICKETSTATUS_MANAGE: "ticketstatus.manage",
   PRIORITY_MANAGE: "priority.manage",
+  PROJECTTYPE_MANAGE: "projecttype.manage",
   PLAN_MANAGE: "plan.manage",
   PERMISSION_READ: "permission.read",
   WORKSPACE_MANAGE: "workspace.manage",

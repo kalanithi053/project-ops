@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, Boxes, ChevronRight, Plus } from "lucide-react";
 
@@ -38,15 +38,45 @@ export default function WorkspacesPage() {
 function WorkspacesHub() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  // Deep-link to the create form via /workspaces?new=1 (header menu).
+  // Deep-link to the create form via /workspaces?new=1.
   const [mode, setMode] = useState<"select" | "create">(
     searchParams.get("new") ? "create" : "select",
   );
   const { data, isLoading, isError } = useMyWorkspaces();
   const workspaces = data ?? [];
 
+  /**
+   * With exactly one workspace this screen is a list of one — so we skip it
+   * and open that workspace directly. `?manage=1` (the header's Manage
+   * workspace entry) opts out, otherwise a single-workspace user could never
+   * reach the hub to create a second one.
+   */
+  const autoOpen =
+    mode === "select" &&
+    !isLoading &&
+    !isError &&
+    workspaces.length === 1 &&
+    !searchParams.get("manage");
+
+  const soleSlug = autoOpen ? workspaces[0].slug : undefined;
+
+  useEffect(() => {
+    // `replace`, not `push` — otherwise Back lands here and forwards again.
+    if (soleSlug) router.replace(`/${soleSlug}/dashboard`);
+  }, [soleSlug, router]);
+
   function openWorkspace(workspace: Workspace) {
     router.push(`/${workspace.slug}/dashboard`);
+  }
+
+  // Hold the skeleton through the redirect so the picker never flashes.
+  if (autoOpen) {
+    return (
+      <div className="flex w-full max-w-md flex-col gap-8">
+        <BrandMark />
+        <ListSkeleton rows={1} />
+      </div>
+    );
   }
 
   if (mode === "create") {

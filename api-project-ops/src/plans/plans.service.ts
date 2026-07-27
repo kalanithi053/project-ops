@@ -9,6 +9,7 @@ import { DEFAULT_MODULES } from '../common/constants/workspace-defaults';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { UpdatePlanDetailsDto } from './dto/update-plan-details.dto';
 
 @Injectable()
 export class PlansService {
@@ -139,6 +140,56 @@ export class PlansService {
   }
 
   /** Updates the active plan's limits / feature flags. */
+  /**
+   * Updates a plan by id — the route that lets any plan be renamed, not just
+   * whichever one happens to be active.
+   *
+   * Plan names are unique per project type (enforced in `createPlan`), so a
+   * rename re-checks that constraint rather than letting duplicates in
+   * through the side door.
+   */
+  async updatePlan(
+    workspaceId: string,
+    planId: string,
+    dto: UpdatePlanDetailsDto,
+  ) {
+    const plan = await this.prisma.plan.findFirst({
+      where: { id: planId, workspaceId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found in this workspace.');
+    }
+
+    const name = dto.name?.trim();
+
+    if (name && name !== plan.name) {
+      const clash = await this.prisma.plan.findFirst({
+        where: {
+          workspaceId,
+          projectTypeId: plan.projectTypeId,
+          name,
+          id: { not: planId },
+        },
+      });
+      if (clash) {
+        throw new ConflictException(
+          `A plan named "${name}" already exists for this project type.`,
+        );
+      }
+    }
+
+    return this.prisma.plan.update({
+      where: { id: planId },
+      data: {
+        name: name ?? undefined,
+        features:
+          dto.features !== undefined
+            ? (dto.features as Prisma.InputJsonValue)
+            : undefined,
+      },
+    });
+  }
+
   async updateActivePlan(workspaceId: string, dto: UpdatePlanDto) {
     const plan = await this.getActivePlan(workspaceId);
     return this.prisma.plan.update({

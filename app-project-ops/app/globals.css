@@ -164,4 +164,29 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /*
+   * Tailwind v4's preflight sets buttons to `cursor: default`, unlike v3.
+   * Restoring the pointer here fixes every control at once rather than
+   * sprinkling `cursor-pointer` across each component, and pairs it with a
+   * not-allowed cursor wherever something is actually unavailable.
+   */
+  button:not(:disabled):not([aria-disabled="true"]),
+  [role="button"]:not(:disabled):not([aria-disabled="true"]),
+  [role="switch"]:not(:disabled),
+  summary,
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [role="button"][aria-disabled="true"],
+  input:disabled,
+  select:disabled,
+  textarea:disabled,
+  fieldset:disabled button,
+  fieldset:disabled input,
+  fieldset:disabled textarea {
+    cursor: not-allowed;
+  }
 }

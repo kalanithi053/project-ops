@@ -92,15 +92,34 @@ export class ProjectsService {
       // isPlanAdd types auto-provision each chosen plan's default modules +
       // seed tasks; otherwise the project starts empty.
       if (projectType.isPlanAdd) {
+        // `position` runs continuously across plans so the seeded board has a
+        // stable, distinct ordering instead of every task sitting at 0.
+        let position = 0;
+        // Two plans can each contribute a module of the same name, so prefixes
+        // are numbered per module *name* across the whole project — matching
+        // how TasksService numbers tasks added later.
+        const prefixCounts = new Map<string, number>();
+        // Collected across every plan and written in one statement: a plan set
+        // can seed ~90 tasks, and that many round-trips would push the
+        // interactive transaction toward its timeout.
+        const taskRows: Prisma.TaskCreateManyInput[] = [];
+
         for (const plan of selectedPlans) {
-          await this.provisionDefaultModules(tx, {
+          position = await this.provisionDefaultModules(tx, {
             project,
             workspaceId,
             planId: plan.id,
             userId,
             startDate,
             endDate,
+            startPosition: position,
+            prefixCounts,
+            taskRows,
           });
+        }
+
+        if (taskRows.length) {
+          await tx.task.createMany({ data: taskRows });
         }
       }
 
@@ -113,12 +132,27 @@ export class ProjectsService {
           members: true,
         },
       });
-    });
+      // Above Prisma's 5s default: provisioning several plans means a module
+      // instance per module plus a bulk insert of every seeded task.
+    }, { timeout: 20_000 });
   }
 
   /**
-   * Attaches the active plan's default modules to a project and seeds one task
-   * each. Which modules get attached depends on the workspace's active plan.
+   * Attaches a plan's default modules to a project and seeds one task per
+   * unit of each module's quantity, stamped with the workspace's default
+   * status and priority.
+   *
+   * `defaultTaskLimit` is the quantity the plan entitles the project to, so a
+   * module with 10 seeds "Workflows - 1" through "Workflows - 10". That fills
+   * the instance to its allowance by design — the 11th task is then counted
+   * as an add-on via `ModuleInstance.addonTask`, which is exactly what that
+   * counter is for.
+   *
+   * Rows are pushed onto `taskRows` rather than inserted here so the caller
+   * can write them all in one createMany.
+   *
+   * Returns the next free `position` so numbering stays continuous when a
+   * project is created under several plans.
    */
   private async provisionDefaultModules(
     tx: Prisma.TransactionClient,
@@ -129,11 +163,27 @@ export class ProjectsService {
       userId: string;
       startDate: Date | null;
       endDate: Date | null;
+      startPosition: number;
+      /** Module name -> tasks seeded so far, shared across plans. */
+      prefixCounts: Map<string, number>;
+      /** Accumulator the caller flushes with a single createMany. */
+      taskRows: Prisma.TaskCreateManyInput[];
     },
-  ) {
-    const { project, workspaceId, planId, userId, startDate, endDate } = ctx;
+  ): Promise<number> {
+    const {
+      project,
+      workspaceId,
+      planId,
+      userId,
+      startDate,
+      endDate,
+      startPosition,
+      prefixCounts,
+      taskRows,
+    } = ctx;
 
-    // Default workspace ticket status for seed tasks.
+    // Default workspace ticket status and priority for seed tasks, so a new
+    // board opens with every card already sitting in a real column.
     const defaultStatus =
       (await tx.ticketStatus.findFirst({
         where: { workspaceId, isDefault: true },
@@ -143,10 +193,22 @@ export class ProjectsService {
         orderBy: { order: 'asc' },
       }));
 
-    // Only the active plan's default modules.
+    const defaultPriority =
+      (await tx.priority.findFirst({
+        where: { workspaceId, isDefault: true },
+      })) ??
+      (await tx.priority.findFirst({
+        where: { workspaceId },
+        orderBy: { order: 'asc' },
+      }));
+
+    // Only this plan's default modules.
     const defaultModules = await tx.module.findMany({
       where: { workspaceId, planId, isDefault: true, isActive: true },
+      orderBy: { name: 'asc' },
     });
+
+    let position = startPosition;
 
     for (const module of defaultModules) {
       const instance = await tx.moduleInstance.create({
@@ -156,24 +218,34 @@ export class ProjectsService {
           taskLimit: module.defaultTaskLimit,
         },
       });
-      Array.from({ length: module.defaultTaskLimit ?? 1 }).forEach(
-        async (_, index) => {
-          await tx.task.create({
-            data: {
-              projectId: project.id,
-              moduleInstanceId: instance.id,
-              prefix: `${module.name} - ${index + 1}`,
-              name: module.name,
-              startDate,
-              dueDate: endDate,
-              statusId: defaultStatus?.id ?? null,
-              createdBy: userId,
-              position: 0,
-            },
-          });
-        },
-      );
+
+      const quantity = Math.max(0, module.defaultTaskLimit);
+      let seededSoFar = prefixCounts.get(module.name) ?? 0;
+
+      for (let unit = 0; unit < quantity; unit += 1) {
+        seededSoFar += 1;
+        taskRows.push({
+          projectId: project.id,
+          moduleInstanceId: instance.id,
+          // The stable key, mirroring how TasksService numbers later tasks.
+          prefix: `${module.name} - ${seededSoFar}`,
+          // Numbered too, so ten cards don't all read "Workflows" on the
+          // board. Users rename these afterwards.
+          name: `${module.name} ${seededSoFar}`,
+          startDate,
+          dueDate: endDate,
+          statusId: defaultStatus?.id ?? null,
+          priorityId: defaultPriority?.id ?? null,
+          createdBy: userId,
+          position,
+        });
+        position += 1;
+      }
+
+      prefixCounts.set(module.name, seededSoFar);
     }
+
+    return position;
   }
 
   list(workspaceId: string) {

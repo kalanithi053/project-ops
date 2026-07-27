@@ -1,23 +1,12 @@
 "use client";
 
 import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 
-import { useMe } from "@/lib/api/hooks/use-users";
-import { useRoles, useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { apiFetch } from "@/lib/api/client";
+import { useAuthStore } from "@/lib/store/auth-store";
 import type { PermissionCode } from "@/lib/api/permissions";
-import type { Role, WorkspaceMember } from "@/lib/api/types";
-
-function memberUsername(member: WorkspaceMember): string | undefined {
-  return member.user?.username ?? member.username;
-}
-
-function memberRole(member: WorkspaceMember): { id?: string; name?: string } {
-  if (member.role && typeof member.role === "object") {
-    return { id: member.role.id, name: member.role.name };
-  }
-  if (typeof member.role === "string") return { name: member.role };
-  return {};
-}
+import type { MyPermissions } from "@/lib/api/types";
 
 export interface WorkspacePermissions {
   /** True once we've actually resolved the current user's role permissions. */
@@ -33,39 +22,41 @@ export interface WorkspacePermissions {
 }
 
 /**
- * Resolve the signed-in user's effective permissions for a workspace by
- * matching their membership to a role and reading that role's permission
- * codes (GET /workspace-members + GET /roles).
+ * GET /workspace/permission — the caller's own role and effective
+ * permission codes for a workspace.
+ *
+ * This endpoint resolves the answer server-side in a single request. The
+ * previous approach cross-referenced GET /workspace-members with
+ * GET /roles, but GET /roles itself requires `role.manage`, so it 403'd
+ * for exactly the non-admin users whose permissions it was trying to
+ * determine — leaving `can()` permanently failing open for them.
  */
+export function useMyPermissions(workspaceSlug: string) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ["my-permissions", workspaceSlug],
+    queryFn: () =>
+      apiFetch<MyPermissions>("/workspace/permission", { workspaceSlug }),
+    enabled: Boolean(token && workspaceSlug),
+    // A role change mid-session is rare and the backend is the real gate.
+    staleTime: 5 * 60_000,
+  });
+}
+
+/** Resolve the signed-in user's effective permissions for a workspace. */
 export function usePermissions(workspaceSlug: string): WorkspacePermissions {
-  const { data: me } = useMe();
-  const { data: members } = useWorkspaceMembers(workspaceSlug);
-  const { data: roles } = useRoles(workspaceSlug);
+  const { data } = useMyPermissions(workspaceSlug);
 
   return useMemo(() => {
-    const myUsername = me?.username;
-    const member = (members ?? []).find(
-      (m) => memberUsername(m) === myUsername,
-    );
-    const roleRef = member ? memberRole(member) : undefined;
-
-    let role: Role | undefined;
-    if (roleRef && roles) {
-      role =
-        (roleRef.id && roles.find((r) => r.id === roleRef.id)) ||
-        (roleRef.name && roles.find((r) => r.name === roleRef.name)) ||
-        undefined;
-    }
-
-    const permissions = new Set(role?.permissions ?? []);
-    const isResolved = Boolean(myUsername && member && role);
+    const permissions = new Set(data?.permissions ?? []);
+    const isResolved = Boolean(data);
 
     return {
       isResolved,
-      roleName: roleRef?.name ?? role?.name,
+      roleName: data?.role?.name,
       permissions,
       can: (permission: PermissionCode) =>
         !isResolved || permissions.has(permission),
     };
-  }, [me, members, roles]);
+  }, [data]);
 }

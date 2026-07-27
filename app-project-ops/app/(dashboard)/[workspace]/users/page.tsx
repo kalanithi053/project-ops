@@ -13,22 +13,14 @@ import { QueryState } from "@/components/shared/query-state";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
+import { FormPanel } from "@/components/shared/form-panel";
 import { SelectField, type SelectOption } from "@/components/shared/select-field";
 import { TableSkeleton } from "@/components/shared/skeletons";
 import {
   useInviteMember,
-  useRoles,
   useWorkspaceMembers,
 } from "@/lib/api/hooks/use-members";
+import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { MemberUser, WorkspaceMember } from "@/lib/api/types";
@@ -120,18 +112,10 @@ export default function UsersPage() {
           description="Add people to this workspace and manage their roles."
         />
         {canInvite && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto">
-                <UserPlus className="h-4 w-4" />
-                Add User
-              </Button>
-            </DialogTrigger>
-            <AddUserDialog
-              workspaceSlug={workspace}
-              onDone={() => setOpen(false)}
-            />
-          </Dialog>
+          <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Add User
+          </Button>
         )}
       </div>
 
@@ -157,11 +141,18 @@ export default function UsersPage() {
           emptyMessage="No members yet. Add someone to this workspace to get started."
         />
       </QueryState>
+
+      {open && (
+        <AddUserPanel
+          workspaceSlug={workspace}
+          onDone={() => setOpen(false)}
+        />
+      )}
     </PageContainer>
   );
 }
 
-function AddUserDialog({
+function AddUserPanel({
   workspaceSlug,
   onDone,
 }: {
@@ -169,7 +160,8 @@ function AddUserDialog({
   onDone: () => void;
 }) {
   const invite = useInviteMember(workspaceSlug);
-  const { data: roles } = useRoles(workspaceSlug);
+  const { data: settings } = useWorkspaceSettings(workspaceSlug);
+  const roles = settings?.roles;
   const [username, setUsername] = React.useState("");
   const [roleId, setRoleId] = React.useState<string>();
   const [error, setError] = React.useState<string | null>(null);
@@ -192,49 +184,22 @@ function AddUserDialog({
   }
 
   return (
-    <DialogContent>
-      <DialogHeader>
-        <DialogTitle>Add user</DialogTitle>
-        <DialogDescription>
-          Add a user by username and assign the role that controls their
-          permissions.
-        </DialogDescription>
-      </DialogHeader>
-
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="invite-username">Username</Label>
-          <Input
-            id="invite-username"
-            placeholder="jordan.rivera"
-            value={username}
-            onChange={(event) => setUsername(event.target.value)}
-            autoFocus
-          />
-        </div>
-
-        <div className="flex flex-col gap-2">
-          <Label htmlFor="invite-role">Role</Label>
-          <SelectField
-            id="invite-role"
-            aria-label="Role"
-            options={roleOptions}
-            value={roleId}
-            onValueChange={setRoleId}
-            placeholder={roleOptions.length ? "Select a role" : "Default role"}
-          />
-          <p className="text-xs text-muted-foreground">
-            The role determines what this user can do in the workspace.
-          </p>
-        </div>
-
-        {error ? (
-          <p role="alert" className="text-sm text-destructive">
-            {error}
-          </p>
-        ) : null}
-
-        <DialogFooter>
+    <FormPanel
+      title="Add user"
+      description="Add a user by username and assign the role that controls their permissions."
+      onClose={onDone}
+      onSubmit={handleSubmit}
+      busy={invite.isPending}
+      footer={
+        <>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onDone}
+            disabled={invite.isPending}
+          >
+            Cancel
+          </Button>
           <Button type="submit" disabled={invite.isPending}>
             {invite.isPending ? (
               <>
@@ -245,8 +210,40 @@ function AddUserDialog({
               "Add User"
             )}
           </Button>
-        </DialogFooter>
-      </form>
-    </DialogContent>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="invite-username">Username</Label>
+        <Input
+          id="invite-username"
+          placeholder="jordan.rivera"
+          value={username}
+          onChange={(event) => setUsername(event.target.value)}
+          autoFocus
+        />
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="invite-role">Role</Label>
+        <SelectField
+          id="invite-role"
+          aria-label="Role"
+          options={roleOptions}
+          value={roleId}
+          onValueChange={setRoleId}
+          placeholder={roleOptions.length ? "Select a role" : "Default role"}
+        />
+        <p className="text-xs text-muted-foreground">
+          The role determines what this user can do in the workspace.
+        </p>
+      </div>
+
+      {error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      ) : null}
+    </FormPanel>
   );
 }

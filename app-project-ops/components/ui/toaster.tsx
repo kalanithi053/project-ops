@@ -27,7 +27,7 @@ const ACCENT: Record<ToastVariant, string> = {
 
 /**
  * Global toast host. Renders stacked alerts in the top-right corner
- * (150px from the top, clear of the app header), each sliding in from the
+ * (100px from the top, clear of the app header), each sliding in from the
  * right and fading/sliding back out on dismiss. Fire toasts with
  * `toast.success/error/info`.
  */
@@ -36,7 +36,7 @@ export function Toaster() {
 
   return (
     <div
-      className="pointer-events-none fixed right-4 top-[150px] z-[100] flex w-full max-w-sm flex-col gap-2 sm:right-6"
+      className="pointer-events-none fixed right-4 top-[100px] z-[100] flex w-full max-w-sm flex-col gap-2 sm:right-6"
       role="region"
       aria-label="Notifications"
     >

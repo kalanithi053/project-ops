@@ -1,13 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import {
-  Building2,
-  Check,
-  ChevronsUpDown,
-  Plus,
-  Settings2,
-} from "lucide-react";
+import { Building2, Check, ChevronsUpDown, Settings2 } from "lucide-react";
 
 import { useTenant } from "@/lib/tenant/tenant-context";
 import type { Tenant } from "@/types/tenant";
@@ -71,13 +65,15 @@ export function TenantSelector() {
           </DropdownMenuItem>
         ))}
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => router.push("/workspaces?new=1")}>
-          <Plus className="h-4 w-4" />
-          Create workspace
-        </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => router.push("/workspaces")}>
+        {/*
+          One entry, not two: the hub already offers creation, so a separate
+          "Create workspace" item here was a second door to the same room.
+          `manage=1` keeps the hub from auto-forwarding a single-workspace
+          user straight back to their dashboard.
+        */}
+        <DropdownMenuItem onSelect={() => router.push("/workspaces?manage=1")}>
           <Settings2 className="h-4 w-4" />
-          Manage workspaces
+          Manage workspace
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

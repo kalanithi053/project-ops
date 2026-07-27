@@ -58,8 +58,9 @@ model User {
   workspaceMembers WorkspaceMember[]
   projectMembers   ProjectMember[]
   ownedProjects    Project[]         @relation("ProjectOwner")
-  assignedTasks    Task[]            @relation("TaskAssignee")
+  taskAssignments  TaskAssignee[]
   createdTasks     Task[]            @relation("TaskCreator")
+  uploadedFiles    TaskAttachment[]  @relation("AttachmentUploader")
 
   @@index([username])
   @@map("user")
@@ -326,25 +327,64 @@ model Task {
   dueDate          DateTime? @map("due_date")
   statusId         String?   @map("status_id")
   priorityId       String?   @map("priority_id")
-  assigneeId       String?   @map("assignee_id")
   createdBy        String    @map("created_by")
   position         Int       @default(0)
+  /// Estimated effort in whole hours. Null means not estimated.
+  etaHours         Int?      @map("eta_hours")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
   deletedAt        DateTime? @map("deleted_at")
 
-  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  moduleInstance ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
-  status         TicketStatus?   @relation(fields: [statusId], references: [id])
-  priority       Priority?       @relation(fields: [priorityId], references: [id])
-  assignee       User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  creator        User            @relation("TaskCreator", fields: [createdBy], references: [id])
+  project        Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  moduleInstance ModuleInstance?  @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  status         TicketStatus?    @relation(fields: [statusId], references: [id])
+  priority       Priority?        @relation(fields: [priorityId], references: [id])
+  creator        User             @relation("TaskCreator", fields: [createdBy], references: [id])
+  assignees      TaskAssignee[]
+  attachments    TaskAttachment[]
 
   @@index([projectId])
   @@index([moduleInstanceId])
   @@index([statusId])
   @@index([priorityId])
   @@map("task")
+}
+
+/// Join table for a task's assignees — a task can be worked by several people.
+model TaskAssignee {
+  taskId     String   @map("task_id")
+  userId     String   @map("user_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, userId])
+  @@index([userId])
+  @@map("task_assignee")
+}
+
+/// A document uploaded against a task. Bytes live on disk; this row is the
+/// metadata plus the randomised on-disk name.
+model TaskAttachment {
+  id String @id @default(uuid())
+
+  taskId String @map("task_id")
+  /// Original filename as uploaded — what the UI shows and downloads as.
+  fileName String @map("file_name")
+  /// Randomised name on disk, so uploads can't collide or escape the folder.
+  storedName String @map("stored_name")
+  mimeType   String @map("mime_type")
+  sizeBytes  Int    @map("size_bytes")
+  uploadedBy String @map("uploaded_by")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader User @relation("AttachmentUploader", fields: [uploadedBy], references: [id])
+
+  @@index([taskId])
+  @@map("task_attachment")
 }
 
 // ---------------------------------------------------------------------------

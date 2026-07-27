@@ -33,7 +33,9 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignee: { select: { id: true, username: true } },
+        assignees: {
+          select: { user: { select: { id: true, username: true } } },
+        },
       },
     });
   }
@@ -79,7 +81,8 @@ export class TasksService {
 
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
-    if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
+    await this.assertAssignees(workspaceId, dto.assigneeIds);
+    this.assertWithinProjectDates(project, dto.startDate, dto.dueDate);
 
     const position = dto.position ?? (await this.nextPosition(projectId));
 
@@ -94,9 +97,17 @@ export class TasksService {
         dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
         statusId: dto.statusId ?? null,
         priorityId: dto.priorityId ?? null,
-        assigneeId: dto.assigneeId ?? null,
+        etaHours: dto.etaHours ?? null,
         createdBy: userId,
         position,
+        assignees: dto.assigneeIds?.length
+          ? { create: dto.assigneeIds.map((userId) => ({ userId })) }
+          : undefined,
+      },
+      include: {
+        assignees: {
+          select: { user: { select: { id: true, username: true } } },
+        },
       },
     });
   }
@@ -123,7 +134,16 @@ export class TasksService {
     }
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
-    if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
+    await this.assertAssignees(workspaceId, dto.assigneeIds);
+
+    // Validate the dates the task will end up with, not just the ones sent,
+    // so shifting only one end still can't push it outside the project.
+    const project = await this.assertProject(workspaceId, projectId);
+    this.assertWithinProjectDates(
+      project,
+      dto.startDate ?? task.startDate?.toISOString(),
+      dto.dueDate ?? task.dueDate?.toISOString(),
+    );
 
     return this.prisma.task.update({
       where: { id: taskId },
@@ -136,8 +156,21 @@ export class TasksService {
         dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
         statusId: dto.statusId ?? undefined,
         priorityId: dto.priorityId ?? undefined,
-        assigneeId: dto.assigneeId ?? undefined,
+        etaHours: dto.etaHours ?? undefined,
         position: dto.position ?? undefined,
+        // Replace-all: whatever array arrives becomes the assignee set.
+        // Omitting the key leaves the existing assignees untouched.
+        assignees: dto.assigneeIds
+          ? {
+              deleteMany: {},
+              create: dto.assigneeIds.map((userId) => ({ userId })),
+            }
+          : undefined,
+      },
+      include: {
+        assignees: {
+          select: { user: { select: { id: true, username: true } } },
+        },
       },
     });
   }
@@ -268,12 +301,71 @@ export class TasksService {
     }
   }
 
-  private async assertAssignee(workspaceId: string, userId: string) {
-    const member = await this.prisma.workspaceMember.findFirst({
-      where: { workspaceId, userId, status: { not: 'removed' } },
+  /**
+   * Every assignee must still be a workspace member. Checked as a set so one
+   * bad id rejects the whole request rather than silently assigning a subset.
+   */
+  private async assertAssignees(workspaceId: string, userIds?: string[]) {
+    if (!userIds?.length) return;
+
+    const unique = [...new Set(userIds)];
+    const members = await this.prisma.workspaceMember.findMany({
+      where: {
+        workspaceId,
+        userId: { in: unique },
+        status: { not: 'removed' },
+      },
+      select: { userId: true },
     });
-    if (!member) {
-      throw new BadRequestException('Assignee is not a workspace member');
+
+    if (members.length !== unique.length) {
+      throw new BadRequestException(
+        'One or more assignees are not workspace members',
+      );
+    }
+  }
+
+  /**
+   * Keeps a task's dates inside its project's window. Without this a task
+   * could be scheduled to start before the project does or run past its end,
+   * which makes every project-level date rollup meaningless.
+   */
+  private assertWithinProjectDates(
+    project: { name: string; startDate: Date | null; endDate: Date | null },
+    startDate?: string | null,
+    dueDate?: string | null,
+  ) {
+    const start = startDate ? new Date(startDate) : null;
+    const due = dueDate ? new Date(dueDate) : null;
+
+    if (start && due && due < start) {
+      throw new BadRequestException(
+        'Task due date cannot be before its start date.',
+      );
+    }
+
+    // Compare against the day boundaries so a task dated on the project's
+    // first or last day is accepted rather than rejected on time-of-day.
+    const projectStart = project.startDate
+      ? startOfDay(project.startDate)
+      : null;
+    const projectEnd = project.endDate ? endOfDay(project.endDate) : null;
+
+    for (const [label, value] of [
+      ['start date', start],
+      ['due date', due],
+    ] as const) {
+      if (!value) continue;
+      if (projectStart && value < projectStart) {
+        throw new BadRequestException(
+          `Task ${label} is before the project start date.`,
+        );
+      }
+      if (projectEnd && value > projectEnd) {
+        throw new BadRequestException(
+          `Task ${label} is after the project end date.`,
+        );
+      }
     }
   }
 
@@ -297,10 +389,26 @@ export class TasksService {
       include: {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
-        assignee: { select: { id: true, username: true } },
+        assignees: {
+          select: { user: { select: { id: true, username: true } } },
+        },
       },
     });
     if (!task) throw new NotFoundException('Task not found');
     return task;
   }
+}
+
+/** Midnight at the start of a date, in UTC. */
+function startOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setUTCHours(0, 0, 0, 0);
+  return copy;
+}
+
+/** The last millisecond of a date, in UTC. */
+function endOfDay(date: Date): Date {
+  const copy = new Date(date);
+  copy.setUTCHours(23, 59, 59, 999);
+  return copy;
 }

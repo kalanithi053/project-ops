@@ -1,5 +1,21 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
+
+/** The workspace fields exposed by the settings endpoints. */
+const WORKSPACE_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  ownerId: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 /**
  * Aggregates all workspace configuration into one payload the frontend can use
@@ -9,6 +25,49 @@ import { PrismaService } from '../prisma/prisma.service';
 @Injectable()
 export class SettingsService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /**
+   * Updates the workspace's display name and/or URL slug.
+   *
+   * The slug is globally unique and doubles as the tenant header, so a
+   * collision is reported as a 409 rather than surfacing a raw Prisma error.
+   */
+  async updateWorkspace(workspaceId: string, dto: UpdateWorkspaceSettingsDto) {
+    const workspace = await this.prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: WORKSPACE_SELECT,
+    });
+
+    if (!workspace) {
+      throw new NotFoundException('Workspace not found');
+    }
+
+    const name = dto.name?.trim();
+    const slug = dto.slug?.trim();
+
+    if (name === undefined && slug === undefined) {
+      throw new BadRequestException('Provide a name or slug to update.');
+    }
+
+    if (slug !== undefined && slug !== workspace.slug) {
+      const taken = await this.prisma.workspace.findUnique({
+        where: { slug },
+        select: { id: true },
+      });
+      if (taken) {
+        throw new ConflictException(`The URL "${slug}" is already taken.`);
+      }
+    }
+
+    return this.prisma.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(slug !== undefined ? { slug } : {}),
+      },
+      select: WORKSPACE_SELECT,
+    });
+  }
 
   async getSettings(workspaceId: string) {
     const [
@@ -22,14 +81,7 @@ export class SettingsService {
     ] = await Promise.all([
         this.prisma.workspace.findUnique({
           where: { id: workspaceId },
-          select: {
-            id: true,
-            name: true,
-            slug: true,
-            ownerId: true,
-            createdAt: true,
-            updatedAt: true,
-          },
+          select: WORKSPACE_SELECT,
         }),
         this.prisma.plan.findMany({
           where: { workspaceId },

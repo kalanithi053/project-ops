@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
-import { FolderKanban, Loader2, Plus } from "lucide-react";
+import { Eye, FolderKanban, ListChecks, Loader2, Plus } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -21,6 +22,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SelectField, type SelectOption } from "@/components/shared/select-field";
+import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { QueryState } from "@/components/shared/query-state";
 import { TableSkeleton } from "@/components/shared/skeletons";
 import { useCreateProject, useProjects } from "@/lib/api/hooks/use-projects";
@@ -38,7 +40,7 @@ import type {
   ProjectType,
   WorkspaceMember,
 } from "@/lib/api/types";
-import type { ColumnDef, Tone } from "@/types/module";
+import type { ColumnDef, RowAction, Tone } from "@/types/module";
 
 /** Small rotating palette so distinct (dynamic) project types read apart. */
 const TONE_CYCLE: Tone[] = ["info", "warning", "success", "neutral"];
@@ -135,7 +137,14 @@ export default function ProjectsPage() {
         sortAccessor: (p) => p.name,
         cell: (p) => (
           <div className="flex flex-col">
-            <span className="font-medium">{p.name}</span>
+            {/* The name is the primary way into a project — the row menu's
+                View action is the discoverable duplicate, not the only path. */}
+            <Link
+              href={`/${workspace}/projects/${p.id}`}
+              className="font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:underline"
+            >
+              {p.name}
+            </Link>
             {p.description ? (
               <span className="truncate text-xs text-muted-foreground">
                 {p.description}
@@ -190,7 +199,23 @@ export default function ProjectsPage() {
         },
       },
     ],
-    [projectTypes],
+    [projectTypes, workspace],
+  );
+
+  const rowActions = React.useMemo<RowAction<Project>[]>(
+    () => [
+      {
+        label: "View project",
+        icon: Eye,
+        href: (p) => `/${workspace}/projects/${p.id}`,
+      },
+      {
+        label: "Open board",
+        icon: ListChecks,
+        href: (p) => `/${workspace}/projects/${p.id}/board`,
+      },
+    ],
+    [workspace],
   );
 
   // Only show the "Created by" column when the API actually returns owner info.
@@ -252,6 +277,7 @@ export default function ProjectsPage() {
           columns={columns}
           data={projects}
           getRowId={(p) => String(p.id)}
+          rowActions={rowActions}
           searchAccessors={[(p) => p.name, (p) => p.projectType?.name ?? ""]}
           searchPlaceholder="Search projects…"
           emptyMessage="No projects yet. Create your first project to get started."
@@ -279,7 +305,7 @@ function NewProjectPanel({
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   const [projectTypeId, setProjectTypeId] = React.useState<string>();
-  const [planId, setPlanId] = React.useState<string>();
+  const [planIds, setPlanIds] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
 
   const typeOptions: SelectOption[] = (typeData ?? []).map((type) => ({
@@ -287,8 +313,8 @@ function NewProjectPanel({
     value: String(type.id),
   }));
 
-  // Project types with `isPlanAdd` provision plan-scoped quotas/modules —
-  // the API requires an explicit plan for those (it does not fall back to
+  // Project types with `isPlanAdd` provision plan-scoped modules — the API
+  // requires at least one explicit plan for those (it does not fall back to
   // the workspace's active plan despite what the docs imply).
   const selectedType = typeData?.find((t) => String(t.id) === projectTypeId);
   const requiresPlan = Boolean(selectedType?.isPlanAdd);
@@ -300,14 +326,11 @@ function NewProjectPanel({
     label: plan.isActive ? `${plan.name} (Active)` : plan.name,
     value: String(plan.id),
   }));
-  // Default to the type's active plan until the user explicitly picks one
-  // (derived, not stored — avoids an effect-driven setState).
-  const activePlanId = planData?.find((plan) => plan.isActive)?.id;
-  const selectedPlanId = planId ?? (activePlanId ? String(activePlanId) : undefined);
 
   function handleTypeChange(value: string) {
     setProjectTypeId(value);
-    setPlanId(undefined);
+    // Plans belong to a single type, so the previous picks can't carry over.
+    setPlanIds([]);
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -316,7 +339,9 @@ function NewProjectPanel({
 
     if (!name.trim()) return setError("Enter a project name.");
     if (!projectTypeId) return setError("Select a project type.");
-    if (requiresPlan && !selectedPlanId) return setError("Select a plan.");
+    if (requiresPlan && planIds.length === 0) {
+      return setError("Select at least one plan.");
+    }
     if (!startDate) return setError("Choose a start date.");
     if (!endDate) return setError("Choose an end date.");
     if (endDate < startDate) {
@@ -329,7 +354,9 @@ function NewProjectPanel({
       startDate,
       endDate,
       description: description.trim() || undefined,
-      planId: requiresPlan ? selectedPlanId : undefined,
+      // Always an array — the backend validates with @IsArray, so a bare
+      // string is rejected outright.
+      planId: requiresPlan ? planIds : undefined,
     };
 
     // API errors surface via the global error toast; success closes the panel.
@@ -379,17 +406,23 @@ function NewProjectPanel({
 
           {requiresPlan && (
             <div className="flex flex-col gap-2">
-              <Label htmlFor="project-plan">Plan</Label>
-              <SelectField
-                id="project-plan"
-                aria-label="Plan"
+              <Label htmlFor="project-plans">Plans</Label>
+              <MultiSelectField
+                id="project-plans"
+                aria-label="Plans"
                 options={planOptions}
-                value={selectedPlanId}
-                onValueChange={setPlanId}
-                placeholder="Select a plan"
+                values={planIds}
+                onValuesChange={setPlanIds}
+                placeholder={
+                  planOptions.length === 0
+                    ? "No plans on this project type"
+                    : "Select one or more plans"
+                }
+                disabled={planOptions.length === 0}
               />
               <p className="text-xs text-muted-foreground">
-                This project type provisions modules from the selected plan.
+                Each selected plan contributes its modules and a starter task
+                per module.
               </p>
             </div>
           )}

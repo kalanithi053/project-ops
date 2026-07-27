@@ -16,6 +16,7 @@ import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { UpdatePlanDetailsDto } from './dto/update-plan-details.dto';
 import { PlansService } from './plans.service';
 
 @ApiTags('plans')
@@ -72,5 +73,17 @@ export class PlansController {
     @Body() dto: UpdatePlanDto,
   ) {
     return this.plans.updateActivePlan(workspaceId, dto);
+  }
+
+  // Declared after 'active' so that literal path never falls through to :planId.
+  @Patch(':planId')
+  @RequirePermission(PERMISSIONS.PLAN_MANAGE)
+  @ApiOperation({ summary: 'Rename a plan or update its feature flags' })
+  update(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('planId') planId: string,
+    @Body() dto: UpdatePlanDetailsDto,
+  ) {
+    return this.plans.updatePlan(workspaceId, planId, dto);
   }
 }

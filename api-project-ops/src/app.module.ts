@@ -19,6 +19,7 @@ import { PrioritiesModule } from './priorities/priorities.module';
 import { ProjectTypesModule } from './project-types/project-types.module';
 import { SettingsModule } from './settings/settings.module';
 import { AccessModule } from './access/access.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -42,6 +43,7 @@ import { AppService } from './app.service';
     ProjectTypesModule,
     SettingsModule,
     AccessModule,
+    AttachmentsModule,
   ],
   controllers: [AppController],
   providers: [

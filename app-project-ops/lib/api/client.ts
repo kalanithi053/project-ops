@@ -77,9 +77,12 @@ interface RequestOptions {
 }
 
 function buildHeaders(opts: RequestOptions): Record<string, string> {
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const headers: Record<string, string> = {};
+  // FormData must set its own Content-Type: the browser appends the multipart
+  // boundary, and overriding it makes the body unparseable server-side.
+  if (!(opts.body instanceof FormData)) {
+    headers["Content-Type"] = "application/json";
+  }
   if (opts.auth !== false) {
     const token = useAuthStore.getState().accessToken;
     if (token) headers.Authorization = `Bearer ${token}`;
@@ -88,12 +91,43 @@ function buildHeaders(opts: RequestOptions): Record<string, string> {
   return headers;
 }
 
+function buildBody(body: unknown): BodyInit | undefined {
+  if (body === undefined) return undefined;
+  if (body instanceof FormData) return body;
+  return JSON.stringify(body);
+}
+
 function rawFetch(path: string, opts: RequestOptions): Promise<Response> {
   return fetch(`${API_BASE_URL}${path}`, {
     method: opts.method ?? "GET",
     headers: buildHeaders(opts),
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: buildBody(opts.body),
   });
+}
+
+/**
+ * Fetches a file as a Blob instead of JSON.
+ *
+ * Attachment downloads go through the authenticated API rather than a public
+ * folder, so a plain <a href> can't carry the bearer token — the bytes have
+ * to be fetched and handed to the browser as an object URL.
+ */
+export async function apiDownload(
+  path: string,
+  opts: { workspaceSlug?: string } = {},
+): Promise<Blob> {
+  let res = await rawFetch(path, opts);
+
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await rawFetch(path, opts);
+  }
+
+  if (!res.ok) {
+    throw new ApiError(`Download failed (${res.status})`, res.status);
+  }
+
+  return res.blob();
 }
 
 /** Exchange the stored refresh token for a fresh token pair. */

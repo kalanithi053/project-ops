@@ -67,10 +67,12 @@ export default function PlansPage() {
   const selectedTypeId = projectTypeId ?? projectTypes[0]?.id;
   const selectedType = projectTypes.find((type) => type.id === selectedTypeId);
 
-  const typeOptions: SelectOption[] = projectTypes.map((type) => ({
-    label: type.name,
-    value: type.id,
-  }));
+  const typeOptions: SelectOption[] = projectTypes
+    ?.filter((type) => type.isPlanAdd)
+    .map((type) => ({
+      label: type.name,
+      value: type.id,
+    }));
 
   // A plan only means something inside its project type — project creation
   // picks a type first, then plans from it — so the type acts as the filter
@@ -90,7 +92,9 @@ export default function PlansPage() {
         Add Plan
       </Button>
     ) : null;
-
+  React.useEffect(() => {
+    setProjectTypeId(typeOptions[0]?.value);
+  }, [typeOptions]);
   return (
     <SettingsSection
       title="Plans"

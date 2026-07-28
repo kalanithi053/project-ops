@@ -1,25 +1,27 @@
 "use client";
 
-import * as React from "react";
 import { Loader2, Trash2 } from "lucide-react";
+import * as React from "react";
 
+import { TaskAttachments } from "@/components/projects/task-attachments";
+import { SettingsField } from "@/components/settings/settings-section";
+import { FormPanel } from "@/components/shared/form-panel";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { FormPanel } from "@/components/shared/form-panel";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { MultiSelectField } from "@/components/shared/multi-select-field";
-import { SettingsField } from "@/components/settings/settings-section";
-import { TaskAttachments } from "@/components/projects/task-attachments";
+import { usePriorities } from "@/lib/api/hooks/use-priorities";
+import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
+import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import {
   useCreateTask,
   useDeleteTask,
   useUpdateTask,
 } from "@/lib/api/hooks/use-tasks";
-import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
-import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
-import { usePriorities } from "@/lib/api/hooks/use-priorities";
 import type { CreateTaskDto, Task } from "@/lib/api/types";
 
 /** ISO timestamp -> the `YYYY-MM-DD` an <input type="date"> expects. */
@@ -75,28 +77,30 @@ export function TaskPanel({
 
   const [name, setName] = React.useState(task?.name ?? "");
   const [description, setDescription] = React.useState(task?.description ?? "");
-  const [moduleInstanceId, setModuleInstanceId] = React.useState<string | undefined>(
-    task?.moduleInstanceId ?? undefined,
-  );
+  const [moduleInstanceId, setModuleInstanceId] = React.useState<
+    string | undefined
+  >(task?.moduleInstanceId ?? undefined);
   const [statusId, setStatusId] = React.useState<string | undefined>(
     task?.statusId ?? defaultStatusId,
   );
   const [priorityId, setPriorityId] = React.useState<string | undefined>(
     task?.priorityId ?? undefined,
   );
-  const [assigneeIds, setAssigneeIds] = React.useState<string[]>(
-    () => (task?.assignees ?? []).map((entry) => entry.user.id),
+  const [assigneeIds, setAssigneeIds] = React.useState<string>(
+    task?.assigneeId ?? "",
   );
   const [etaHours, setEtaHours] = React.useState(
     task?.etaHours != null ? String(task.etaHours) : "",
   );
-  const [startDate, setStartDate] = React.useState(toDateInput(task?.startDate));
+  const [startDate, setStartDate] = React.useState(
+    toDateInput(task?.startDate),
+  );
   const [dueDate, setDueDate] = React.useState(toDateInput(task?.dueDate));
   const [error, setError] = React.useState<string | null>(null);
   const [confirmingDelete, setConfirmingDelete] = React.useState(false);
 
   const moduleOptions: SelectOption[] = (modules ?? []).map((instance) => ({
-    label: `${instance.module.name} (${instance.taskLimit} included)`,
+    label: instance.module.name,
     value: instance.id,
   }));
   const statusOptions: SelectOption[] = [...(statuses ?? [])]
@@ -110,7 +114,10 @@ export function TaskPanel({
   const assigneeOptions: SelectOption[] = (members ?? [])
     .filter((member) => member.status !== "removed" && member.user?.id)
     .map((member) => ({
-      label: member.user?.username ?? "Unknown",
+      label:
+        ([member?.user?.firstName, member?.user?.lastName].join(" ")?.trim() ||
+          member?.user?.email?.split("@")[0]) ??
+        "Unknown",
       value: String(member.user?.id),
     }));
 
@@ -127,10 +134,14 @@ export function TaskPanel({
       return setError("Due date can't be before the start date.");
     }
     if (projectStart && startDate && startDate < projectStart) {
-      return setError(`Start date can't be before the project starts (${projectStart}).`);
+      return setError(
+        `Start date can't be before the project starts (${projectStart}).`,
+      );
     }
     if (projectEnd && dueDate && dueDate > projectEnd) {
-      return setError(`Due date can't be after the project ends (${projectEnd}).`);
+      return setError(
+        `Due date can't be after the project ends (${projectEnd}).`,
+      );
     }
 
     const eta = etaHours.trim();
@@ -148,7 +159,7 @@ export function TaskPanel({
       ...(startDate ? { startDate } : {}),
       ...(dueDate ? { dueDate } : {}),
       // Always sent so clearing every assignee actually takes effect.
-      assigneeIds,
+      assigneeId: assigneeIds,
     };
 
     if (task) {
@@ -213,7 +224,12 @@ export function TaskPanel({
             )
           ) : null}
 
-          <Button type="button" variant="ghost" onClick={onClose} disabled={pending}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onClose}
+            disabled={pending}
+          >
             {canUpdate ? "Cancel" : "Close"}
           </Button>
           {canUpdate && (
@@ -334,12 +350,12 @@ export function TaskPanel({
               : "Only members of this project can be assigned."
           }
         >
-          <MultiSelectField
+          <SelectField
             id="task-assignees"
             aria-label="Assignees"
             options={assigneeOptions}
-            values={assigneeIds}
-            onValuesChange={setAssigneeIds}
+            value={assigneeIds ?? ""}
+            onValueChange={setAssigneeIds}
             placeholder="Unassigned"
             disabled={assigneeOptions.length === 0}
           />

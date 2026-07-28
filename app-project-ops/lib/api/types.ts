@@ -505,6 +505,7 @@ export interface Task {
   priority?: TaskPriorityRef | null;
   /** A task can be worked by several people. */
   assignees?: TaskAssignment[];
+  assigneeId: string;
   [key: string]: unknown;
 }
 
@@ -525,7 +526,7 @@ export interface CreateTaskDto {
    * Replace-all on update: the array becomes the complete assignee set, and
    * omitting the key leaves existing assignees untouched.
    */
-  assigneeIds?: string[];
+  assigneeId?: string;
   /** Estimated effort in whole hours. */
   etaHours?: number;
   position?: number;

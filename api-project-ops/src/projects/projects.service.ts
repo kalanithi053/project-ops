@@ -164,7 +164,7 @@ export class ProjectsService {
             data: {
               projectId: project.id,
               moduleInstanceId: instance.id,
-              prefix: `${module.name} - ${index + 1}`,
+              prefix: `${module.name}-${index + 1}`,
               name: module.name,
               startDate,
               dueDate: endDate,

@@ -1,11 +1,17 @@
 "use client";
 
-import * as React from "react";
+import { Boxes, ListChecks, Users } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Boxes, ListChecks, Users } from "lucide-react";
+import * as React from "react";
 
+import { ProjectActivity } from "@/components/projects/project-activity";
+import { EmptyState } from "@/components/shared/empty-state";
+import { QueryState } from "@/components/shared/query-state";
+import { CardsSkeleton } from "@/components/shared/skeletons";
+import { StatsGrid } from "@/components/shared/stats-grid";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -13,18 +19,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { StatsGrid } from "@/components/shared/stats-grid";
-import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
-import { EmptyState } from "@/components/shared/empty-state";
-import { ProjectActivity } from "@/components/projects/project-activity";
-import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
+import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
+import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useTasks } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
-import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 
 function daysBetween(start?: string, end?: string): number | null {
   if (!start || !end) return null;
@@ -69,6 +69,7 @@ export default function ProjectOverviewPage() {
     const counts = new Map<string, number>();
     for (const task of tasks) {
       if (!task.moduleInstanceId) continue;
+      if (task.status?.category === "new") continue;
       counts.set(
         task.moduleInstanceId,
         (counts.get(task.moduleInstanceId) ?? 0) + 1,

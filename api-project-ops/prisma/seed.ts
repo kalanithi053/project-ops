@@ -13,8 +13,8 @@ import { provisionWorkspaceDefaults } from '../src/workspaces/workspace-provisio
 
 const prisma = new PrismaClient();
 
-const DEMO_EMAIL = 'kalanithi@amwhiz.com';
-const DEMO_WORKSPACE_SLUG = 'amwhizcom';
+const DEMO_EMAIL = 'demo.worspace@projectops.com';
+const DEMO_WORKSPACE_SLUG = 'demo.worspace';
 
 async function main() {
   const owner = await prisma.user.upsert({

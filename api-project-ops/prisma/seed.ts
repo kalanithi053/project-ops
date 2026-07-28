@@ -13,8 +13,8 @@ import { provisionWorkspaceDefaults } from '../src/workspaces/workspace-provisio
 
 const prisma = new PrismaClient();
 
-const DEMO_EMAIL = 'demo.worspace@projectops.com';
-const DEMO_WORKSPACE_SLUG = 'demo.worspace';
+const DEMO_EMAIL = 'demo.workspace@projectops.com';
+const DEMO_WORKSPACE_SLUG = 'demo.workspace';
 
 async function main() {
   const owner = await prisma.user.upsert({
@@ -40,7 +40,7 @@ async function main() {
   const workspace = await prisma.$transaction(async (tx) => {
     const ws = await tx.workspace.create({
       data: {
-        name: 'Amwhiz',
+        name: 'Demo Workspace',
         slug: DEMO_WORKSPACE_SLUG,
         ownerId: owner.id,
       },

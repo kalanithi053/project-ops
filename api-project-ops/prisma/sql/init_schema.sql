@@ -61,7 +61,7 @@ CREATE TABLE "user" (
     "is_active" BOOLEAN NOT NULL DEFAULT true,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
-
+    "is_verified" BOOLEAN NOT NULL DEFAULT false,
     CONSTRAINT "user_pkey" PRIMARY KEY ("id")
 );
 

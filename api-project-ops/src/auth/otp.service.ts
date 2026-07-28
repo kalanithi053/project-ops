@@ -79,6 +79,10 @@ export class OtpService {
       });
       throw new UnauthorizedException('Invalid OTP.');
     }
+    await this.prisma.user.update({
+      where: { email: email },
+      data: { isVerified: true },
+    });
 
     await this.prisma.otpRequest.update({
       where: { id: otp.id },

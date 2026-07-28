@@ -64,6 +64,7 @@ model User {
   // to give a tester/demo account a predictable login code.
   staticOtp String?  @default("123456") @map("static_otp")
   isActive  Boolean  @default(true) @map("is_active")
+  isVerified  Boolean  @default(true) @map("is_verified")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

@@ -1,6 +1,5 @@
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -34,15 +33,11 @@ export class AuthService {
   > {
     const user = await this.prisma.user.findUnique({ where: { email } });
 
-    if (!user || !user.firstName) {
+    if (!user || !user.isVerified) {
       return {
         slug: 'Create-User',
-        message: 'User not found. Create the user to continue.',
+        message: 'User not found or not verified. Create the user to continue.',
       };
-    }
-
-    if (!user.isActive) {
-      throw new ForbiddenException('This account is deactivated.');
     }
 
     const { expiresAt } = await this.otp.issue(email);
@@ -62,17 +57,18 @@ export class AuthService {
     const existing = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
-    if (existing?.firstName) {
+    if (existing?.email && existing?.isVerified) {
       throw new ConflictException('User already exists.');
     }
 
     const user = existing
       ? await this.prisma.user.update({
           where: { email: dto.email },
-          data: { firstName: dto.firstName, lastName: dto.lastName },
+          data: { ...dto, isVerified: false },
         })
       : await this.prisma.user.create({
           data: {
+            isVerified: false,
             email: dto.email,
             firstName: dto.firstName,
             lastName: dto.lastName,
@@ -101,7 +97,12 @@ export class AuthService {
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Account not found or deactivated.');
     }
+
     if (user?.staticOtp === otp) {
+      await this.prisma.user.update({
+        where: { email: email },
+        data: { isVerified: true },
+      });
       return {
         ...this.tokens.signAuthTokens(user.id),
         user: { id: user.id, email: user.email },

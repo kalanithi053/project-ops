@@ -24,6 +24,7 @@ async function main() {
       email: DEMO_EMAIL,
       firstName: 'Demo',
       lastName: 'Owner',
+      isVerified: true,
     },
   });
 

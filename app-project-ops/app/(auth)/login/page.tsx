@@ -581,20 +581,33 @@ export default function LoginPage() {
                       </motion.div>
 
                       {/* Change username */}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setStep("identify");
-                          setOtp("");
-                          setError(null);
-                          setIsVerified(false);
-                          verifyOtp.reset();
-                        }}
-                        className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                        Change user name
-                      </button>
+                      <div className="flex justify-between">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setStep("identify");
+                            setOtp("");
+                            setError(null);
+                            setIsVerified(false);
+                            verifyOtp.reset();
+                          }}
+                          className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                        >
+                          <ArrowLeft className="h-4 w-4" />
+                          Change Email
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            submitUsername(
+                              e as unknown as React.FormEvent<HTMLFormElement>,
+                            );
+                          }}
+                          className="inline-flex items-center gap-1.5 self-start text-sm text-muted-foreground underline-offset-4 transition-colors hover:text-foreground hover:underline"
+                        >
+                          Resend OTP
+                        </button>
+                      </div>
                     </>
                   )}
                 </motion.div>

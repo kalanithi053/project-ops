@@ -1,12 +1,10 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
 import { LogOut, Settings, SlidersHorizontal, User } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 
-import type { AuthUser } from "@/types/auth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Skeleton } from "@/components/ui/skeleton";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -15,9 +13,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { useAuthStore } from "@/lib/store/auth-store";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/lib/api/hooks/use-users";
+import { useAuthStore } from "@/lib/store/auth-store";
 import { toast } from "@/lib/toast/toast-store";
+import type { AuthUser } from "@/types/auth";
 
 function initials(name: string) {
   return name
@@ -43,7 +43,7 @@ export function UserMenu({ user }: { user: AuthUser }) {
   function logout() {
     clear();
     toast.success("Signed out");
-    router.replace("/login");
+    window.location.reload();
   }
 
   function goTo(path: string) {
@@ -71,7 +71,9 @@ export function UserMenu({ user }: { user: AuthUser }) {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-64">
         <DropdownMenuLabel className="flex flex-col gap-0.5 py-2">
-          <span className="text-sm font-medium text-foreground">{user.name}</span>
+          <span className="text-sm font-medium text-foreground">
+            {user.name}
+          </span>
           <span className="truncate text-xs font-normal text-muted-foreground">
             {user.email}
           </span>

@@ -2,18 +2,15 @@
 
 import { AppShell } from "@/components/layout/app-shell";
 import { useMe } from "@/lib/api/hooks/use-users";
+import type { Me, UpdateMeDto } from "@/lib/api/types";
+import { getFullname } from "@/lib/utils";
 import type { AuthUser } from "@/types/auth";
-import type { Me } from "@/lib/api/types";
 
 /** Map the API profile onto the shell's AuthUser shape. */
 function toAuthUser(me: Me | undefined, fallbackName: string): AuthUser {
-  const name =
-    [me?.firstName, me?.lastName].filter(Boolean).join(" ").trim() ||
-    me?.username ||
-    fallbackName;
   return {
-    id: String(me?.id ?? me?.username ?? "me"),
-    name,
+    id: String(me?.id ?? me?.email ?? "me"),
+    name: getFullname(me as UpdateMeDto) ?? "",
     email: me?.email ?? "",
     role: "Member",
     permissions: [],

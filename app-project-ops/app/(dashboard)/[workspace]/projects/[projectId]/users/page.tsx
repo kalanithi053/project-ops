@@ -36,8 +36,13 @@ import {
 } from "@/lib/api/hooks/use-project-members";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
-import type { MembershipStatus, ProjectMember } from "@/lib/api/types";
+import type {
+  MembershipStatus,
+  ProjectMember,
+  UpdateMeDto,
+} from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
+import { getFullname } from "@/lib/utils";
 
 const STATUS_TONE: Record<MembershipStatus, BadgeProps["variant"]> = {
   invited: "warning",
@@ -129,11 +134,7 @@ export default function ProjectUsersPage() {
                       updateMember.isPending &&
                       updateMember.variables?.id === member.id;
                     const name =
-                      ([member?.user?.firstName, member?.user?.lastName]
-                        .join(" ")
-                        ?.trim() ||
-                        member?.user?.email?.split("@")[0]) ??
-                      "Unknown";
+                      getFullname(member.user as UpdateMeDto) ?? "Unknown";
                     return (
                       <TableRow key={member.id}>
                         <TableCell className="font-medium first-letter:capitalize">
@@ -210,13 +211,7 @@ export default function ProjectUsersPage() {
       <ConfirmDialog
         open={Boolean(removing)}
         onOpenChange={(open) => !open && setRemoving(null)}
-        title={`Remove ${
-          ([removing?.user?.firstName, removing?.user?.lastName]
-            .join(" ")
-            ?.trim() ||
-            removing?.user?.email?.split("@")[0]) ??
-          "this member"
-        }?`}
+        title={`Remove ${getFullname(removing?.user as UpdateMeDto) ?? "this member"}?`}
         description="They lose access to this project's board and tasks. Their workspace membership is unaffected."
         confirmLabel="Remove from project"
         destructive

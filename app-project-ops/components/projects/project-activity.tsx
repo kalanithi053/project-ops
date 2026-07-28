@@ -1,11 +1,12 @@
 "use client";
 
-import * as React from "react";
 import { CirclePlus, PencilLine, UserPlus } from "lucide-react";
+import * as React from "react";
 
 import { Separator } from "@/components/ui/separator";
+import type { ProjectMember, Task, UpdateMeDto } from "@/lib/api/types";
 import { formatDate } from "@/lib/format";
-import type { ProjectMember, Task } from "@/lib/api/types";
+import { getFullname } from "@/lib/utils";
 
 type ActivityKind = "task-created" | "task-updated" | "member-joined";
 
@@ -121,7 +122,7 @@ export function ProjectActivity({
         key: `${member.id}-j`,
         at: joined,
         kind: "member-joined",
-        label: `${member.user?.username ?? "Someone"} joined the project`,
+        label: `${getFullname(member.user as UpdateMeDto) ?? "Someone"} joined the project`,
       });
     }
 

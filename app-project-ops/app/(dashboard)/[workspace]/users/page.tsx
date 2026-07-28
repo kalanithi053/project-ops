@@ -27,6 +27,7 @@ import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { MemberUser, WorkspaceMember } from "@/lib/api/types";
+import { getFullname } from "@/lib/utils";
 import type { ColumnDef } from "@/types/module";
 
 /** Member name/email live under a nested `user` object (fallback to flat). */
@@ -36,13 +37,12 @@ function memberUser(m: WorkspaceMember): MemberUser {
 
 function memberName(m: WorkspaceMember): string {
   const u = memberUser(m);
-  const full = [u.firstName, u.lastName].filter(Boolean).join(" ").trim();
-  return full || u.username || "—";
+  return getFullname(u) || "—";
 }
 
 function memberEmail(m: WorkspaceMember): string {
   const u = memberUser(m);
-  return u.email ?? u.username ?? "";
+  return u.email ?? "";
 }
 
 function roleName(m: WorkspaceMember): string {

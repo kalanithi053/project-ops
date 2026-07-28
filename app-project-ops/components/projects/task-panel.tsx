@@ -22,7 +22,8 @@ import {
   useUpdateTask,
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
-import type { CreateTaskDto, Task } from "@/lib/api/types";
+import type { CreateTaskDto, Task, UpdateMeDto } from "@/lib/api/types";
+import { getFullname } from "@/lib/utils";
 
 /** ISO timestamp -> the `YYYY-MM-DD` an <input type="date"> expects. */
 function toDateInput(value?: string | null): string {
@@ -114,10 +115,7 @@ export function TaskPanel({
   const assigneeOptions: SelectOption[] = (members ?? [])
     .filter((member) => member.status !== "removed" && member.user?.id)
     .map((member) => ({
-      label:
-        ([member?.user?.firstName, member?.user?.lastName].join(" ")?.trim() ||
-          member?.user?.email?.split("@")[0]) ??
-        "Unknown",
+      label: getFullname(member?.user as UpdateMeDto) ?? "Unknown",
       value: String(member.user?.id),
     }));
 

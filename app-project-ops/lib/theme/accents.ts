@@ -12,6 +12,7 @@ export type AccentKey =
   | "violet"
   | "green"
   | "orange"
+  | "red"
   | "rose";
 
 interface AccentTokens {
@@ -88,6 +89,20 @@ export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
       primary: "oklch(0.75 0.17 55)",
       primaryForeground: "oklch(0.145 0 0)",
       ring: "oklch(0.68 0.16 50)",
+    },
+  },
+  red: {
+    label: "Red",
+    swatch: "oklch(0.55 0.22 27)",
+    light: {
+      primary: "oklch(0.55 0.22 27)",
+      primaryForeground: "oklch(0.985 0 0)",
+      ring: "oklch(0.62 0.18 27)",
+    },
+    dark: {
+      primary: "oklch(0.72 0.18 27)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.62 0.18 27)",
     },
   },
   rose: {

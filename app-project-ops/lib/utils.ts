@@ -1,6 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { UpdateMeDto } from "./api/types";
 
 /**
  * Merges Tailwind class names, resolving conflicting utility classes
@@ -10,6 +9,11 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
-export const getFullname = (user: UpdateMeDto) =>
+export const getFullname = (user?: {
+  firstName?: string | null;
+  lastName?: string | null;
+  email?: string | null;
+}) =>
   [user?.firstName, user?.lastName].join(" ")?.trim() ||
-  user?.email?.split("@")[0];
+  user?.email?.split("@")[0] ||
+  undefined;

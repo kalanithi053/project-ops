@@ -26,6 +26,7 @@ function systemPrefersDark(): boolean {
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const mode = useThemeStore((state) => state.mode);
   const accent = useThemeStore((state) => state.accent);
+  const dateFormat = useThemeStore((state) => state.dateFormat);
 
   const apply = React.useCallback(
     (dark: boolean) => {
@@ -47,5 +48,5 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return () => media.removeEventListener("change", handleChange);
   }, [mode, apply]);
 
-  return <>{children}</>;
+  return <React.Fragment key={dateFormat}>{children}</React.Fragment>;
 }

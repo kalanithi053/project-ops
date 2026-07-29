@@ -185,6 +185,10 @@ export class ActivityLogService {
         return `${actorName} deleted this ${noun}`;
       case 'comment_added':
         return `${actorName} commented: "${(meta.preview as string) ?? ''}"`;
+      case 'comment_updated':
+        return `${actorName} updated a comment`;
+      case 'comment_deleted':
+        return `${actorName} deleted a comment`;
       case 'status_changed': {
         const from = lookups.statusName.get(meta.from as string) ?? 'None';
         const to = lookups.statusName.get(meta.to as string) ?? 'None';

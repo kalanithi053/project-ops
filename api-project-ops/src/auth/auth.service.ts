@@ -32,7 +32,6 @@ export class AuthService {
     | { slug: 'Create-User'; message: string }
   > {
     const user = await this.prisma.user.findUnique({ where: { email } });
-
     if (!user || !user.isVerified) {
       return {
         slug: 'Create-User',
@@ -64,11 +63,11 @@ export class AuthService {
     const user = existing
       ? await this.prisma.user.update({
           where: { email: dto.email },
-          data: { ...dto, isVerified: false },
+          data: { ...dto, isVerified: true },
         })
       : await this.prisma.user.create({
           data: {
-            isVerified: false,
+            isVerified: true,
             email: dto.email,
             firstName: dto.firstName,
             lastName: dto.lastName,

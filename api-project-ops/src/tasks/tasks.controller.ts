@@ -9,12 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import {
-  ApiBearerAuth,
-  ApiOperation,
-  ApiQuery,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
@@ -24,6 +19,7 @@ import { TasksService } from './tasks.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
 import { UpdateTaskStatusDto } from './dto/update-task-status.dto';
+import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 
 @ApiTags('tasks')
 @ApiBearerAuth()
@@ -35,21 +31,12 @@ export class TasksController {
   @Get()
   @RequirePermission(PERMISSIONS.TASK_READ)
   @ApiOperation({ summary: 'List tasks in a project' })
-  @ApiQuery({ name: 'moduleInstanceId', required: false })
-  @ApiQuery({ name: 'statusId', required: false })
-  @ApiQuery({ name: 'priorityId', required: false })
   list(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
-    @Query('moduleInstanceId') moduleInstanceId?: string,
-    @Query('statusId') statusId?: string,
-    @Query('priorityId') priorityId?: string,
+    @Query() filters: ListTasksQueryDto,
   ) {
-    return this.tasks.list(workspaceId, projectId, {
-      moduleInstanceId,
-      statusId,
-      priorityId,
-    });
+    return this.tasks.list(workspaceId, projectId, filters);
   }
 
   @Post()

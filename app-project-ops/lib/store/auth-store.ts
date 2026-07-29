@@ -50,7 +50,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   clear: () => {
     deleteCookie(ACCESS_TOKEN_COOKIE);
     deleteCookie(REFRESH_TOKEN_COOKIE);
-    set({ accessToken: null, refreshToken: null, user: null });
+    set({ accessToken: null, refreshToken: null, user: null, hydrated: false });
   },
   hydrate: () =>
     set({

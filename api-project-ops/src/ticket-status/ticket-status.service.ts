@@ -59,9 +59,12 @@ export class TicketStatusService {
   async remove(workspaceId: string, id: string) {
     await this.getOwned(workspaceId, id);
     const taskCount = await this.prisma.task.count({ where: { statusId: id } });
-    if (taskCount > 0) {
+    const incidentCount = await this.prisma.incident.count({
+      where: { statusId: id },
+    });
+    if (taskCount > 0 || incidentCount > 0) {
       throw new ConflictException(
-        'Status is still used by tasks; reassign them first.',
+        'Status is still used by tasks or incidents; reassign them first.',
       );
     }
     await this.prisma.ticketStatus.delete({ where: { id } });

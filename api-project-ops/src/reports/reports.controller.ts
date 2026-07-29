@@ -27,3 +27,20 @@ export class ReportsController {
     return this.reports.getProjectReport(workspaceId, projectId);
   }
 }
+
+@ApiTags('reports')
+@ApiBearerAuth()
+@UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+@Controller('reports')
+export class WorkspaceReportsController {
+  constructor(private readonly reports: ReportsService) {}
+
+  @Get()
+  @RequirePermission(PERMISSIONS.PROJECT_READ)
+  @ApiOperation({ summary: 'Workspace-wide task and incident status breakdown' })
+  getWorkspaceReport(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+  ) {
+    return this.reports.getWorkspaceReport(workspaceId);
+  }
+}

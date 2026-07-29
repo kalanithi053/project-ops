@@ -35,6 +35,7 @@ export function TaskCardView({
 }) {
   const overdue = task.dueDate ? new Date(task.dueDate) < new Date() : false;
   const assignees = task.assignees ?? [];
+  const estimateHours = task.estimateHours ?? task.etaHours;
 
   return (
     <div
@@ -54,7 +55,7 @@ export function TaskCardView({
       {(task.priority ||
         moduleName ||
         task.dueDate ||
-        task.etaHours != null ||
+        estimateHours != null ||
         assignees.length > 0) && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 pt-0.5">
           {task.priority && (
@@ -89,10 +90,10 @@ export function TaskCardView({
             </span>
           )}
 
-          {task.etaHours != null && (
+          {estimateHours != null && (
             <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
               <Clock className="h-3 w-3 shrink-0" />
-              {task.etaHours}h
+              {estimateHours}h
             </span>
           )}
 
@@ -140,10 +141,12 @@ export function SortableTaskCard({
   task,
   moduleName,
   onOpen,
+  disabled = false,
 }: {
   task: Task;
   moduleName?: string;
   onOpen: () => void;
+  disabled?: boolean;
 }) {
   const {
     attributes,
@@ -155,6 +158,7 @@ export function SortableTaskCard({
   } = useSortable({
     id: task.id,
     data: { type: "task", statusId: task.statusId ?? null },
+    disabled,
   });
 
   return (
@@ -179,6 +183,7 @@ export function SortableTaskCard({
         aria-label={`Reorder ${task.name}`}
         className="absolute right-1 top-2 rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         {...attributes}
+        disabled={disabled}
         // dnd-kit types its listener map as Record<string, Function>, so the
         // handler needs narrowing to attach to a typed element.
         onKeyDown={

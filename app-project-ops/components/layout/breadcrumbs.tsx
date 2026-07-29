@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import { ChevronRight } from "lucide-react";
 import { Fragment } from "react";
+
+import { useProject } from "@/lib/api/hooks/use-projects";
 
 /**
  * Maps a URL segment to a human-readable label. Centralized here so
@@ -45,26 +47,35 @@ function labelFor(segment: string) {
 
 export function Breadcrumbs() {
   const pathname = usePathname();
+  const { workspace, projectId } = useParams<{
+    workspace?: string;
+    projectId?: string;
+  }>();
+  const { data: project } = useProject(workspace ?? "", projectId ?? "");
+
   // First segment is the workspace slug — not a navigable breadcrumb, but it
   // stays in `allSegments` because every href is prefixed with it.
   const allSegments = pathname.split("/").filter(Boolean);
-  // Record ids carry no readable label, and the detail page shows the
-  // record's real name in its own heading — so they're dropped rather than
-  // rendered as a mangled uuid. Hrefs are built from each segment's position
-  // in the original path so a dropped id can't shift the links.
+  // Most record ids have no readable label and are dropped. A project id is
+  // retained because the shared project query can resolve its real name for
+  // the persistent app header.
   const segments = allSegments
     .slice(1)
     .map((segment, index) => ({
       segment,
       href: `/${allSegments.slice(0, index + 2).join("/")}`,
+      label:
+        segment === projectId ? (project?.name ?? "Project") : labelFor(segment),
     }))
-    .filter(({ segment }) => !UUID_PATTERN.test(segment));
+    .filter(
+      ({ segment }) => segment === projectId || !UUID_PATTERN.test(segment),
+    );
 
   if (segments.length === 0) return null;
 
   return (
     <nav aria-label="Breadcrumb" className="hidden min-w-0 items-center text-sm sm:flex">
-      {segments.map(({ segment, href }, index) => {
+      {segments.map(({ label, href }, index) => {
         const isLast = index === segments.length - 1;
 
         return (
@@ -74,14 +85,14 @@ export function Breadcrumbs() {
             )}
             {isLast ? (
               <span className="truncate font-medium text-foreground" aria-current="page">
-                {labelFor(segment)}
+                {label}
               </span>
             ) : (
               <Link
                 href={href}
                 className="truncate text-muted-foreground hover:text-foreground"
               >
-                {labelFor(segment)}
+                {label}
               </Link>
             )}
           </Fragment>

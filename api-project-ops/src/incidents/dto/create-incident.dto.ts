@@ -25,10 +25,20 @@ export class CreateIncidentDto {
   @MaxLength(4000)
   description?: string;
 
+  @ApiProperty({ required: false, description: 'Workspace ticket status' })
+  @IsOptional()
+  @IsUUID()
+  statusId?: string;
+
   @ApiProperty({ required: false, description: 'Workspace member to assign' })
   @IsOptional()
   @IsUUID()
   assigneeId?: string;
+
+  @ApiProperty({ required: false, description: 'Workspace member responsible for QA' })
+  @IsOptional()
+  @IsUUID()
+  qaAssigneeId?: string;
 
   @ApiProperty({ required: false, minimum: 0, example: 4 })
   @IsOptional()

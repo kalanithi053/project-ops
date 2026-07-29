@@ -4,12 +4,16 @@ import { persist } from "zustand/middleware";
 import type { AccentKey } from "@/lib/theme/accents";
 
 export type ThemeMode = "light" | "dark" | "system";
+export type DateFormat = "utc" | "local";
 
 interface ThemeState {
   mode: ThemeMode;
   accent: AccentKey;
+  dateFormat: DateFormat;
   setMode: (mode: ThemeMode) => void;
   setAccent: (accent: AccentKey) => void;
+  setDateFormat: (dateFormat: DateFormat) => void;
+  reset: () => void;
 }
 
 /**
@@ -22,8 +26,11 @@ export const useThemeStore = create<ThemeState>()(
     (set) => ({
       mode: "system",
       accent: "neutral",
+      dateFormat: "utc",
       setMode: (mode) => set({ mode }),
       setAccent: (accent) => set({ accent }),
+      setDateFormat: (dateFormat) => set({ dateFormat }),
+      reset: () => set({ mode: "system", accent: "neutral", dateFormat: "utc" }),
     }),
     { name: "projectops.theme" },
   ),

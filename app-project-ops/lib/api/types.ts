@@ -445,6 +445,7 @@ export interface TaskStatusRef {
   id: string;
   name: string;
   category: StatusCategory;
+  color?: string | null;
 }
 
 export interface TaskPriorityRef {
@@ -493,6 +494,10 @@ export interface Task {
   /** Flat ordering across the whole project, not per column. */
   position: number;
   /** Estimated effort in whole hours; null when not estimated. */
+  estimateHours?: number | null;
+  /** Hours of work completed so far; null when none have been logged. */
+  completedHours?: number | null;
+  /** Legacy frontend field retained while older cached responses expire. */
   etaHours?: number | null;
   createdAt?: string;
   updatedAt?: string;
@@ -506,7 +511,76 @@ export interface Task {
   /** A task can be worked by several people. */
   assignees?: TaskAssignment[];
   assigneeId: string;
+  qaAssigneeId?: string | null;
+  qaAssignee?: TaskCommentUser | null;
   [key: string]: unknown;
+}
+
+export interface Incident {
+  id: string;
+  projectId: string;
+  title: string;
+  description?: string | null;
+  statusId: string;
+  status: TaskStatusRef;
+  assigneeId?: string | null;
+  qaAssigneeId?: string | null;
+  estimateHours?: number | null;
+  completedHours?: number | null;
+  createdAt: string;
+  updatedAt: string;
+  assignee?: TaskCommentUser | null;
+  qaAssignee?: TaskCommentUser | null;
+  [key: string]: unknown;
+}
+
+export interface CreateIncidentDto {
+  title: string;
+  description?: string;
+  statusId?: string;
+  assigneeId?: string;
+  qaAssigneeId?: string;
+  estimateHours?: number;
+  completedHours?: number;
+}
+
+export interface UpdateIncidentDto extends Partial<CreateIncidentDto> {}
+
+export interface ProjectReport {
+  modules: Array<{
+    id: string;
+    module: string;
+    used: number;
+    limit: number;
+    addon: number;
+  }>;
+  statusBreakdown: Array<{
+    name: string;
+    color?: string | null;
+    count: number;
+  }>;
+  byPriority: Array<{ priority: string; statuses: Record<string, number> }>;
+  progress: {
+    totalTasks: number;
+    doneTasks: number;
+    percentComplete: number;
+    stage: string;
+  };
+  user: Array<{
+    name: string;
+    totalTasks: number;
+    totalIncidents: number;
+    completedTasks: number;
+    completedIncidents: number;
+    totalEstimateHours: number;
+    totalCompletedHours: number;
+  }>;
+}
+
+export interface WorkspaceReport {
+  totalTasks: number;
+  totalIncidents: number;
+  statusBreakdown: Array<{ label: string; count: number }>;
 }
 
 /**
@@ -527,8 +601,11 @@ export interface CreateTaskDto {
    * omitting the key leaves existing assignees untouched.
    */
   assigneeId?: string;
+  qaAssigneeId?: string;
   /** Estimated effort in whole hours. */
-  etaHours?: number;
+  estimateHours?: number;
+  /** Hours of work completed so far. */
+  completedHours?: number;
   position?: number;
 }
 
@@ -539,3 +616,48 @@ export interface CreateTaskDto {
  * is a no-op — a value can be changed but not cleared through this API.
  */
 export type UpdateTaskDto = Partial<CreateTaskDto>;
+
+/** Human-readable audit entry returned by a task's activity endpoint. */
+export interface TaskActivityEntry {
+  id: string;
+  entityType: "task";
+  entityId: string;
+  action:
+    | "created"
+    | "updated"
+    | "status_changed"
+    | "deleted"
+    | "comment_added"
+    | string;
+  actor: string;
+  createdAt: string;
+  description: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export interface TaskCommentUser {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+}
+
+export interface TaskComment {
+  id: string;
+  workspaceId: string;
+  taskId: string | null;
+  body: string;
+  authorId: string;
+  author: TaskCommentUser;
+  mentions: Array<{ user: TaskCommentUser }>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaskCommentDto {
+  body: string;
+  mentions?: string[];
+}
+
+/** Full replacement payload for a task comment. */
+export type UpdateTaskCommentDto = CreateTaskCommentDto;

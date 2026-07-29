@@ -10,7 +10,7 @@ import {
   Lock,
   ShieldCheck,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { OtpInput } from "@/components/shared/otp-input";
@@ -24,6 +24,7 @@ import {
   useRequestOtp,
   useVerifyOtp,
 } from "@/lib/api/hooks/use-auth";
+import { safeAuthDestination } from "@/lib/auth/redirect";
 
 type Step = "identify" | "register" | "verify";
 
@@ -51,6 +52,9 @@ export const isValidEmail = (email: string): boolean => {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const destination = searchParams.get("next");
+  const redirectAfterLogin = safeAuthDestination(destination);
 
   const [step, setStep] = useState<Step>("identify");
   const [firstName, setFirstName] = useState("");
@@ -72,11 +76,11 @@ export default function LoginPage() {
     if (!isVerified) return;
 
     const timer = window.setTimeout(() => {
-      router.push("/workspaces");
+      window.location.href = redirectAfterLogin;
     }, 1800);
 
     return () => window.clearTimeout(timer);
-  }, [isVerified, router]);
+  }, [isVerified, redirectAfterLogin, router]);
 
   function submitUsername(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

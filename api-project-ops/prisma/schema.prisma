@@ -38,15 +38,8 @@ enum StatusCategory {
   review
   done
   blocked
+
   @@map("status_category")
-}
-
-enum IncidentStatus {
-  open
-  in_progress
-  resolved
-
-  @@map("incident_status")
 }
 
 // ---------------------------------------------------------------------------
@@ -54,31 +47,33 @@ enum IncidentStatus {
 // ---------------------------------------------------------------------------
 
 model User {
-  id        String   @id @default(uuid())
+  id         String   @id @default(uuid())
   // Login identifier. Required + unique — replaces the old username field.
-  email     String   @unique
-  firstName String?  @map("first_name")
-  lastName  String?  @map("last_name")
+  email      String   @unique
+  firstName  String?  @map("first_name")
+  lastName   String?  @map("last_name")
   // Fixed OTP code for this user (defaults to the dev static code). When set,
   // OtpService issues this value instead of a random one — override per user
   // to give a tester/demo account a predictable login code.
-  staticOtp String?  @default("123456") @map("static_otp")
-  isActive  Boolean  @default(true) @map("is_active")
-  isVerified  Boolean  @default(true) @map("is_verified")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  staticOtp  String?  @default("123456") @map("static_otp")
+  isActive   Boolean  @default(true) @map("is_active")
+  isVerified Boolean  @default(true) @map("is_verified")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  ownedWorkspaces  Workspace[]       @relation("WorkspaceOwner")
-  workspaceMembers WorkspaceMember[]
-  projectMembers   ProjectMember[]
-  ownedProjects    Project[]         @relation("ProjectOwner")
-  assignedTasks    Task[]            @relation("TaskAssignee")
-  createdTasks     Task[]            @relation("TaskCreator")
-  reportedIncidents Incident[]       @relation("IncidentReporter")
-  assignedIncidents Incident[]       @relation("IncidentAssignee")
-  activityLogs      ActivityLog[]    @relation("ActivityLogActor")
-  comments          Comment[]        @relation("CommentAuthor")
-  commentMentions   CommentMention[] @relation("CommentMentions")
+  ownedWorkspaces     Workspace[]       @relation("WorkspaceOwner")
+  workspaceMembers    WorkspaceMember[]
+  projectMembers      ProjectMember[]
+  ownedProjects       Project[]         @relation("ProjectOwner")
+  assignedTasks       Task[]            @relation("TaskAssignee")
+  qaAssignedTasks     Task[]            @relation("TaskQaAssignee")
+  createdTasks        Task[]            @relation("TaskCreator")
+  reportedIncidents   Incident[]        @relation("IncidentReporter")
+  assignedIncidents   Incident[]        @relation("IncidentAssignee")
+  qaAssignedIncidents Incident[]        @relation("IncidentQaAssignee")
+  activityLogs        ActivityLog[]     @relation("ActivityLogActor")
+  comments            Comment[]         @relation("CommentAuthor")
+  commentMentions     CommentMention[]  @relation("CommentMentions")
 
   @@map("user")
 }
@@ -198,12 +193,12 @@ model RolePermission {
 // ---------------------------------------------------------------------------
 
 model Plan {
-  id                String  @id @default(uuid())
-  workspaceId       String  @map("workspace_id")
-  projectTypeId     String  @map("project_type_id")
-  name              String
-  features          Json    @default("{}")
-  isActive          Boolean @default(true) @map("is_active")
+  id            String  @id @default(uuid())
+  workspaceId   String  @map("workspace_id")
+  projectTypeId String  @map("project_type_id")
+  name          String
+  features      Json    @default("{}")
+  isActive      Boolean @default(true) @map("is_active")
 
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   projectType ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
@@ -350,6 +345,7 @@ model Task {
   statusId         String?   @map("status_id")
   priorityId       String?   @map("priority_id")
   assigneeId       String?   @map("assignee_id")
+  qaAssigneeId     String?   @map("qa_assignee_id")
   createdBy        String    @map("created_by")
   position         Int       @default(0)
   estimateHours    Float?    @map("estimate_hours")
@@ -363,6 +359,7 @@ model Task {
   status         TicketStatus?   @relation(fields: [statusId], references: [id])
   priority       Priority?       @relation(fields: [priorityId], references: [id])
   assignee       User?           @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  qaAssignee     User?           @relation("TaskQaAssignee", fields: [qaAssigneeId], references: [id])
   creator        User            @relation("TaskCreator", fields: [createdBy], references: [id])
   comments       Comment[]
 
@@ -371,6 +368,7 @@ model Task {
   @@index([statusId])
   @@index([priorityId])
   @@index([assigneeId])
+  @@index([qaAssigneeId])
   @@map("task")
 }
 
@@ -380,27 +378,32 @@ model Task {
 // ---------------------------------------------------------------------------
 
 model Incident {
-  id          String         @id @default(uuid())
-  workspaceId String         @map("workspace_id")
-  projectId   String         @map("project_id")
-  title       String
-  description String?
-  status      IncidentStatus @default(open)
-  reportedBy  String         @map("reported_by")
-  assigneeId  String?        @map("assignee_id")
-  estimateHours  Float?      @map("estimate_hours")
-  completedHours Float?      @map("completed_hours")
-  createdAt   DateTime       @default(now()) @map("created_at")
-  updatedAt   DateTime       @updatedAt @map("updated_at")
+  id             String   @id @default(uuid())
+  workspaceId    String   @map("workspace_id")
+  projectId      String   @map("project_id")
+  title          String
+  description    String?
+  statusId       String   @map("status_id")
+  reportedBy     String   @map("reported_by")
+  assigneeId     String?  @map("assignee_id")
+  qaAssigneeId   String?  @map("qa_assignee_id")
+  estimateHours  Float?   @map("estimate_hours")
+  completedHours Float?   @map("completed_hours")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  reporter  User      @relation("IncidentReporter", fields: [reportedBy], references: [id])
-  assignee  User?     @relation("IncidentAssignee", fields: [assigneeId], references: [id])
-  comments  Comment[]
+  workspace  Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project    Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  status     TicketStatus @relation(fields: [statusId], references: [id])
+  reporter   User         @relation("IncidentReporter", fields: [reportedBy], references: [id])
+  assignee   User?        @relation("IncidentAssignee", fields: [assigneeId], references: [id])
+  qaAssignee User?        @relation("IncidentQaAssignee", fields: [qaAssigneeId], references: [id])
+  comments   Comment[]
 
   @@index([workspaceId])
   @@index([projectId])
+  @@index([statusId])
+  @@index([qaAssigneeId])
   @@map("incident")
 }
 
@@ -456,7 +459,7 @@ model Priority {
   order       Int     @default(0)
   isDefault   Boolean @default(false) @map("is_default")
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks     Task[]
 
   @@unique([workspaceId, name])
@@ -477,8 +480,9 @@ model TicketStatus {
   isDefault   Boolean        @default(false) @map("is_default")
   category    StatusCategory @default(todo)
 
-  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   tasks     Task[]
+  incidents Incident[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -504,7 +508,7 @@ model ActivityLog {
   createdAt   DateTime @default(now()) @map("created_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  actor     User       @relation("ActivityLogActor", fields: [userId], references: [id])
+  actor     User      @relation("ActivityLogActor", fields: [userId], references: [id])
 
   @@index([workspaceId])
   @@index([entityType, entityId])

@@ -32,7 +32,7 @@ import { usePlans } from "@/lib/api/hooks/use-plans";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { PERMISSIONS } from "@/lib/api/permissions";
-import { formatDate } from "@/lib/format";
+import { formatDate, todayDateInput } from "@/lib/format";
 import type {
   CreateProjectDto,
   Me,
@@ -302,7 +302,7 @@ function NewProjectPanel({
   const { data: typeData } = useProjectTypes(workspaceSlug);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [startDate, setStartDate] = React.useState("");
+  const [startDate, setStartDate] = React.useState(todayDateInput);
   const [endDate, setEndDate] = React.useState("");
   const [projectTypeId, setProjectTypeId] = React.useState<string>();
   const [planIds, setPlanIds] = React.useState<string[]>([]);
@@ -444,6 +444,7 @@ function NewProjectPanel({
                 id="project-start"
                 type="date"
                 value={startDate}
+                min={todayDateInput()}
                 onChange={(event) => setStartDate(event.target.value)}
               />
             </div>

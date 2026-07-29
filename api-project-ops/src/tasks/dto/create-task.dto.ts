@@ -67,6 +67,11 @@ export class CreateTaskDto {
   @IsUUID()
   assigneeId?: string;
 
+  @ApiProperty({ required: false, description: 'Workspace member responsible for QA' })
+  @IsOptional()
+  @IsUUID()
+  qaAssigneeId?: string;
+
   @ApiProperty({ required: false, minimum: 0 })
   @IsOptional()
   @IsInt()

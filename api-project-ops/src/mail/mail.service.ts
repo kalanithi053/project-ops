@@ -1,6 +1,8 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
+import { assignmentNotificationEmailTemplate } from './templates/assignment-notification-email.template';
+import { commentMentionEmailTemplate } from './templates/comment-mention-email.template';
 import { incidentCreatedEmailTemplate } from './templates/incident-created-email.template';
 import { otpEmailTemplate } from './templates/otp-email.template';
 import { projectInviteEmailTemplate } from './templates/project-invite-email.template';
@@ -12,9 +14,13 @@ export class MailService implements OnModuleInit {
   private readonly logger = new Logger(MailService.name);
   private transporter: nodemailer.Transporter;
   private readonly from: string;
+  private readonly frontendUrl: string;
 
   constructor(private readonly config: ConfigService) {
     this.from = this.config.getOrThrow<string>('MAIL_FROM');
+    this.frontendUrl = this.config
+      .get<string>('FRONTEND_REDIRECT_URL', 'http://localhost:4000')
+      .replace(/\/$/, '');
     this.transporter = nodemailer.createTransport({
       host: this.config.getOrThrow<string>('BREVO_SMTP_HOST'),
       port: Number(this.config.getOrThrow<string>('BREVO_SMTP_PORT')),
@@ -37,6 +43,10 @@ export class MailService implements OnModuleInit {
     }
   }
 
+  appUrl(path: string): string {
+    return `${this.frontendUrl}${path.startsWith('/') ? path : `/${path}`}`;
+  }
+
   async sendOtpEmail(
     to: string,
     code: string,
@@ -46,7 +56,7 @@ export class MailService implements OnModuleInit {
     await this.transporter.sendMail({
       from: this.from,
       to,
-      subject: 'Your ProjectHub sign-in code',
+      subject: 'Your ProjectOps sign-in code',
       html: otpEmailTemplate(code, ttlMinutes),
     });
     this.logger.log(`OTP email sent to=${to} code=${code}`);
@@ -60,6 +70,7 @@ export class MailService implements OnModuleInit {
       projectName: string;
       oldStatusName: string;
       newStatusName: string;
+      actionUrl: string;
     },
   ): Promise<void> {
     await this.transporter.sendMail({
@@ -79,7 +90,10 @@ export class MailService implements OnModuleInit {
       from: this.from,
       to,
       subject: `You've been added to ${params.projectName}`,
-      html: projectInviteEmailTemplate(params),
+      html: projectInviteEmailTemplate({
+        ...params,
+        loginUrl: `${this.frontendUrl}/login`,
+      }),
     });
     this.logger.log(`Project invite email sent to=${to}`);
   }
@@ -92,6 +106,7 @@ export class MailService implements OnModuleInit {
       incidentTitle: string;
       projectName: string;
       incidentId: string;
+      actionUrl: string;
     },
   ): Promise<void> {
     await this.transporter.sendMail({
@@ -110,6 +125,7 @@ export class MailService implements OnModuleInit {
       entityName: string;
       projectName: string;
       statusName: string;
+      actionUrl: string;
     },
   ): Promise<void> {
     await this.transporter.sendMail({
@@ -119,5 +135,44 @@ export class MailService implements OnModuleInit {
       html: statusNotificationEmailTemplate(params),
     });
     this.logger.log(`Status notification email sent to=${to}`);
+  }
+
+  async sendAssignmentNotificationEmail(
+    to: string,
+    params: {
+      entityLabel: 'task' | 'incident';
+      entityName: string;
+      projectName: string;
+      assignmentRole?: string;
+      actionUrl: string;
+    },
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `[${params.projectName}] You've been assigned${params.assignmentRole ? ` as ${params.assignmentRole}` : ''} ${params.entityName}`,
+      html: assignmentNotificationEmailTemplate(params),
+    });
+    this.logger.log(`Assignment notification email sent to=${to}`);
+  }
+
+  async sendCommentMentionEmail(
+    to: string,
+    params: {
+      authorName: string;
+      projectName: string;
+      entityLabel: 'task' | 'incident';
+      entityName: string;
+      body: string;
+      actionUrl: string;
+    },
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `[${params.projectName}] ${params.authorName} mentioned you on a ${params.entityLabel}`,
+      html: commentMentionEmailTemplate(params),
+    });
+    this.logger.log(`Comment mention email sent to=${to}`);
   }
 }

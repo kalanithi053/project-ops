@@ -46,11 +46,14 @@ export class ProjectMembersService {
     const project = await this.assertProject(workspaceId, projectId);
     const role = await this.assertRole(workspaceId, dto.roleId);
 
-    const user = await this.prisma.user.upsert({
+    const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
-      update: {},
-      create: { email: dto.email },
     });
+    const user =
+      existingUser ??
+      (await this.prisma.user.create({
+        data: { email: dto.email, isVerified: false },
+      }));
 
     await this.ensureWorkspaceMembership(workspaceId, user.id);
 

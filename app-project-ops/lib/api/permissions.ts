@@ -12,6 +12,8 @@ export const PERMISSIONS = {
   TASK_READ: "task.read",
   TASK_UPDATE: "task.update",
   TASK_DELETE: "task.delete",
+  INCIDENT_CREATE: "incident.create",
+  COMMENT_CREATE: "comment.create",
   MEMBER_INVITE: "member.invite",
   MEMBER_REMOVE: "member.remove",
   ROLE_MANAGE: "role.manage",

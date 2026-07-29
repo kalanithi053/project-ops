@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Laptop, Moon, Sun } from "lucide-react";
+import { Check, Clock3, Laptop, Moon, Sun } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/shared/page-header";
@@ -12,7 +12,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import { useThemeStore, type ThemeMode } from "@/lib/store/theme-store";
+import {
+  useThemeStore,
+  type DateFormat,
+  type ThemeMode,
+} from "@/lib/store/theme-store";
 import { ACCENT_KEYS, ACCENT_PRESETS, type AccentKey } from "@/lib/theme/accents";
 import { toast } from "@/lib/toast/toast-store";
 
@@ -22,11 +26,18 @@ const MODE_OPTIONS: { value: ThemeMode; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "System", icon: Laptop },
 ];
 
+const DATE_FORMAT_OPTIONS: { value: DateFormat; label: string }[] = [
+  { value: "utc", label: "UTC" },
+  { value: "local", label: "Local" },
+];
+
 export default function PreferencesPage() {
   const mode = useThemeStore((state) => state.mode);
   const accent = useThemeStore((state) => state.accent);
+  const dateFormat = useThemeStore((state) => state.dateFormat);
   const setMode = useThemeStore((state) => state.setMode);
   const setAccent = useThemeStore((state) => state.setAccent);
+  const setDateFormat = useThemeStore((state) => state.setDateFormat);
 
   function handleMode(next: ThemeMode) {
     setMode(next);
@@ -36,6 +47,11 @@ export default function PreferencesPage() {
   function handleAccent(next: AccentKey) {
     setAccent(next);
     toast.success("Appearance updated", `Accent set to ${ACCENT_PRESETS[next].label}`);
+  }
+
+  function handleDateFormat(next: DateFormat) {
+    setDateFormat(next);
+    toast.success("Date display updated", `Dates now use ${next === "utc" ? "UTC" : "local time"}`);
   }
 
   return (
@@ -73,6 +89,35 @@ export default function PreferencesPage() {
                     )}
                   >
                     <Icon className="h-4 w-4" />
+                    {option.label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <span className="text-sm font-medium">Date and time</span>
+            <span className="text-sm text-muted-foreground">
+              Choose whether timestamps use UTC or your browser&apos;s local time.
+            </span>
+            <div className="inline-flex w-fit rounded-lg border border-border bg-muted p-1">
+              {DATE_FORMAT_OPTIONS.map((option) => {
+                const active = dateFormat === option.value;
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => handleDateFormat(option.value)}
+                    aria-pressed={active}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                      active
+                        ? "bg-background text-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    <Clock3 className="h-4 w-4" />
                     {option.label}
                   </button>
                 );

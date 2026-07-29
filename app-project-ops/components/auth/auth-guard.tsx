@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2 } from "lucide-react";
 
 import { useAuthStore } from "@/lib/store/auth-store";
+import { loginPath } from "@/lib/auth/redirect";
 
 /**
  * Client-side gate for authenticated areas. Waits for the persisted auth
@@ -14,12 +15,17 @@ import { useAuthStore } from "@/lib/store/auth-store";
  */
 export function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const hydrated = useAuthStore((state) => state.hydrated);
   const token = useAuthStore((state) => state.accessToken);
 
   React.useEffect(() => {
-    if (hydrated && !token) router.replace("/login");
-  }, [hydrated, token, router]);
+    if (hydrated && !token) {
+      const search = searchParams.toString();
+      router.replace(loginPath(`${pathname}${search ? `?${search}` : ""}`));
+    }
+  }, [hydrated, token, router, pathname, searchParams]);
 
   if (!hydrated || !token) {
     return (

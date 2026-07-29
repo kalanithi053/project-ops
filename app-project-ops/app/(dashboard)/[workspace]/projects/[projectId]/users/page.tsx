@@ -88,7 +88,7 @@ export default function ProjectUsersPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="sticky top-[6rem] z-20 -mx-4 flex flex-col gap-3 border-b border-border bg-background px-4 py-4 sm:-mx-6 sm:flex-row sm:items-start sm:justify-between sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-semibold tracking-tight">Users</h2>
           <p className="text-sm text-muted-foreground">

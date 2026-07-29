@@ -12,7 +12,7 @@ type ReportTask = {
 
 type ReportIncident = {
   assigneeId: string | null;
-  status: string;
+  status: { name: string; category: string; isDefault: boolean } | null;
   estimateHours: number | null;
   completedHours: number | null;
 };
@@ -41,7 +41,7 @@ export class ReportsService {
   async getProjectReport(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
 
-    const [instances, tasks, incidents, members] = await Promise.all([
+    const [instances, tasks, incidents, members, ticketStatuses] = await Promise.all([
       this.prisma.moduleInstance.findMany({
         where: { projectId },
         include: { module: { select: { name: true } } },
@@ -62,7 +62,7 @@ export class ReportsService {
         where: { projectId },
         select: {
           assigneeId: true,
-          status: true,
+          status: { select: { name: true, category: true, isDefault: true } },
           estimateHours: true,
           completedHours: true,
         },
@@ -75,14 +75,52 @@ export class ReportsService {
           },
         },
       }),
+      this.prisma.ticketStatus.findMany({
+        where: { workspaceId },
+        select: { name: true, color: true, order: true },
+        orderBy: { order: 'asc' },
+      }),
     ]);
 
     return {
       modules: this.buildModuleUsage(instances, tasks),
-      statusBreakdown: this.buildStatusBreakdown(tasks),
+      statusBreakdown: this.buildStatusBreakdown(ticketStatuses, tasks),
       byPriority: this.buildPriorityMatrix(tasks),
       progress: this.buildProgress(tasks),
       user: this.buildUserWorkload(members, tasks, incidents),
+    };
+  }
+
+  /** Every live task and incident in a workspace, grouped by its current status. */
+  async getWorkspaceReport(workspaceId: string) {
+    const [tasks, incidents] = await Promise.all([
+      this.prisma.task.findMany({
+        where: { deletedAt: null, project: { workspaceId, deletedAt: null } },
+        select: { status: { select: { name: true, category: true } } },
+      }),
+      this.prisma.incident.findMany({
+        where: { workspaceId, project: { deletedAt: null } },
+        select: { status: { select: { name: true, category: true } } },
+      }),
+    ]);
+
+    const byStatus = new Map<string, number>();
+    for (const task of tasks) {
+      const status = task.status?.name ?? 'No status';
+      const label = `Task · ${status}`;
+      byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
+    }
+    for (const incident of incidents) {
+      const label = `Incident · ${incident.status?.name ?? 'No status'}`;
+      byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
+    }
+
+    return {
+      totalTasks: tasks.length,
+      totalIncidents: incidents.length,
+      statusBreakdown: [...byStatus.entries()]
+        .map(([label, count]) => ({ label, count }))
+        .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
     };
   }
 
@@ -100,8 +138,9 @@ export class ReportsService {
       const moduleTasks = tasks.filter(
         (t) => t.moduleInstanceId === instance.id,
       );
-      const used = moduleTasks.filter((t) => !t.status.isDefault).length;
+      const used = moduleTasks.filter((t) => !t.status?.isDefault).length;
       return {
+        id: instance.id,
         module: instance.module.name,
         used,
         limit: instance.taskLimit,
@@ -110,15 +149,21 @@ export class ReportsService {
     });
   }
 
-  /** Blocked is name-based (no dedicated category exists); done/review use their category. */
-  private buildStatusBreakdown(tasks: ReportTask[]) {
-    return {
-      blocked: tasks.filter(
-        (t) => (t.status?.category ?? '').toLowerCase() === 'blocked',
-      ).length,
-      done: tasks.filter((t) => t.status?.category === 'done').length,
-      review: tasks.filter((t) => t.status?.category === 'review').length,
-    };
+  /** Includes every configured workflow status, even when a project has no work there. */
+  private buildStatusBreakdown(
+    statuses: Array<{ name: string; color: string | null; order: number }>,
+    tasks: ReportTask[],
+  ) {
+    const counts = new Map<string, number>();
+    for (const task of tasks) {
+      const name = task.status?.name;
+      if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
+    }
+    return statuses.map((status) => ({
+      name: status.name,
+      color: status.color,
+      count: counts.get(status.name) ?? 0,
+    }));
   }
 
   private buildPriorityMatrix(tasks: ReportTask[]) {
@@ -173,7 +218,7 @@ export class ReportsService {
         (t) => t.status?.category === 'done',
       ).length;
       const completedIncidents = myIncidents.filter(
-        (i) => i.status === 'resolved',
+        (i) => i.status?.category === 'done',
       ).length;
 
       const totalEstimateHours = this.sumHours(

@@ -158,24 +158,38 @@ export class ProjectsService {
           taskLimit: module.defaultTaskLimit,
         },
       });
-      Array.from({ length: module.defaultTaskLimit ?? 1 }).forEach(
-        async (_, index) => {
-          await tx.task.create({
-            data: {
-              projectId: project.id,
-              moduleInstanceId: instance.id,
-              prefix: `${module.name}-${index + 1}`,
-              name: module.name,
-              startDate,
-              dueDate: endDate,
-              statusId: defaultStatus?.id ?? null,
-              createdBy: userId,
-              position: 0,
-              assigneeId: userId,
-            },
-          });
-        },
-      );
+      for (let index = 0; index < (module.defaultTaskLimit ?? 1); index += 1) {
+        const task = await tx.task.create({
+          data: {
+            projectId: project.id,
+            moduleInstanceId: instance.id,
+            prefix: `${module.name}-${index + 1}`,
+            name: module.name,
+            startDate,
+            dueDate: endDate,
+            statusId: defaultStatus?.id ?? null,
+            createdBy: userId,
+            position: 0,
+            assigneeId: userId,
+          },
+        });
+
+        await tx.activityLog.create({
+          data: {
+            workspaceId,
+            projectId: project.id,
+            entityType: 'task',
+            entityId: task.id,
+            action: 'created',
+            userId,
+            metadata: {
+              name: task.name,
+              statusId: task.statusId,
+              assigneeId: task.assigneeId,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
     }
   }
 
@@ -236,17 +250,14 @@ export class ProjectsService {
     return project;
   }
 
-  /** Rejects dates that fall on today or earlier (UTC) — must be strictly after today. */
+  /** Rejects dates before today (UTC), while allowing a project to start today. */
   private assertFutureDate(date: Date, field: string) {
     const now = new Date();
     const todayUtc = new Date(
       Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()),
     );
-    const tomorrowUtc = new Date(todayUtc);
-    tomorrowUtc.setUTCDate(tomorrowUtc.getUTCDate() + 1);
-
-    if (date.getTime() < tomorrowUtc.getTime()) {
-      throw new BadRequestException(`${field} must be after today`);
+    if (date.getTime() < todayUtc.getTime()) {
+      throw new BadRequestException(`${field} must be today or later`);
     }
   }
 }

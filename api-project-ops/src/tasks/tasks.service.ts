@@ -9,6 +9,9 @@ import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTaskDto } from './dto/create-task.dto';
 import { UpdateTaskDto } from './dto/update-task.dto';
+import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
+
+const UNASSIGNED_STATUS_FILTER = '__unassigned__';
 
 const TASK_UPDATE_FIELDS = [
   'name',
@@ -20,6 +23,7 @@ const TASK_UPDATE_FIELDS = [
   'statusId',
   'priorityId',
   'assigneeId',
+  'qaAssigneeId',
   'position',
   'estimateHours',
   'completedHours',
@@ -38,26 +42,50 @@ export class TasksService {
   async list(
     workspaceId: string,
     projectId: string,
-    filters: {
-      moduleInstanceId?: string;
-      statusId?: string;
-      priorityId?: string;
-    },
+    filters: ListTasksQueryDto,
   ) {
     await this.assertProject(workspaceId, projectId);
+    const search = filters.search?.trim();
     return this.prisma.task.findMany({
       where: {
         projectId,
         deletedAt: null,
-        moduleInstanceId: filters.moduleInstanceId ?? undefined,
-        statusId: filters.statusId ?? undefined,
+        moduleInstanceId: filters.moduleInstanceIds?.length
+          ? { in: filters.moduleInstanceIds }
+          : (filters.moduleInstanceId ?? undefined),
+        statusId:
+          filters.statusId === UNASSIGNED_STATUS_FILTER
+            ? null
+            : filters.statusIds?.length
+              ? { in: filters.statusIds }
+              : (filters.statusId ?? undefined),
         priorityId: filters.priorityId ?? undefined,
+        assigneeId: filters.assigneeIds?.length
+          ? { in: filters.assigneeIds }
+          : undefined,
+        startDate: filters.startDate
+          ? { gte: new Date(filters.startDate) }
+          : undefined,
+        dueDate: filters.endDate
+          ? { lte: new Date(filters.endDate) }
+          : undefined,
+        ...(search
+          ? {
+              OR: [
+                { name: { contains: search, mode: 'insensitive' } },
+                { prefix: { contains: search, mode: 'insensitive' } },
+              ],
+            }
+          : {}),
       },
       orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
       include: {
-        status: { select: { id: true, name: true, category: true } },
+        status: {
+          select: { id: true, name: true, category: true, color: true },
+        },
         priority: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, email: true } },
+        qaAssignee: { select: { id: true, email: true } },
       },
     });
   }
@@ -104,10 +132,11 @@ export class TasksService {
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
+    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
 
     const position = dto.position ?? (await this.nextPosition(projectId));
 
-    return this.prisma.$transaction(async (tx) => {
+    const task = await this.prisma.$transaction(async (tx) => {
       const task = await tx.task.create({
         data: {
           projectId,
@@ -120,11 +149,13 @@ export class TasksService {
           statusId: dto.statusId ?? null,
           priorityId: dto.priorityId ?? null,
           assigneeId: dto.assigneeId ?? userId ?? null,
+          qaAssigneeId: dto.qaAssigneeId ?? null,
           createdBy: userId,
           position,
           estimateHours: dto.estimateHours ?? null,
           completedHours: dto.completedHours ?? null,
         },
+        include: { qaAssignee: { select: { email: true } } },
       });
 
       await this.activityLog.log(
@@ -139,6 +170,7 @@ export class TasksService {
             name: task.name,
             statusId: task.statusId,
             assigneeId: task.assigneeId,
+            qaAssigneeId: task.qaAssigneeId,
           },
         },
         tx,
@@ -146,6 +178,17 @@ export class TasksService {
 
       return task;
     });
+
+    if (task.qaAssignee) {
+      await this.notifyAssignment(task.qaAssignee.email, {
+        entityLabel: 'task',
+        entityName: task.name,
+        entityId: task.id,
+        projectId,
+        assignmentRole: 'QA',
+      });
+    }
+    return task;
   }
 
   async findOne(workspaceId: string, projectId: string, taskId: string) {
@@ -172,8 +215,13 @@ export class TasksService {
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
+    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
 
     const statusChanged = !!dto.statusId && dto.statusId !== task.statusId;
+    const assigneeChanged =
+      !!dto.assigneeId && dto.assigneeId !== task.assigneeId;
+    const qaAssigneeChanged =
+      !!dto.qaAssigneeId && dto.qaAssigneeId !== task.qaAssigneeId;
     const changes = this.computeTaskChanges(task, dto);
 
     const updated = await this.prisma.$transaction(async (tx) => {
@@ -189,6 +237,7 @@ export class TasksService {
           statusId: dto.statusId ?? undefined,
           priorityId: dto.priorityId ?? undefined,
           assigneeId: dto.assigneeId ?? undefined,
+          qaAssigneeId: dto.qaAssigneeId ?? undefined,
           position: dto.position ?? undefined,
           estimateHours: dto.estimateHours ?? undefined,
           completedHours: dto.completedHours ?? undefined,
@@ -197,6 +246,7 @@ export class TasksService {
           status: { select: { id: true, name: true, category: true } },
           priority: { select: { id: true, name: true, color: true } },
           assignee: { select: { id: true, email: true } },
+          qaAssignee: { select: { id: true, email: true } },
           creator: { select: { id: true, email: true } },
         },
       });
@@ -225,6 +275,23 @@ export class TasksService {
         task.status?.name ?? 'None',
         updated.status?.name ?? 'None',
       );
+    }
+    if (assigneeChanged && updated.assignee) {
+      await this.notifyAssignment(updated.assignee.email, {
+        entityLabel: 'task',
+        entityName: updated.name,
+        entityId: updated.id,
+        projectId,
+      });
+    }
+    if (qaAssigneeChanged && updated.qaAssignee) {
+      await this.notifyAssignment(updated.qaAssignee.email, {
+        entityLabel: 'task',
+        entityName: updated.name,
+        entityId: updated.id,
+        projectId,
+        assignmentRole: 'QA',
+      });
     }
 
     return updated;
@@ -330,7 +397,7 @@ export class TasksService {
 
     const project = await this.prisma.project.findUnique({
       where: { id: task.projectId },
-      select: { name: true },
+      select: { name: true, workspace: { select: { slug: true } } },
     });
 
     await this.mail.sendStatusNotificationEmail(task.assignee.email, {
@@ -338,6 +405,9 @@ export class TasksService {
       entityName: task.prefix ? `${task.prefix} · ${task.name}` : task.name,
       projectName: project?.name ?? 'Unknown project',
       statusName: task.status?.name ?? 'None',
+      actionUrl: this.mail.appUrl(
+        `/${project?.workspace.slug ?? workspaceId}/projects/${projectId}/tasks/${taskId}`,
+      ),
     });
 
     return { notified: true, assignee: task.assignee.email };
@@ -515,6 +585,7 @@ export class TasksService {
         status: { select: { id: true, name: true, category: true } },
         priority: { select: { id: true, name: true, color: true } },
         assignee: { select: { id: true, email: true } },
+        qaAssignee: { select: { id: true, email: true } },
         creator: { select: { id: true, email: true } },
       },
     });
@@ -529,6 +600,7 @@ export class TasksService {
    */
   private async notifyStatusChange(
     task: {
+      id: string;
       name: string;
       prefix: string | null;
       projectId: string;
@@ -540,7 +612,7 @@ export class TasksService {
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: task.projectId },
-      select: { name: true },
+      select: { name: true, workspace: { select: { slug: true } } },
     });
 
     const recipients = new Map<string, string>([
@@ -556,6 +628,9 @@ export class TasksService {
             projectName: project?.name ?? 'Unknown project',
             oldStatusName,
             newStatusName,
+            actionUrl: this.mail.appUrl(
+              `/${project?.workspace.slug ?? 'workspace'}/projects/${task.projectId}/tasks/${task.id}`,
+            ),
           })
           .catch((err) =>
             this.logger.error(
@@ -564,5 +639,34 @@ export class TasksService {
           ),
       ),
     );
+  }
+
+  private async notifyAssignment(
+    email: string,
+    params: {
+      entityLabel: 'task';
+      entityName: string;
+      entityId: string;
+      projectId: string;
+      assignmentRole?: string;
+    },
+  ): Promise<void> {
+    const project = await this.prisma.project.findUnique({
+      where: { id: params.projectId },
+      select: { name: true, workspace: { select: { slug: true } } },
+    });
+    await this.mail
+      .sendAssignmentNotificationEmail(email, {
+        ...params,
+        projectName: project?.name ?? 'Unknown project',
+        actionUrl: this.mail.appUrl(
+          `/${project?.workspace.slug}/projects/${params.projectId}/tasks/${params.entityId}`,
+        ),
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send assignment email to=${email}: ${(err as Error).message}`,
+        ),
+      );
   }
 }

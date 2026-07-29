@@ -1,8 +1,9 @@
 export function projectInviteEmailTemplate(params: {
   projectName: string;
   roleName: string;
+  loginUrl: string;
 }): string {
-  const { projectName, roleName } = params;
+  const { projectName, roleName, loginUrl } = params;
 
   return `
 <!doctype html>
@@ -14,7 +15,7 @@ export function projectInviteEmailTemplate(params: {
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
             <tr>
               <td style="padding:32px 40px 16px 40px;">
-                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectHub</h1>
+                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectOps</h1>
               </td>
             </tr>
             <tr>
@@ -24,6 +25,9 @@ export function projectInviteEmailTemplate(params: {
                 </p>
                 <p style="margin:0;font-size:13px;color:#6b7280;">
                   Sign in with this email address to get started.
+                </p>
+                <p style="margin:20px 0 0 0;">
+                  <a href="${loginUrl}" style="display:inline-block;border-radius:6px;background-color:#2563eb;padding:10px 16px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;">Sign in</a>
                 </p>
               </td>
             </tr>

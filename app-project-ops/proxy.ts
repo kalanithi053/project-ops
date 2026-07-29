@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 import { ACCESS_TOKEN_COOKIE } from "@/lib/auth/cookies";
+import { safeAuthDestination } from "@/lib/auth/redirect";
 
 /**
  * Route protection based on the auth cookie (Next.js `proxy` convention,
@@ -27,7 +28,8 @@ export function proxy(request: NextRequest) {
   if (pathname === "/login") {
     if (hasToken) {
       const url = request.nextUrl.clone();
-      url.pathname = "/workspaces";
+      url.pathname = safeAuthDestination(request.nextUrl.searchParams.get("next"));
+      url.search = "";
       return NextResponse.redirect(url);
     }
     return NextResponse.next();
@@ -36,6 +38,8 @@ export function proxy(request: NextRequest) {
   if (!hasToken) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
+    url.search = "";
+    url.searchParams.set("next", `${pathname}${request.nextUrl.search}`);
     return NextResponse.redirect(url);
   }
 

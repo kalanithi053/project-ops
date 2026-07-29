@@ -12,6 +12,7 @@ import { CardsSkeleton, StatsSkeleton } from "@/components/shared/skeletons";
 import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
+import { useWorkspaceReport } from "@/lib/api/hooks/use-project-report";
 import { formatDate } from "@/lib/format";
 import type { Panel, Tone } from "@/types/module";
 
@@ -27,24 +28,43 @@ export default function ReportsPage() {
   const projectsQuery = useProjects(workspace);
   const membersQuery = useWorkspaceMembers(workspace);
   const typesQuery = useProjectTypes(workspace);
+  const workReportQuery = useWorkspaceReport(workspace);
   const projects = projectsQuery.data ?? [];
   const members = membersQuery.data ?? [];
   const projectTypes = typesQuery.data ?? [];
 
   const isLoading =
-    projectsQuery.isLoading || typesQuery.isLoading || membersQuery.isLoading;
+    projectsQuery.isLoading ||
+    typesQuery.isLoading ||
+    membersQuery.isLoading ||
+    workReportQuery.isLoading;
 
   const stats = [
     { label: "Projects", value: projects.length, icon: FolderKanban },
     { label: "Members", value: members.length, icon: Users },
     {
-      label: "Scheduled",
-      value: projects.filter((p) => p.endDate).length,
+      label: "Work items",
+      value:
+        (workReportQuery.data?.totalTasks ?? 0) +
+        (workReportQuery.data?.totalIncidents ?? 0),
       icon: BarChart3,
     },
   ];
 
   const panels: Panel[] = [
+    {
+      type: "breakdown",
+      title: "Work by status",
+      description: "All tasks and incidents in this workspace",
+      span: 2,
+      items: (workReportQuery.data?.statusBreakdown ?? []).map(
+        (status, index) => ({
+          label: status.label,
+          count: status.count,
+          tone: TONE_CYCLE[index % TONE_CYCLE.length],
+        }),
+      ),
+    },
     {
       type: "breakdown",
       title: "Projects by type",
@@ -80,9 +100,12 @@ export default function ReportsPage() {
 
       <QueryState
         isLoading={isLoading}
-        isError={projectsQuery.isError}
-        error={projectsQuery.error}
-        onRetry={() => projectsQuery.refetch()}
+        isError={projectsQuery.isError || workReportQuery.isError}
+        error={projectsQuery.error ?? workReportQuery.error}
+        onRetry={() => {
+          projectsQuery.refetch();
+          workReportQuery.refetch();
+        }}
         skeleton={<CardsSkeleton count={2} />}
       >
         <ModulePanels panels={panels} />

@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '../common/constants/permissions';
 import {
@@ -9,6 +18,8 @@ import { RequirePermission } from '../common/decorators/require-permission.decor
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { CreateIncidentDto } from './dto/create-incident.dto';
+import { ListIncidentsQueryDto } from './dto/list-incidents-query.dto';
+import { UpdateIncidentDto } from './dto/update-incident.dto';
 import { IncidentsService } from './incidents.service';
 
 @ApiTags('incidents')
@@ -38,8 +49,9 @@ export class IncidentsController {
   list(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
+    @Query() filters: ListIncidentsQueryDto,
   ) {
-    return this.incidents.list(workspaceId, projectId);
+    return this.incidents.list(workspaceId, projectId, filters);
   }
 
   @Get(':incidentId')
@@ -51,6 +63,24 @@ export class IncidentsController {
     @Param('incidentId') incidentId: string,
   ) {
     return this.incidents.findOne(workspaceId, projectId, incidentId);
+  }
+
+  @Patch(':incidentId')
+  @RequirePermission(PERMISSIONS.TASK_UPDATE)
+  @ApiOperation({ summary: 'Update an incident ticket' })
+  update(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('incidentId') incidentId: string,
+    @Body() dto: UpdateIncidentDto,
+  ) {
+    return this.incidents.update(
+      ws.workspaceId,
+      projectId,
+      incidentId,
+      ws.userId,
+      dto,
+    );
   }
 
   @Get(':incidentId/activity')

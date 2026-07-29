@@ -133,7 +133,10 @@ export async function apiDownload(
 /** Exchange the stored refresh token for a fresh token pair. */
 async function tryRefresh(): Promise<boolean> {
   const { refreshToken, setTokens, clear } = useAuthStore.getState();
-  if (!refreshToken) return false;
+  if (!refreshToken) {
+    clear();
+    return false;
+  }
   try {
     const res = await rawFetch("/auth/token/refresh", {
       method: "POST",

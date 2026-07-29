@@ -53,11 +53,7 @@ export function useVerifyOtp() {
       }),
     onSuccess: (data) => {
       const { accessToken, refreshToken } = extractTokens(data);
-      setTokens(
-        "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJkY2VkOWVjOS00YjNkLTRlNTgtOGViOC04MDA5ZDk1MjJmYzIiLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzg0OTc5NTU5LCJleHAiOjE3ODQ5ODA0NTl9.PcfXUFlNkMzFhHAtBpsYeFnWG0oo4SmxUMoG2yI8YLA",
-        refreshToken ?? "",
-      );
-      // if (accessToken && refreshToken) setTokens(accessToken, refreshToken);
+      if (accessToken && refreshToken) setTokens(accessToken, refreshToken);
     },
   });
 }

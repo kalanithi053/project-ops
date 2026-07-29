@@ -4,9 +4,16 @@ export function taskStatusEmailTemplate(params: {
   projectName: string;
   oldStatusName: string;
   newStatusName: string;
+  actionUrl: string;
 }): string {
-  const { taskName, taskPrefix, projectName, oldStatusName, newStatusName } =
-    params;
+  const {
+    taskName,
+    taskPrefix,
+    projectName,
+    oldStatusName,
+    newStatusName,
+    actionUrl,
+  } = params;
   const label = taskPrefix ? `${taskPrefix} · ${taskName}` : taskName;
 
   return `
@@ -19,7 +26,7 @@ export function taskStatusEmailTemplate(params: {
           <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
             <tr>
               <td style="padding:32px 40px 16px 40px;">
-                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectHub</h1>
+                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectOps</h1>
               </td>
             </tr>
             <tr>
@@ -35,6 +42,9 @@ export function taskStatusEmailTemplate(params: {
                   &nbsp;&rarr;&nbsp;
                   <strong>${newStatusName}</strong>
                 </div>
+                <p style="margin:0;">
+                  <a href="${actionUrl}" style="display:inline-block;border-radius:6px;background-color:#2563eb;padding:10px 16px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;">Open task</a>
+                </p>
               </td>
             </tr>
           </table>

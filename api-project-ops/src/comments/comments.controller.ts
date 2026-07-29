@@ -1,4 +1,13 @@
-import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '../common/constants/permissions';
 import {
@@ -49,6 +58,44 @@ export class CommentsController {
     return this.comments.listForTask(workspaceId, projectId, taskId);
   }
 
+  @Patch('projects/:projectId/tasks/:taskId/comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Edit your own task comment' })
+  updateTaskComment(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Param('commentId') commentId: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.comments.updateForTask(
+      ws.workspaceId,
+      projectId,
+      taskId,
+      commentId,
+      ws.userId,
+      dto,
+    );
+  }
+
+  @Delete('projects/:projectId/tasks/:taskId/comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Delete your own task comment' })
+  removeTaskComment(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('taskId') taskId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.comments.removeForTask(
+      ws.workspaceId,
+      projectId,
+      taskId,
+      commentId,
+      ws.userId,
+    );
+  }
+
   @Post('projects/:projectId/incidents/:incidentId/comments')
   @RequirePermission(PERMISSIONS.COMMENT_CREATE)
   @ApiOperation({
@@ -79,5 +126,43 @@ export class CommentsController {
     @Param('incidentId') incidentId: string,
   ) {
     return this.comments.listForIncident(workspaceId, projectId, incidentId);
+  }
+
+  @Patch('projects/:projectId/incidents/:incidentId/comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Edit your own incident comment' })
+  updateIncidentComment(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('incidentId') incidentId: string,
+    @Param('commentId') commentId: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.comments.updateForIncident(
+      ws.workspaceId,
+      projectId,
+      incidentId,
+      commentId,
+      ws.userId,
+      dto,
+    );
+  }
+
+  @Delete('projects/:projectId/incidents/:incidentId/comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Delete your own incident comment' })
+  removeIncidentComment(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('incidentId') incidentId: string,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.comments.removeForIncident(
+      ws.workspaceId,
+      projectId,
+      incidentId,
+      commentId,
+      ws.userId,
+    );
   }
 }

@@ -14,6 +14,7 @@ interface ToastState {
   toasts: Toast[];
   push: (toast: Omit<Toast, "id">) => string;
   dismiss: (id: string) => void;
+  clear: () => void;
 }
 
 let counter = 0;
@@ -27,6 +28,7 @@ export const useToastStore = create<ToastState>((set) => ({
   },
   dismiss: (id) =>
     set((state) => ({ toasts: state.toasts.filter((t) => t.id !== id) })),
+  clear: () => set({ toasts: [] }),
 }));
 
 const DEFAULT_DURATION = 2000;

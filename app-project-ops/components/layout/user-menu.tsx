@@ -16,7 +16,8 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { useAuthStore } from "@/lib/store/auth-store";
-import { toast } from "@/lib/toast/toast-store";
+import { useThemeStore } from "@/lib/store/theme-store";
+import { toast, useToastStore } from "@/lib/toast/toast-store";
 import type { AuthUser } from "@/types/auth";
 
 function initials(name: string) {
@@ -37,13 +38,17 @@ export function UserMenu({ user }: { user: AuthUser }) {
   const router = useRouter();
   const pathname = usePathname();
   const clear = useAuthStore((state) => state.clear);
+  const resetTheme = useThemeStore((state) => state.reset);
+  const clearToasts = useToastStore((state) => state.clear);
   const { data: me, isLoading } = useMe();
   const workspaceSlug = pathname.split("/").filter(Boolean)[0];
 
   function logout() {
     clear();
+    resetTheme();
+    clearToasts();
     toast.success("Signed out");
-    window.location.reload();
+    router.replace("/login");
   }
 
   function goTo(path: string) {

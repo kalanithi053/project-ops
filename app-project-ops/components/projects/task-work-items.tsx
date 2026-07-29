@@ -17,6 +17,7 @@ import * as React from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { QueryState } from "@/components/shared/query-state";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { TableSkeleton } from "@/components/shared/skeletons";
@@ -253,7 +254,11 @@ export function TaskWorkItems({
             .filter((task) =>
               !query || `${task.prefix ?? ""} ${task.name}`.toLowerCase().includes(query),
             )
-            .map((task) => ({ type: "Task" as const, item: task, date: task.dueDate ?? task.createdAt ?? "" }))
+            .map((task) => ({
+              type: "Task" as const,
+              item: task,
+              date: task.updatedAt ?? task.createdAt ?? "",
+            }))
         : []),
       ...(workTypes.length === 0 || workTypes.includes("incident")
         ? incidents
@@ -265,7 +270,11 @@ export function TaskWorkItems({
                 selectedStatusIds.includes(incident.statusId);
               return matchesKeyword && matchesStatus && !startDate && !endDate;
             })
-            .map((incident) => ({ type: "Incident" as const, item: incident, date: incident.createdAt }))
+            .map((incident) => ({
+              type: "Incident" as const,
+              item: incident,
+              date: incident.updatedAt ?? incident.createdAt,
+            }))
         : []),
     ].sort((left, right) => right.date.localeCompare(left.date));
   }, [endDate, incidents, keyword, selectedStatusIds, startDate, tasks, workTypes]);
@@ -449,30 +458,44 @@ export function TaskWorkItems({
                   )}
                   <TableCell>
                     {type === "Task" ? (
-                      <button
-                        type="button"
-                        className="text-left font-medium hover:text-primary hover:underline"
-                        onClick={() =>
-                          router.push(
-                            `/${workspaceSlug}/projects/${projectId}/tasks/${item.id}`,
-                          )
-                        }
-                      >
-                        {item.prefix ? `${item.prefix} · ` : ""}
-                        {item.name}
-                      </button>
+                      <div className="group/title flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="text-left font-medium hover:text-primary hover:underline"
+                          onClick={() =>
+                            router.push(
+                              `/${workspaceSlug}/projects/${projectId}/tasks/${item.id}`,
+                            )
+                          }
+                        >
+                          {item.prefix ? `${item.prefix} · ` : ""}
+                          {item.name}
+                        </button>
+                        <CopyWorkItemLink
+                          prefix={item.prefix ?? "Task"}
+                          title={item.name}
+                          url={`/${workspaceSlug}/projects/${projectId}/tasks/${item.id}`}
+                        />
+                      </div>
                     ) : (
-                      <button
-                        type="button"
-                        className="text-left font-medium hover:text-primary hover:underline"
-                        onClick={() =>
-                          router.push(
-                            `/${workspaceSlug}/projects/${projectId}/incidents/${item.id}`,
-                          )
-                        }
-                      >
-                        {item.title}
-                      </button>
+                      <div className="group/title flex items-center gap-1">
+                        <button
+                          type="button"
+                          className="text-left font-medium hover:text-primary hover:underline"
+                          onClick={() =>
+                            router.push(
+                              `/${workspaceSlug}/projects/${projectId}/incidents/${item.id}`,
+                            )
+                          }
+                        >
+                          {item.title}
+                        </button>
+                        <CopyWorkItemLink
+                          prefix="Incident"
+                          title={item.title}
+                          url={`/${workspaceSlug}/projects/${projectId}/incidents/${item.id}`}
+                        />
+                      </div>
                     )}
                   </TableCell>
                   {columnVisible("module") && <TableCell>{type === "Task" && item.moduleInstanceId ? moduleNames.get(item.moduleInstanceId) ?? "—" : "—"}</TableCell>}

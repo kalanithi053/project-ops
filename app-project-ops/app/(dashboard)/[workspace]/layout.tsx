@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { TenantProvider } from "@/lib/tenant/tenant-context";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
+import { WorkspacePrefetcher } from "@/components/providers/workspace-prefetcher";
 
 /**
  * Shared layout for every workspace-scoped route (`/{workspace}/…`).
@@ -25,6 +26,7 @@ export default function WorkspaceLayout({
   return (
     <AuthGuard>
       <TenantProvider slug={workspace}>
+        <WorkspacePrefetcher slug={workspace} />
         <WorkspaceShell>{children}</WorkspaceShell>
       </TenantProvider>
     </AuthGuard>

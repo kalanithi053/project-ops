@@ -38,6 +38,7 @@ enum StatusCategory {
   review
   done
   blocked
+  removed
 
   @@map("status_category")
 }
@@ -478,6 +479,7 @@ model TicketStatus {
   color       String?
   order       Int            @default(0)
   isDefault   Boolean        @default(false) @map("is_default")
+  canDelete   Boolean        @default(true) @map("can_delete")
   category    StatusCategory @default(todo)
 
   workspace Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

@@ -135,4 +135,29 @@ export class WorkspaceMembersService {
       throw new BadRequestException('The workspace owner cannot be removed.');
     }
   }
+  /**
+   * Marks one of the user's workspaces as their default, clearing the flag
+   * from any other membership of theirs. Applied immediately (no confirmation
+   * step) since it's a pure preference with no side effects on other users.
+   */
+  async setDefault(userId: string, workspaceId: string) {
+    const membership = await this.prisma.workspaceMember.findFirst({
+      where: { userId, workspaceId, status: { not: 'removed' } },
+    });
+    if (!membership) {
+      throw new NotFoundException('Workspace not found or access denied.');
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.workspaceMember.updateMany({
+        where: { userId, isDefault: true },
+        data: { isDefault: false },
+      });
+      return tx.workspaceMember.update({
+        where: { id: membership.id },
+        data: { isDefault: true },
+        include: { workspace: true },
+      });
+    });
+  }
 }

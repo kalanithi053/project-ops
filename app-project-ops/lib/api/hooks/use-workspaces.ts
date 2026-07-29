@@ -29,3 +29,15 @@ export function useCreateWorkspace() {
     },
   });
 }
+
+/** PATCH /workspace-members/:workspaceId/default — set the user's default workspace. */
+export function useSetDefaultWorkspace() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (workspaceId: string) =>
+      apiFetch(`/workspace-members/${workspaceId}/default`, { method: "PATCH" }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["workspaces", "me"] });
+    },
+  });
+}

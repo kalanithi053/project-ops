@@ -5,6 +5,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { Boxes, CalendarDays, Clock, GripVertical } from "lucide-react";
 
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDate } from "@/lib/format";
@@ -142,11 +143,13 @@ export function SortableTaskCard({
   moduleName,
   onOpen,
   disabled = false,
+  copyUrl,
 }: {
   task: Task;
   moduleName?: string;
   onOpen: () => void;
   disabled?: boolean;
+  copyUrl?: string;
 }) {
   const {
     attributes,
@@ -165,7 +168,7 @@ export function SortableTaskCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("relative touch-none", isDragging && "opacity-40")}
+      className={cn("group/title relative touch-none", isDragging && "opacity-40")}
       // Pointer listeners only — a 5px activation distance on the sensor
       // keeps a plain click falling through to the button below.
       {...listeners}
@@ -177,6 +180,15 @@ export function SortableTaskCard({
       >
         <TaskCardView task={task} moduleName={moduleName} />
       </button>
+
+      {copyUrl && (
+        <CopyWorkItemLink
+          prefix={task.prefix ?? "Task"}
+          title={task.name}
+          url={copyUrl}
+          className="absolute right-7 top-2"
+        />
+      )}
 
       <button
         type="button"

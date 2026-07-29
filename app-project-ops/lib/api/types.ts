@@ -9,6 +9,7 @@ export interface Workspace {
   id: string;
   name: string;
   slug: string;
+  isDefault?: boolean;
   [key: string]: unknown;
 }
 
@@ -236,6 +237,7 @@ export interface TicketStatus {
   color?: string | null;
   order: number;
   isDefault: boolean;
+  canDelete: boolean;
   category: StatusCategory;
   [key: string]: unknown;
 }
@@ -369,6 +371,7 @@ export interface CreateTicketStatusDto {
   color?: string;
   order?: number;
   isDefault?: boolean;
+  canDelete?: boolean;
 }
 
 /** PATCH /ticket-statuses/:id */
@@ -633,6 +636,10 @@ export interface TaskActivityEntry {
   createdAt: string;
   description: string;
   metadata?: Record<string, unknown> | null;
+}
+
+export interface IncidentActivityEntry extends Omit<TaskActivityEntry, "entityType"> {
+  entityType: "incident";
 }
 
 export interface TaskCommentUser {

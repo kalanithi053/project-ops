@@ -13,6 +13,10 @@ import { ListTasksQueryDto } from './dto/list-tasks-query.dto';
 
 const UNASSIGNED_STATUS_FILTER = '__unassigned__';
 
+function isRemovedStatus(name: string): boolean {
+  return name.trim().toLowerCase() === 'removed';
+}
+
 const TASK_UPDATE_FIELDS = [
   'name',
   'prefix',
@@ -50,6 +54,13 @@ export class TasksService {
       where: {
         projectId,
         deletedAt: null,
+        // NOT: {
+        //   status: {
+        //     is: {
+        //       category: { equals: 'removed', mode: 'insensitive' },
+        //     },
+        //   },
+        // },
         moduleInstanceId: filters.moduleInstanceIds?.length
           ? { in: filters.moduleInstanceIds }
           : (filters.moduleInstanceId ?? undefined),
@@ -132,7 +143,8 @@ export class TasksService {
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
-    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
+    if (dto.qaAssigneeId)
+      await this.assertAssignee(workspaceId, dto.qaAssigneeId);
 
     const position = dto.position ?? (await this.nextPosition(projectId));
 
@@ -215,7 +227,8 @@ export class TasksService {
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
-    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
+    if (dto.qaAssigneeId)
+      await this.assertAssignee(workspaceId, dto.qaAssigneeId);
 
     const statusChanged = !!dto.statusId && dto.statusId !== task.statusId;
     const assigneeChanged =
@@ -270,10 +283,13 @@ export class TasksService {
     });
 
     if (statusChanged) {
+      const oldStatusName = task.status?.name ?? 'None';
+      const newStatusName = updated.status?.name ?? 'None';
       await this.notifyStatusChange(
         updated,
-        task.status?.name ?? 'None',
-        updated.status?.name ?? 'None',
+        oldStatusName,
+        newStatusName,
+        isRemovedStatus(oldStatusName) !== isRemovedStatus(newStatusName),
       );
     }
     if (assigneeChanged && updated.assignee) {
@@ -345,41 +361,17 @@ export class TasksService {
     });
 
     if (statusChanged) {
+      const oldStatusName = task.status?.name ?? 'None';
+      const newStatusName = updated.status?.name ?? 'None';
       await this.notifyStatusChange(
         updated,
-        task.status?.name ?? 'None',
-        updated.status?.name ?? 'None',
+        oldStatusName,
+        newStatusName,
+        isRemovedStatus(oldStatusName) !== isRemovedStatus(newStatusName),
       );
     }
 
     return updated;
-  }
-
-  async remove(
-    workspaceId: string,
-    projectId: string,
-    taskId: string,
-    userId: string,
-  ) {
-    await this.getTask(workspaceId, projectId, taskId);
-    await this.prisma.$transaction(async (tx) => {
-      await tx.task.update({
-        where: { id: taskId },
-        data: { deletedAt: new Date() },
-      });
-      await this.activityLog.log(
-        {
-          workspaceId,
-          projectId,
-          entityType: 'task',
-          entityId: taskId,
-          action: 'deleted',
-          userId,
-        },
-        tx,
-      );
-    });
-    return { id: taskId, deleted: true };
   }
 
   /** Activity log entries for one task, newest first. */
@@ -609,16 +601,24 @@ export class TasksService {
     },
     oldStatusName: string,
     newStatusName: string,
+    notifyProjectOwner: boolean,
   ): Promise<void> {
     const project = await this.prisma.project.findUnique({
       where: { id: task.projectId },
-      select: { name: true, workspace: { select: { slug: true } } },
+      select: {
+        name: true,
+        owner: { select: { id: true, email: true } },
+        workspace: { select: { slug: true } },
+      },
     });
 
     const recipients = new Map<string, string>([
       [task.creator.id, task.creator.email],
     ]);
     if (task.assignee) recipients.set(task.assignee.id, task.assignee.email);
+    if (notifyProjectOwner && project?.owner) {
+      recipients.set(project.owner.id, project.owner.email);
+    }
     await Promise.all(
       [...recipients.values()].map((email) =>
         this.mail

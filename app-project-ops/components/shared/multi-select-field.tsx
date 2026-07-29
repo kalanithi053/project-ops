@@ -89,7 +89,7 @@ export function MultiSelectField({
                   role="button"
                   tabIndex={-1}
                   aria-label={`Remove ${option.label}`}
-                  onClick={(event) => {
+                  onPointerDown={(event) => {
                     event.preventDefault();
                     event.stopPropagation();
                     toggle(option.value);

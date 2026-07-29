@@ -131,9 +131,15 @@ export async function provisionWorkspaceDefaults(
       color: s.color,
       order: s.order,
       isDefault: s.isDefault,
+      canDelete: s.canDelete,
       category: s.category,
     })),
     skipDuplicates: true,
+  });
+
+  await tx.ticketStatus.updateMany({
+    where: { workspaceId, name: 'Removed' },
+    data: { category: 'removed', canDelete: false },
   });
 
   // 7. Priorities

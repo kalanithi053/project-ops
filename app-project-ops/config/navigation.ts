@@ -1,10 +1,9 @@
 import {
-  LayoutDashboard,
-  FolderKanban,
   BarChart3,
-  Users,
-  UsersRound,
+  FolderKanban,
+  LayoutDashboard,
   Settings,
+  Users
 } from "lucide-react";
 
 import type { NavigationSection } from "@/types/navigation";
@@ -19,9 +18,7 @@ import type { NavigationSection } from "@/types/navigation";
  */
 export const navigationConfig: NavigationSection[] = [
   {
-    items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-    ],
+    items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Workspace",
@@ -34,13 +31,11 @@ export const navigationConfig: NavigationSection[] = [
     label: "People",
     items: [
       { label: "Users", href: "/users", icon: Users },
-      { label: "Teams", href: "/teams", icon: UsersRound },
+      // { label: "Teams", href: "/teams", icon: UsersRound },
     ],
   },
   {
     label: "Administration",
-    items: [
-      { label: "Settings", href: "/settings", icon: Settings },
-    ],
+    items: [{ label: "Settings", href: "/settings", icon: Settings }],
   },
 ];

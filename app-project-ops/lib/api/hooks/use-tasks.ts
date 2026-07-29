@@ -237,27 +237,6 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
   });
 }
 
-/**
- * DELETE /projects/:projectId/tasks/:taskId — requires `task.delete`.
- * Soft-delete server-side.
- */
-export function useDeleteTask(workspaceSlug: string, projectId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (id: string) =>
-      apiFetch<{ id: string; deleted: boolean }>(
-        `/projects/${projectId}/tasks/${id}`,
-        { method: "DELETE", workspaceSlug },
-      ),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(workspaceSlug, projectId) });
-      queryClient.invalidateQueries({ queryKey: ["project", workspaceSlug, projectId] });
-      queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
-      toast.success("Task deleted");
-    },
-  });
-}
-
 /** POST /projects/:projectId/tasks/:taskId/notify — email the assignee. */
 export function useNotifyTaskAssignee(
   workspaceSlug: string,

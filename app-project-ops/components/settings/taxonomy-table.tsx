@@ -35,6 +35,7 @@ interface TaxonomyTableProps<T extends TaxonomyRow> {
   extraColumn?: { header: string; render: (row: T) => React.ReactNode };
   onEdit: (row: T) => void;
   onDelete: (row: T) => void;
+  canDeleteRow?: (row: T) => boolean;
   emptyTitle: string;
   emptyDescription: string;
   emptyAction?: React.ReactNode;
@@ -54,6 +55,7 @@ export function TaxonomyTable<T extends TaxonomyRow>({
   extraColumn,
   onEdit,
   onDelete,
+  canDeleteRow = () => true,
   emptyTitle,
   emptyDescription,
   emptyAction,
@@ -136,15 +138,17 @@ export function TaxonomyTable<T extends TaxonomyRow>({
                       >
                         <Pencil className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        aria-label={`Delete ${row.name}`}
-                        onClick={() => onDelete(row)}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {canDeleteRow(row) && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          aria-label={`Delete ${row.name}`}
+                          onClick={() => onDelete(row)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      )}
                     </div>
                   </TableCell>
                 )}

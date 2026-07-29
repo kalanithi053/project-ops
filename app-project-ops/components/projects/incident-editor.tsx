@@ -1,10 +1,18 @@
 "use client";
 
-import { AlertTriangle, Check, ChevronDown, Loader2, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  ChevronDown,
+  Loader2,
+  Save,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
 import { SettingsField } from "@/components/settings/settings-section";
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
+import { IncidentActivity } from "@/components/projects/incident-activity";
 import { TaskComments } from "@/components/projects/task-comments";
 import { SelectField } from "@/components/shared/select-field";
 import {
@@ -75,6 +83,9 @@ export function IncidentEditor({
   const [statusId, setStatusId] = React.useState(incident?.statusId ?? "");
   const [error, setError] = React.useState<string | null>(null);
   const savedTitle = React.useRef(incident?.title ?? "");
+  const [activeTab, setActiveTab] = React.useState<"details" | "activity">(
+    "details",
+  );
 
   const assigneeOptions = React.useMemo(
     () =>
@@ -177,17 +188,27 @@ export function IncidentEditor({
                     Incident {incidentIdentifier}
                   </span>
                 </div>
-                <Input
-                  id="incident-title"
-                  value={title}
-                  onChange={(event) => setTitle(event.target.value)}
-                  onBlur={saveTitleOnBlur}
-                  placeholder={isEdit ? "Untitled incident" : "Incident title"}
-                  maxLength={200}
-                  autoFocus={!isEdit}
-                  aria-label="Incident title"
-                  className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
+                <div className="group/title relative">
+                  <Input
+                    id="incident-title"
+                    value={title}
+                    onChange={(event) => setTitle(event.target.value)}
+                    onBlur={saveTitleOnBlur}
+                    placeholder={isEdit ? "Untitled incident" : "Incident title"}
+                    maxLength={200}
+                    autoFocus={!isEdit}
+                    aria-label="Incident title"
+                    className="h-auto rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-input focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/70"
+                  />
+                  {isEdit && incident && (
+                    <CopyWorkItemLink
+                      prefix={`Incident ${incident.id}`}
+                      title={title}
+                      url={`/${workspaceSlug}/projects/${projectId}/incidents/${incident.id}`}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 group-focus-within/title:opacity-100"
+                    />
+                  )}
+                </div>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2">
                 <Button
@@ -287,85 +308,132 @@ export function IncidentEditor({
               </DropdownMenu>
             </div>
           </div>
+
+          <div
+            role="tablist"
+            aria-label="Incident editor sections"
+            className="flex border-t border-border px-4"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === "details"}
+              onClick={() => setActiveTab("details")}
+              className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                activeTab === "details"
+                  ? "border-foreground text-foreground"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Details
+            </button>
+            {incident && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "activity"}
+                onClick={() => setActiveTab("activity")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "activity"
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Activity
+              </button>
+            )}
+          </div>
         </CardHeader>
 
         <CardContent className="p-4">
-          <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
-            <div className="min-w-0">
-              <SettingsField
-                label="Description"
-                htmlFor="incident-description"
-              >
-                <RichTextEditor
-                  id="incident-description"
-                  value={description}
-                  onChange={setDescription}
-                  placeholder="Describe the issue and its impact…"
-                  aria-label="Incident description"
-                  disabled={pending}
-                />
-              </SettingsField>
-              {incident && (
-                <TaskComments
-                  workspaceSlug={workspaceSlug}
-                  projectId={projectId}
-                  incidentId={incident.id}
-                  canComment={canComment}
-                />
-              )}
-            </div>
+          {activeTab === "details" ? (
+            <>
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                <div className="min-w-0">
+                  <SettingsField
+                    label="Description"
+                    htmlFor="incident-description"
+                  >
+                    <RichTextEditor
+                      id="incident-description"
+                      value={description}
+                      onChange={setDescription}
+                      placeholder="Describe the issue and its impact…"
+                      aria-label="Incident description"
+                      disabled={pending}
+                    />
+                  </SettingsField>
+                  {incident && (
+                    <TaskComments
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      incidentId={incident.id}
+                      canComment={canComment}
+                    />
+                  )}
+                </div>
 
-            <div className="flex min-w-0 flex-col gap-4 lg:border-l lg:border-border lg:pl-5">
-              <SettingsField
-                label="QA assignee"
-                htmlFor="incident-qa-assignee"
-              >
-                <SelectField
-                  id="incident-qa-assignee"
-                  aria-label="QA assignee"
-                  options={assigneeOptions}
-                  value={qaAssigneeId}
-                  onValueChange={setQaAssigneeId}
-                  placeholder="Assign QA"
-                />
-              </SettingsField>
-              <SettingsField
-                label="ETA (hours)"
-                htmlFor="incident-eta"
-                hint="Estimated effort."
-              >
-                <Input
-                  id="incident-eta"
-                  type="number"
-                  min={0}
-                  max={10000}
-                  value={estimateHours}
-                  onChange={(event) => setEstimateHours(event.target.value)}
-                  placeholder="8"
-                />
-              </SettingsField>
-              <SettingsField
-                label="Completed hours"
-                htmlFor="incident-completed-hours"
-                hint="Work logged so far."
-              >
-                <Input
-                  id="incident-completed-hours"
-                  type="number"
-                  min={0}
-                  step="0.25"
-                  value={completedHours}
-                  onChange={(event) => setCompletedHours(event.target.value)}
-                  placeholder="0"
-                />
-              </SettingsField>
-            </div>
-          </div>
-          {error && (
-            <p role="alert" className="mt-4 text-sm text-destructive">
-              {error}
-            </p>
-          )}
+                <div className="flex min-w-0 flex-col gap-4 lg:border-l lg:border-border lg:pl-5">
+                  <SettingsField
+                    label="QA assignee"
+                    htmlFor="incident-qa-assignee"
+                  >
+                    <SelectField
+                      id="incident-qa-assignee"
+                      aria-label="QA assignee"
+                      options={assigneeOptions}
+                      value={qaAssigneeId}
+                      onValueChange={setQaAssigneeId}
+                      placeholder="Assign QA"
+                    />
+                  </SettingsField>
+                  <SettingsField
+                    label="ETA (hours)"
+                    htmlFor="incident-eta"
+                    hint="Estimated effort."
+                  >
+                    <Input
+                      id="incident-eta"
+                      type="number"
+                      min={0}
+                      max={10000}
+                      value={estimateHours}
+                      onChange={(event) => setEstimateHours(event.target.value)}
+                      placeholder="8"
+                    />
+                  </SettingsField>
+                  <SettingsField
+                    label="Completed hours"
+                    htmlFor="incident-completed-hours"
+                    hint="Work logged so far."
+                  >
+                    <Input
+                      id="incident-completed-hours"
+                      type="number"
+                      min={0}
+                      step="0.25"
+                      value={completedHours}
+                      onChange={(event) =>
+                        setCompletedHours(event.target.value)
+                      }
+                      placeholder="0"
+                    />
+                  </SettingsField>
+                </div>
+              </div>
+              {error && (
+                <p role="alert" className="mt-4 text-sm text-destructive">
+                  {error}
+                </p>
+              )}
+            </>
+          ) : incident ? (
+            <IncidentActivity
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              incidentId={incident.id}
+            />
+          ) : null}
         </CardContent>
       </form>
     </Card>

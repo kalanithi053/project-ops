@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { siteConfig } from "@/config/site";
 
 /**
- * Brand logo + wordmark that links to the active workspace's dashboard.
+ * Brand logo + wordmark that links to the active workspace's projects.
  * Derives the workspace slug from the current path so the sidebar never
  * hardcodes a tenant.
  */
@@ -23,7 +23,7 @@ export function BrandLink({
 }) {
   const pathname = usePathname();
   const slug = pathname.split("/").filter(Boolean)[0];
-  const href = slug ? `/${slug}/dashboard` : "/";
+  const href = slug ? `/${slug}/projects` : "/";
 
   return (
     <Link

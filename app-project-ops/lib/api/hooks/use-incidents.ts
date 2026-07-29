@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api/client";
 import type {
   CreateIncidentDto,
   Incident,
+  IncidentActivityEntry,
   UpdateIncidentDto,
 } from "@/lib/api/types";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -63,6 +64,32 @@ export function useIncident(
       apiFetch<Incident>(`/projects/${projectId}/incidents/${incidentId}`, {
         workspaceSlug,
       }),
+    enabled: Boolean(token && workspaceSlug && projectId && incidentId),
+  });
+}
+
+export function incidentActivityKey(
+  workspaceSlug: string,
+  projectId: string,
+  incidentId: string,
+) {
+  return ["incident-activity", workspaceSlug, projectId, incidentId] as const;
+}
+
+/** GET /projects/:projectId/incidents/:incidentId/activity — oldest first. */
+export function useIncidentActivity(
+  workspaceSlug: string,
+  projectId: string,
+  incidentId?: string,
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: incidentActivityKey(workspaceSlug, projectId, incidentId ?? ""),
+    queryFn: () =>
+      apiFetch<IncidentActivityEntry[]>(
+        `/projects/${projectId}/incidents/${incidentId}/activity`,
+        { workspaceSlug },
+      ),
     enabled: Boolean(token && workspaceSlug && projectId && incidentId),
   });
 }

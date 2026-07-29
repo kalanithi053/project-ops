@@ -17,7 +17,7 @@ import { OtpInput } from "@/components/shared/otp-input";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ApiError } from "@/lib/api/client";
+import { apiFetch, ApiError } from "@/lib/api/client";
 import {
   CREATE_USER_SLUG,
   useRegister,
@@ -25,6 +25,7 @@ import {
   useVerifyOtp,
 } from "@/lib/api/hooks/use-auth";
 import { safeAuthDestination } from "@/lib/auth/redirect";
+import type { Workspace } from "@/lib/api/types";
 
 type Step = "identify" | "register" | "verify";
 
@@ -75,8 +76,24 @@ export default function LoginPage() {
   useEffect(() => {
     if (!isVerified) return;
 
-    const timer = window.setTimeout(() => {
-      window.location.href = redirectAfterLogin;
+    const timer = window.setTimeout(async () => {
+      let destination = redirectAfterLogin;
+
+      if (redirectAfterLogin === "/workspaces") {
+        try {
+          const workspaces = await apiFetch<Workspace[]>("/workspaces/me");
+          const defaultWorkspace = workspaces.find(
+            (workspace) => workspace.isDefault,
+          );
+          if (defaultWorkspace) {
+            destination = `/${defaultWorkspace.slug}/projects`;
+          }
+        } catch {
+          // The workspaces page will display the appropriate load state.
+        }
+      }
+
+      window.location.href = destination;
     }, 1800);
 
     return () => window.clearTimeout(timer);

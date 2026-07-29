@@ -36,4 +36,9 @@ export class CreateTicketStatusDto {
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
+
+  @ApiProperty({ required: false, default: true })
+  @IsOptional()
+  @IsBoolean()
+  canDelete?: boolean;
 }

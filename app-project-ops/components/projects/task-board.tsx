@@ -26,6 +26,7 @@ import {
   SortableTaskCard,
   TaskCardView,
 } from "@/components/projects/task-card";
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { QueryState } from "@/components/shared/query-state";
 import { SelectField } from "@/components/shared/select-field";
@@ -127,7 +128,7 @@ export function TaskBoard({
     { type: "task"; item: Task } | { type: "incident"; item: Incident } | null
   >(null);
   const [search, setSearch] = React.useState("");
-  const [moduleId, setModuleId] = React.useState("");
+  const [moduleIds, setModuleIds] = React.useState<string[]>([]);
   const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
   const [statusId, setStatusId] = React.useState("");
   const [startDate, setStartDate] = React.useState("");
@@ -167,13 +168,11 @@ export function TaskBoard({
   );
 
   const moduleOptions = React.useMemo(
-    () => [
-      { value: "", label: "All modules" },
-      ...(modulesQuery.data ?? []).map((instance) => ({
+    () =>
+      (modulesQuery.data ?? []).map((instance) => ({
         value: instance.id,
         label: instance.module.name,
       })),
-    ],
     [modulesQuery.data],
   );
 
@@ -214,7 +213,7 @@ export function TaskBoard({
   const filtersActive = Object.keys(appliedFilters).length > 0;
   const hasDraftFilters = Boolean(
     search ||
-    moduleId ||
+    moduleIds.length ||
     assigneeIds.length ||
     statusId ||
     startDate ||
@@ -289,7 +288,7 @@ export function TaskBoard({
 
   function clearFilters() {
     setSearch("");
-    setModuleId("");
+    setModuleIds([]);
     setAssigneeIds([]);
     setStatusId("");
     setStartDate("");
@@ -300,7 +299,7 @@ export function TaskBoard({
   function applyFilters() {
     setAppliedFilters({
       ...(search.trim() ? { search: search.trim() } : {}),
-      ...(moduleId ? { moduleInstanceId: moduleId } : {}),
+      ...(moduleIds.length ? { moduleInstanceIds: moduleIds } : {}),
       ...(assigneeIds.length ? { assigneeIds } : {}),
       ...(statusId ? { statusId } : {}),
       ...(startDate ? { startDate } : {}),
@@ -488,11 +487,12 @@ export function TaskBoard({
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium">
                     Module
-                    <SelectField
-                      aria-label="Filter by module"
+                    <MultiSelectField
+                      aria-label="Filter by modules"
                       options={moduleOptions}
-                      value={moduleId}
-                      onValueChange={setModuleId}
+                      values={moduleIds}
+                      onValuesChange={setModuleIds}
+                      placeholder="All modules"
                     />
                   </label>
                   <label className="flex flex-col gap-1.5 text-sm font-medium">
@@ -567,6 +567,8 @@ export function TaskBoard({
                 dragDisabled={filtersActive}
                 canCreate={canCreate && column.droppable}
                 canUpdate={canUpdate}
+                workspaceSlug={workspaceSlug}
+                projectId={projectId}
                 onCreate={() =>
                   openTaskTab(
                     `/${workspaceSlug}/projects/${projectId}/tasks/new?statusId=${encodeURIComponent(column.id)}`,
@@ -613,11 +615,13 @@ function IncidentCard({
   onOpen,
   disabled = false,
   overlay = false,
+  copyUrl,
 }: {
   incident: Incident;
   onOpen?: () => void;
   disabled?: boolean;
   overlay?: boolean;
+  copyUrl?: string;
 }) {
   const {
     attributes,
@@ -636,7 +640,7 @@ function IncidentCard({
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={cn("relative rounded-md border border-status-error/30 bg-card p-3 shadow-sm", isDragging && "opacity-40", overlay && "rotate-2 shadow-lg")}
+      className={cn("group/title relative rounded-md border border-status-error/30 bg-card p-3 shadow-sm", isDragging && "opacity-40", overlay && "rotate-2 shadow-lg")}
     >
       <button
         type="button"
@@ -656,6 +660,14 @@ function IncidentCard({
           {incident.status.name}
         </span>
       </button>
+      {copyUrl && !overlay && (
+        <CopyWorkItemLink
+          prefix="Incident"
+          title={incident.title}
+          url={copyUrl}
+          className="absolute right-7 top-8"
+        />
+      )}
       {!overlay && !disabled && (
         <button
           ref={setActivatorNodeRef}
@@ -683,6 +695,8 @@ function BoardColumn({
   onCreate,
   onOpenTask,
   onOpenIncident,
+  workspaceSlug,
+  projectId,
 }: {
   column: BoardColumnDef;
   tasks: Task[];
@@ -694,6 +708,8 @@ function BoardColumn({
   onCreate: () => void;
   onOpenTask: (task: Task) => void;
   onOpenIncident: (incident: Incident) => void;
+  workspaceSlug: string;
+  projectId: string;
 }) {
   const { setNodeRef, isOver } = useDroppable({
     id: column.id,
@@ -755,6 +771,7 @@ function BoardColumn({
               }
               onOpen={() => onOpenTask(task)}
               disabled={dragDisabled}
+              copyUrl={`/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`}
             />
           ))}
 
@@ -764,6 +781,7 @@ function BoardColumn({
               incident={incident}
               onOpen={() => onOpenIncident(incident)}
               disabled={dragDisabled || !canUpdate}
+              copyUrl={`/${workspaceSlug}/projects/${projectId}/incidents/${incident.id}`}
             />
           ))}
 

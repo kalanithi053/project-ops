@@ -67,6 +67,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
   color: string;
   order: number;
   isDefault: boolean;
+  canDelete: boolean;
   category: StatusCategory;
 }> = [
   {
@@ -74,6 +75,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#e4f468ff',
     order: 0,
     isDefault: true,
+    canDelete: true,
     category: 'new',
   },
   {
@@ -81,6 +83,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#94a3b8',
     order: 1,
     isDefault: false,
+    canDelete: true,
     category: 'todo',
   },
   {
@@ -88,6 +91,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#3b82f6',
     order: 2,
     isDefault: false,
+    canDelete: true,
     category: 'in_progress',
   },
   {
@@ -95,6 +99,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#f59e0b',
     order: 3,
     isDefault: false,
+    canDelete: true,
     category: 'ready_qa',
   },
   {
@@ -102,6 +107,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#3b82f6',
     order: 4,
     isDefault: false,
+    canDelete: true,
     category: 'review',
   },
   {
@@ -109,6 +115,7 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#22c55e',
     order: 5,
     isDefault: false,
+    canDelete: true,
     category: 'done',
   },
   {
@@ -116,7 +123,16 @@ export const DEFAULT_TICKET_STATUSES: Array<{
     color: '#ef4444',
     order: 6,
     isDefault: false,
+    canDelete: true,
     category: 'blocked',
+  },
+  {
+    name: 'Removed',
+    color: '#64748b',
+    order: 7,
+    isDefault: false,
+    canDelete: false,
+    category: 'removed',
   },
 ];
 

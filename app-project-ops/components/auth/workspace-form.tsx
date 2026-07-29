@@ -23,7 +23,7 @@ function slugify(value: string) {
 /**
  * New-workspace creation form. POST /workspaces only needs `name` (and an
  * optional `slug`); on success we hand the created workspace's slug back
- * to the caller to route into `/{slug}/dashboard`.
+ * to the caller to route into `/{slug}/projects`.
  */
 export function WorkspaceForm({
   onCreated,

@@ -30,8 +30,8 @@ export function TenantSelector() {
 
   function switchTenant(next: Tenant) {
     // Routes are workspace-scoped, so switching navigates to the selected
-    // workspace's dashboard (which re-scopes every API call via the header).
-    router.push(`/${next.slug}/dashboard`);
+    // workspace's projects (which re-scopes every API call via the header).
+    router.push(`/${next.slug}/projects`);
   }
 
   if (isLoading && tenants.length <= 1) {

@@ -31,6 +31,10 @@ export class TicketStatusService {
           order: dto.order ?? 0,
           category: dto.category,
           isDefault: dto.isDefault ?? false,
+          canDelete:
+            dto.name.trim().toLowerCase() === 'removed'
+              ? false
+              : (dto.canDelete ?? true),
         },
       });
     });
@@ -51,13 +55,20 @@ export class TicketStatusService {
           order: dto.order ?? undefined,
           category: dto.category ?? undefined,
           isDefault: dto.isDefault ?? undefined,
+          canDelete:
+            (dto.name ?? status.name).trim().toLowerCase() === 'removed'
+              ? false
+              : (dto.canDelete ?? undefined),
         },
       });
     });
   }
 
   async remove(workspaceId: string, id: string) {
-    await this.getOwned(workspaceId, id);
+    const status = await this.getOwned(workspaceId, id);
+    if (!status.canDelete) {
+      throw new ConflictException('This status cannot be deleted.');
+    }
     const taskCount = await this.prisma.task.count({ where: { statusId: id } });
     const incidentCount = await this.prisma.incident.count({
       where: { statusId: id },

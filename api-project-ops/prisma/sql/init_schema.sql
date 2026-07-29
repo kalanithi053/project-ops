@@ -44,7 +44,7 @@ DROP TYPE IF EXISTS "incident_status";
 CREATE TYPE "membership_status" AS ENUM ('invited', 'active', 'removed');
 
 -- CreateEnum
-CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'ready_qa', 'review', 'done');
+CREATE TYPE "status_category" AS ENUM ('todo', 'in_progress', 'ready_qa', 'review', 'done', 'removed');
 
 -- CreateEnum
 CREATE TYPE "incident_status" AS ENUM ('open', 'in_progress', 'resolved');

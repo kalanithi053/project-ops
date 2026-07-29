@@ -79,6 +79,7 @@ export default function TicketStatusesPage() {
           canManage={canManage}
           onEdit={setEditing}
           onDelete={setDeleting}
+          canDeleteRow={(status) => status.canDelete !== false}
           emptyTitle="No ticket statuses"
           emptyDescription="Statuses define the columns tasks move through. Add your first one to get started."
           emptyAction={addButton}

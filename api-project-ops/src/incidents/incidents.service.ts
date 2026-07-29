@@ -24,6 +24,10 @@ function displayName(user: {
   return name || user.email;
 }
 
+function isRemovedStatus(name: string): boolean {
+  return name.trim().toLowerCase() === 'removed';
+}
+
 /**
  * Standalone incident tickets, scoped to a project (not bound to any task).
  */
@@ -46,8 +50,10 @@ export class IncidentsService {
   ) {
     const project = await this.assertProject(workspaceId, projectId);
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
-    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
-    const statusId = dto.statusId ?? (await this.getDefaultStatusId(workspaceId));
+    if (dto.qaAssigneeId)
+      await this.assertAssignee(workspaceId, dto.qaAssigneeId);
+    const statusId =
+      dto.statusId ?? (await this.getDefaultStatusId(workspaceId));
     await this.assertStatus(workspaceId, statusId);
 
     const incident = await this.prisma.$transaction(async (tx) => {
@@ -68,7 +74,9 @@ export class IncidentsService {
           reporter: PERSON_SELECT,
           assignee: PERSON_SELECT,
           qaAssignee: PERSON_SELECT,
-          status: { select: { id: true, name: true, category: true, color: true } },
+          status: {
+            select: { id: true, name: true, category: true, color: true },
+          },
         },
       });
 
@@ -90,7 +98,11 @@ export class IncidentsService {
 
     await this.notifyIncidentCreated(project, incident);
     if (incident.qaAssignee) {
-      await this.notifyQaAssignment(incident.qaAssignee.email, incident, project);
+      await this.notifyQaAssignment(
+        incident.qaAssignee.email,
+        incident,
+        project,
+      );
     }
     return incident;
   }
@@ -115,6 +127,13 @@ export class IncidentsService {
     return this.prisma.incident.findMany({
       where: {
         projectId,
+        // NOT: {
+        //   status: {
+        //     is: {
+        //       category: { equals: 'removed' },
+        //     },
+        //   },
+        // },
         ...(filters.assigneeIds?.length
           ? {
               OR: [
@@ -132,7 +151,9 @@ export class IncidentsService {
         reporter: PERSON_SELECT,
         assignee: PERSON_SELECT,
         qaAssignee: PERSON_SELECT,
-        status: { select: { id: true, name: true, category: true, color: true } },
+        status: {
+          select: { id: true, name: true, category: true, color: true },
+        },
         _count: { select: { comments: true } },
       },
     });
@@ -147,7 +168,9 @@ export class IncidentsService {
         reporter: PERSON_SELECT,
         assignee: PERSON_SELECT,
         qaAssignee: PERSON_SELECT,
-        status: { select: { id: true, name: true, category: true, color: true } },
+        status: {
+          select: { id: true, name: true, category: true, color: true },
+        },
         _count: { select: { comments: true } },
       },
     });
@@ -165,15 +188,19 @@ export class IncidentsService {
     const project = await this.assertProject(workspaceId, projectId);
     const incident = await this.prisma.incident.findFirst({
       where: { id: incidentId, projectId },
+      include: { status: { select: { name: true } } },
     });
     if (!incident) throw new NotFoundException('Incident not found');
     if (dto.assigneeId) await this.assertAssignee(workspaceId, dto.assigneeId);
-    if (dto.qaAssigneeId) await this.assertAssignee(workspaceId, dto.qaAssigneeId);
+    if (dto.qaAssigneeId)
+      await this.assertAssignee(workspaceId, dto.qaAssigneeId);
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     const assigneeChanged =
       !!dto.assigneeId && dto.assigneeId !== incident.assigneeId;
     const qaAssigneeChanged =
       !!dto.qaAssigneeId && dto.qaAssigneeId !== incident.qaAssigneeId;
+    const statusChanged =
+      dto.statusId !== undefined && dto.statusId !== incident.statusId;
 
     const changes: Record<string, { from: unknown; to: unknown }> = {};
     const updateFields = [
@@ -200,7 +227,9 @@ export class IncidentsService {
           reporter: PERSON_SELECT,
           assignee: PERSON_SELECT,
           qaAssignee: PERSON_SELECT,
-          status: { select: { id: true, name: true, category: true, color: true } },
+          status: {
+            select: { id: true, name: true, category: true, color: true },
+          },
           _count: { select: { comments: true } },
         },
       });
@@ -240,6 +269,13 @@ export class IncidentsService {
     }
     if (qaAssigneeChanged && updated.qaAssignee) {
       await this.notifyQaAssignment(updated.qaAssignee.email, updated, project);
+    }
+    if (
+      statusChanged &&
+      isRemovedStatus(incident.status.name) !==
+        isRemovedStatus(updated.status.name)
+    ) {
+      await this.notifyProjectOwnerOfRemovedStatusChange(project, updated);
     }
 
     return updated;
@@ -342,6 +378,38 @@ export class IncidentsService {
       .catch((err) =>
         this.logger.error(
           `Failed to send QA assignment email to=${email}: ${(err as Error).message}`,
+        ),
+      );
+  }
+
+  private async notifyProjectOwnerOfRemovedStatusChange(
+    project: {
+      id: string;
+      name: string;
+      ownerId: string;
+      workspace: { slug: string };
+    },
+    incident: { id: string; title: string; status: { name: string } },
+  ): Promise<void> {
+    const owner = await this.prisma.user.findUnique({
+      where: { id: project.ownerId },
+      select: { email: true },
+    });
+    if (!owner) return;
+
+    await this.mail
+      .sendStatusNotificationEmail(owner.email, {
+        entityLabel: 'incident',
+        entityName: incident.title,
+        projectName: project.name,
+        statusName: incident.status.name,
+        actionUrl: this.mail.appUrl(
+          `/${project.workspace.slug}/projects/${project.id}/incidents/${incident.id}`,
+        ),
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send incident removal status email to=${owner.email}: ${(err as Error).message}`,
         ),
       );
   }

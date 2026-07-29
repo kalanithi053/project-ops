@@ -56,7 +56,7 @@ export default function ProjectLayout({
           All projects
         </Link>
       </Button> */}
-      {isLoading ? <Skeleton className="h-8 w-64" /> : null}
+      {/* {isLoading ? <Skeleton className="h-8 w-64" /> : null} */}
       {/* <div className="flex flex-col gap-2">
 
         ) : (

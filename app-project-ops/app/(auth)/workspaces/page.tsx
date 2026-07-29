@@ -2,13 +2,16 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Boxes, ChevronRight, Plus } from "lucide-react";
+import { ArrowLeft, Boxes, ChevronRight, Plus, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { WorkspaceForm } from "@/components/auth/workspace-form";
 import { ListSkeleton } from "@/components/shared/skeletons";
-import { useMyWorkspaces } from "@/lib/api/hooks/use-workspaces";
+import {
+  useMyWorkspaces,
+  useSetDefaultWorkspace,
+} from "@/lib/api/hooks/use-workspaces";
 import type { Workspace } from "@/lib/api/types";
 
 function initials(name: string) {
@@ -23,7 +26,7 @@ function initials(name: string) {
 /**
  * Post-login workspace hub. Lists the workspaces the user belongs to
  * (GET /workspaces/me) and lets them create a new one. Both paths route
- * into `/{slug}/dashboard`.
+ * into `/{slug}/projects`.
  */
 export default function WorkspacesPage() {
   return (
@@ -43,6 +46,7 @@ function WorkspacesHub() {
     searchParams.get("new") ? "create" : "select",
   );
   const { data, isLoading, isError } = useMyWorkspaces();
+  const setDefaultWorkspace = useSetDefaultWorkspace();
   const workspaces = data ?? [];
 
   /**
@@ -55,18 +59,25 @@ function WorkspacesHub() {
     mode === "select" &&
     !isLoading &&
     !isError &&
-    workspaces.length === 1 &&
+    (workspaces.some((workspace) => workspace.isDefault) ||
+      workspaces.length === 1) &&
     !searchParams.get("manage");
 
-  const soleSlug = autoOpen ? workspaces[0].slug : undefined;
+  const defaultWorkspace = workspaces.find((workspace) => workspace.isDefault);
+  const autoOpenWorkspace = defaultWorkspace ?? workspaces[0];
+  const autoOpenSlug = autoOpen ? autoOpenWorkspace?.slug : undefined;
 
   useEffect(() => {
     // `replace`, not `push` — otherwise Back lands here and forwards again.
-    if (soleSlug) router.replace(`/${soleSlug}/dashboard`);
-  }, [soleSlug, router]);
+    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/projects`);
+  }, [autoOpenSlug, router]);
 
   function openWorkspace(workspace: Workspace) {
-    router.push(`/${workspace.slug}/dashboard`);
+    router.push(`/${workspace.slug}/projects`);
+  }
+
+  function setAsDefault(workspace: Workspace) {
+    setDefaultWorkspace.mutate(workspace.id);
   }
 
   // Hold the skeleton through the redirect so the picker never flashes.
@@ -102,7 +113,7 @@ function WorkspacesHub() {
         </div>
 
         <WorkspaceForm
-          onCreated={(slug) => router.push(`/${slug}/dashboard`)}
+          onCreated={(slug) => router.push(`/${slug}/projects`)}
         />
       </div>
     );
@@ -138,27 +149,46 @@ function WorkspacesHub() {
             <ul className="flex flex-col gap-2">
               {workspaces.map((workspace) => (
                 <li key={String(workspace.id ?? workspace.slug)}>
-                  <button
-                    type="button"
-                    onClick={() => openWorkspace(workspace)}
+                  <div
                     className={cn(
                       "group flex w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors",
-                      "hover:border-foreground/20 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      "hover:border-foreground/20 hover:bg-accent",
                     )}
                   >
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
-                      {initials(workspace.name ?? workspace.slug)}
-                    </span>
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-sm font-medium">
-                        {workspace.name ?? workspace.slug}
+                    <button
+                      type="button"
+                      onClick={() => openWorkspace(workspace)}
+                      className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    >
+                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
+                        {initials(workspace.name ?? workspace.slug)}
                       </span>
-                      <span className="truncate text-xs text-muted-foreground">
-                        projectops.app/{workspace.slug}
+                      <span className="flex min-w-0 flex-1 flex-col">
+                        <span className="truncate text-sm font-medium">
+                          {workspace.name ?? workspace.slug}
+                        </span>
+                        <span className="truncate text-xs text-muted-foreground">
+                          projectops.app/{workspace.slug}
+                        </span>
                       </span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                  </button>
+                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </button>
+                    {workspace.isDefault ? (
+                      <span className="shrink-0 text-xs text-muted-foreground">
+                        Default
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setAsDefault(workspace)}
+                        disabled={setDefaultWorkspace.isPending}
+                        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Star className="h-3.5 w-3.5" />
+                        Set as default
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

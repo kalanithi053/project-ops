@@ -59,7 +59,7 @@ const columns: ColumnDef<WorkspaceMember>[] = [
     cell: (m) => (
       <div className="flex flex-col">
         <span className="font-medium">{memberName(m)}</span>
-        <span className="text-xs text-muted-foreground">{memberEmail(m)}</span>
+        {/* <span className="text-xs text-muted-foreground">{memberEmail(m)}</span> */}
       </div>
     ),
   },

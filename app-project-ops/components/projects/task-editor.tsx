@@ -7,21 +7,20 @@ import {
   ListChecks,
   Loader2,
   Save,
-  Trash2,
 } from "lucide-react";
 import * as React from "react";
 
+import { TaskActivity } from "@/components/projects/task-activity";
+import { TaskComments } from "@/components/projects/task-comments";
 import { SettingsField } from "@/components/settings/settings-section";
-import {
-  SelectField,
-  type SelectOption,
-} from "@/components/shared/select-field";
 import {
   RichTextEditor,
   sanitizeRichText,
 } from "@/components/shared/rich-text-editor";
-import { TaskActivity } from "@/components/projects/task-activity";
-import { TaskComments } from "@/components/projects/task-comments";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -33,12 +32,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { usePriorities } from "@/lib/api/hooks/use-priorities";
 import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
 import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import {
   useCreateTask,
-  useDeleteTask,
   useUpdateTask,
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
@@ -90,7 +89,6 @@ export function TaskEditor({
 }: TaskEditorProps) {
   const create = useCreateTask(workspaceSlug, projectId);
   const update = useUpdateTask(workspaceSlug, projectId);
-  const remove = useDeleteTask(workspaceSlug, projectId);
 
   const { data: modules } = useProjectModules(workspaceSlug, projectId);
   const { data: project } = useProject(workspaceSlug, projectId);
@@ -106,7 +104,7 @@ export function TaskEditor({
   const requiresModule = Boolean(project?.projectType?.isPlanAdd);
 
   const isEdit = Boolean(task);
-  const pending = create.isPending || update.isPending || remove.isPending;
+  const pending = create.isPending || update.isPending;
 
   const [name, setName] = React.useState(task?.name ?? "");
   const [description, setDescription] = React.useState(task?.description ?? "");
@@ -141,7 +139,6 @@ export function TaskEditor({
   const [dueDate, setDueDate] = React.useState(toDateInput(task?.dueDate));
   const [error, setError] = React.useState<string | null>(null);
   const savedTitle = React.useRef(task?.name ?? "");
-  const [confirmingDelete, setConfirmingDelete] = React.useState(false);
   const [activeTab, setActiveTab] = React.useState<"details" | "activity">(
     "details",
   );
@@ -251,7 +248,11 @@ export function TaskEditor({
     setName(trimmed);
     update.mutate(
       { id: task.id, dto: { name: trimmed } },
-      { onSuccess: () => { savedTitle.current = trimmed; } },
+      {
+        onSuccess: () => {
+          savedTitle.current = trimmed;
+        },
+      },
     );
   }
 
@@ -274,65 +275,31 @@ export function TaskEditor({
                     Task {taskIdentifier}
                   </span>
                 </div>
-                <Input
-                  id="task-name"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                  onBlur={saveTitleOnBlur}
-                  placeholder={isEdit ? "Untitled task" : "Task name"}
-                  maxLength={200}
-                  autoFocus={!isEdit}
-                  disabled={!canSave}
-                  aria-label="Task name"
-                  className="h-auto rounded-none border-0 bg-transparent px-0 py-0 text-2xl font-semibold tracking-tight shadow-none placeholder:text-muted-foreground/70 focus-visible:ring-0 focus-visible:ring-offset-0"
-                />
+                <div className="group/title relative">
+                  <Input
+                    id="task-name"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                    onBlur={saveTitleOnBlur}
+                    placeholder={isEdit ? "Untitled task" : "Task name"}
+                    maxLength={200}
+                    autoFocus={!isEdit}
+                    disabled={!canSave}
+                    aria-label="Task name"
+                    className="h-auto rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-input focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/70"
+                  />
+                  {isEdit && task && (
+                    <CopyWorkItemLink
+                      prefix={`Task ${task.prefix ?? task.id}`}
+                      title={name}
+                      url={`/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 group-focus-within/title:opacity-100"
+                    />
+                  )}
+                </div>
               </div>
 
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                {isEdit && canSave ? (
-                  confirmingDelete ? (
-                    <>
-                      <span className="text-xs text-muted-foreground">
-                        Delete this task?
-                      </span>
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        size="sm"
-                        disabled={remove.isPending}
-                        onClick={() =>
-                          task &&
-                          remove.mutate(task.id, { onSuccess: onDone })
-                        }
-                      >
-                        {remove.isPending && (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        )}
-                        Delete
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmingDelete(false)}
-                      >
-                        Keep task
-                      </Button>
-                    </>
-                  ) : (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground hover:text-destructive"
-                      onClick={() => setConfirmingDelete(true)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                  )
-                ) : null}
-
                 <Button
                   type="button"
                   variant="outline"
@@ -474,13 +441,11 @@ export function TaskEditor({
               )}
             </div>
           </div>
-        </CardHeader>
 
-        <CardContent className="flex flex-col gap-4 p-4">
           <div
             role="tablist"
             aria-label="Task editor sections"
-            className="-mx-4 -mt-4 flex border-b border-border px-4"
+            className="flex border-t border-border px-4"
           >
             <button
               type="button"
@@ -501,7 +466,7 @@ export function TaskEditor({
                 role="tab"
                 aria-selected={activeTab === "activity"}
                 onClick={() => setActiveTab("activity")}
-                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-col ${
                   activeTab === "activity"
                     ? "border-foreground text-foreground"
                     : "border-transparent text-muted-foreground hover:text-foreground"
@@ -511,23 +476,29 @@ export function TaskEditor({
               </button>
             )}
           </div>
+        </CardHeader>
 
+        <CardContent className="flex flex-col gap-4 p-4">
           {activeTab === "details" ? (
             <>
-              <div
-                className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]"
-              >
+              <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
                 <div className="flex flex-col gap-5">
-                  <fieldset disabled={!canSave} className="min-w-0 border-0 p-0">
-                    <SettingsField label="Description" htmlFor="task-description">
-                    <RichTextEditor
-                      id="task-description"
-                      value={description}
-                      onChange={setDescription}
-                      placeholder="Add a description…"
-                      aria-label="Description"
-                      disabled={!canSave}
-                    />
+                  <fieldset
+                    disabled={!canSave}
+                    className="min-w-0 border-0 p-0"
+                  >
+                    <SettingsField
+                      label="Description"
+                      htmlFor="task-description"
+                    >
+                      <RichTextEditor
+                        id="task-description"
+                        value={description}
+                        onChange={setDescription}
+                        placeholder="Add a description…"
+                        aria-label="Description"
+                        disabled={!canSave}
+                      />
                     </SettingsField>
                   </fieldset>
 
@@ -594,7 +565,9 @@ export function TaskEditor({
                       min={0}
                       step="0.25"
                       value={completedHours}
-                      onChange={(event) => setCompletedHours(event.target.value)}
+                      onChange={(event) =>
+                        setCompletedHours(event.target.value)
+                      }
                       placeholder="0"
                     />
                   </SettingsField>
@@ -623,7 +596,8 @@ export function TaskEditor({
 
                   {(projectStart || projectEnd) && (
                     <p className="text-xs leading-5 text-muted-foreground">
-                      Project dates: {projectStart || "—"} to {projectEnd || "—"}.
+                      Project dates: {projectStart || "—"} to{" "}
+                      {projectEnd || "—"}.
                     </p>
                   )}
                 </fieldset>

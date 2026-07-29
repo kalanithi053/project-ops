@@ -1,8 +1,8 @@
-import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../common/decorators/current-user.decorator';
-import { WorkspacesService } from './workspaces.service';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
+import { WorkspacesService } from './workspaces.service';
 
 @ApiTags('workspaces')
 @ApiBearerAuth()
@@ -11,7 +11,10 @@ export class WorkspacesController {
   constructor(private readonly workspaces: WorkspacesService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a workspace (provisions default roles, modules, statuses, plan)' })
+  @ApiOperation({
+    summary:
+      'Create a workspace (provisions default roles, modules, statuses, plan)',
+  })
   async create(
     @CurrentUser('sub') userId: string,
     @Body() dto: CreateWorkspaceDto,
@@ -30,14 +33,5 @@ export class WorkspacesController {
   @ApiOperation({ summary: 'Get a workspace the current user belongs to' })
   findOne(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     return this.workspaces.findOneForUser(userId, id);
-  }
-
-  @Patch(':id/default')
-  @ApiOperation({
-    summary:
-      "Mark a workspace as the current user's default (clears it from any other workspace of theirs)",
-  })
-  setDefault(@CurrentUser('sub') userId: string, @Param('id') id: string) {
-    return this.workspaces.setDefault(userId, id);
   }
 }

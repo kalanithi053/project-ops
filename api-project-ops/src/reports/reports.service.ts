@@ -41,46 +41,70 @@ export class ReportsService {
   async getProjectReport(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
 
-    const [instances, tasks, incidents, members, ticketStatuses] = await Promise.all([
-      this.prisma.moduleInstance.findMany({
-        where: { projectId },
-        include: { module: { select: { name: true } } },
-        orderBy: { createdAt: 'asc' },
-      }),
-      this.prisma.task.findMany({
-        where: { projectId, deletedAt: null },
-        select: {
-          moduleInstanceId: true,
-          assigneeId: true,
-          status: { select: { name: true, category: true, isDefault: true } },
-          priority: { select: { name: true } },
-          estimateHours: true,
-          completedHours: true,
-        },
-      }),
-      this.prisma.incident.findMany({
-        where: { projectId },
-        select: {
-          assigneeId: true,
-          status: { select: { name: true, category: true, isDefault: true } },
-          estimateHours: true,
-          completedHours: true,
-        },
-      }),
-      this.prisma.projectMember.findMany({
-        where: { projectId, status: { not: 'removed' } },
-        include: {
-          user: {
-            select: { id: true, email: true, firstName: true, lastName: true },
+    const [instances, tasks, incidents, members, ticketStatuses] =
+      await Promise.all([
+        this.prisma.moduleInstance.findMany({
+          where: { projectId },
+          include: { module: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.task.findMany({
+          where: {
+            projectId,
+            deletedAt: null,
+            NOT: {
+              status: {
+                is: { name: { equals: 'Removed', mode: 'insensitive' } },
+              },
+            },
           },
-        },
-      }),
-      this.prisma.ticketStatus.findMany({
-        where: { workspaceId },
-        select: { name: true, color: true, order: true },
-        orderBy: { order: 'asc' },
-      }),
-    ]);
+          select: {
+            moduleInstanceId: true,
+            assigneeId: true,
+            status: { select: { name: true, category: true, isDefault: true } },
+            priority: { select: { name: true } },
+            estimateHours: true,
+            completedHours: true,
+          },
+        }),
+        this.prisma.incident.findMany({
+          where: {
+            projectId,
+            NOT: {
+              status: {
+                is: { name: { equals: 'Removed', mode: 'insensitive' } },
+              },
+            },
+          },
+          select: {
+            assigneeId: true,
+            status: { select: { name: true, category: true, isDefault: true } },
+            estimateHours: true,
+            completedHours: true,
+          },
+        }),
+        this.prisma.projectMember.findMany({
+          where: { projectId, status: { not: 'removed' } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
+            },
+          },
+        }),
+        this.prisma.ticketStatus.findMany({
+          where: {
+            workspaceId,
+            NOT: { name: { equals: 'Removed', mode: 'insensitive' } },
+          },
+          select: { name: true, color: true, order: true },
+          orderBy: { order: 'asc' },
+        }),
+      ]);
 
     return {
       modules: this.buildModuleUsage(instances, tasks),
@@ -95,23 +119,39 @@ export class ReportsService {
   async getWorkspaceReport(workspaceId: string) {
     const [tasks, incidents] = await Promise.all([
       this.prisma.task.findMany({
-        where: { deletedAt: null, project: { workspaceId, deletedAt: null } },
+        where: {
+          deletedAt: null,
+          project: { workspaceId, deletedAt: null },
+          NOT: {
+            status: {
+              is: { category: 'removed' },
+            },
+          },
+        },
         select: { status: { select: { name: true, category: true } } },
       }),
       this.prisma.incident.findMany({
-        where: { workspaceId, project: { deletedAt: null } },
+        where: {
+          workspaceId,
+          project: { deletedAt: null },
+          NOT: {
+            status: {
+              is: { category: 'removed' },
+            },
+          },
+        },
         select: { status: { select: { name: true, category: true } } },
       }),
     ]);
 
     const byStatus = new Map<string, number>();
     for (const task of tasks) {
-      const status = task.status?.name ?? 'No status';
+      const status = task?.status?.name ?? 'No status';
       const label = `Task · ${status}`;
       byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
     }
     for (const incident of incidents) {
-      const label = `Incident · ${incident.status?.name ?? 'No status'}`;
+      const label = `Incident · ${incident?.status?.name ?? 'No status'}`;
       byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
     }
 
@@ -120,7 +160,10 @@ export class ReportsService {
       totalIncidents: incidents.length,
       statusBreakdown: [...byStatus.entries()]
         .map(([label, count]) => ({ label, count }))
-        .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label)),
+        .sort(
+          (left, right) =>
+            right.count - left.count || left.label.localeCompare(right.label),
+        ),
     };
   }
 

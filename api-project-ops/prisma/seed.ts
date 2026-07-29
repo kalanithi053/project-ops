@@ -55,6 +55,7 @@ async function main() {
         userId: owner.id,
         roleId: ownerRoleId,
         status: 'active',
+        isDefault: true,
       },
     });
 

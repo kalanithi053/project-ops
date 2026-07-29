@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
   Param,
   Patch,
@@ -92,17 +91,6 @@ export class TasksController {
     @Body() dto: UpdateTaskDto,
   ) {
     return this.tasks.update(ws.workspaceId, projectId, taskId, ws.userId, dto);
-  }
-
-  @Delete(':taskId')
-  @RequirePermission(PERMISSIONS.TASK_DELETE)
-  @ApiOperation({ summary: 'Soft-delete a task' })
-  remove(
-    @CurrentWorkspace() ws: { workspaceId: string; userId: string },
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
-  ) {
-    return this.tasks.remove(ws.workspaceId, projectId, taskId, ws.userId);
   }
 
   @Get(':taskId/activity')

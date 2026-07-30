@@ -5,6 +5,8 @@
  * rest through via an index signature. Tighten as the contract firms up.
  */
 
+import type { ThemeMode } from "@/lib/store/theme-store";
+
 export interface Workspace {
   id: string;
   name: string;
@@ -309,6 +311,7 @@ export interface WorkspaceSettings {
   projectTypes: ProjectType[];
   roles: Role[];
   permissions: Permission[];
+  preferences: WorkspacePreferences;
 }
 
 /** GET /workspace/permission — the caller's own role and permission codes. */
@@ -696,3 +699,94 @@ export interface CreateTaskCommentDto {
 
 /** Full replacement payload for a task comment. */
 export type UpdateTaskCommentDto = CreateTaskCommentDto;
+
+export type TimeLogBillingType = "billable" | "non_billable";
+export type TimeLogSource = "manual" | "timer";
+
+export interface TimeLog {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  workItemId: string;
+  userId: string;
+  /** `YYYY-MM-DD` the entry is logged against. */
+  date: string;
+  /** Full ISO timestamp; null for a duration-only manual entry. */
+  startTime?: string | null;
+  /** Full ISO timestamp; null while a timer-sourced entry is still running. */
+  endTime?: string | null;
+  durationMinutes: number;
+  billingType: TimeLogBillingType;
+  source: TimeLogSource;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  user: TaskCommentUser;
+  /** Present only on project-level (cross-work-item) reads. */
+  workItem?: { id: string; name: string; prefix?: string | null };
+}
+
+/** GET .../time-logs for one work item. */
+export interface WorkItemTimeLogs {
+  entries: TimeLog[];
+  /** The caller's own in-progress timer entry, if any. */
+  runningTimer: TimeLog | null;
+}
+
+/**
+ * POST .../time-logs. Either `durationMinutes` or the `startTime`/`endTime`
+ * pair is required — when both a period and a duration are given, the
+ * server derives the duration from the period instead of trusting the
+ * client's number.
+ */
+export interface CreateTimeLogDto {
+  date: string;
+  durationMinutes?: number;
+  startTime?: string;
+  endTime?: string;
+  billingType?: TimeLogBillingType;
+  notes?: string;
+}
+
+export type UpdateTimeLogDto = Partial<CreateTimeLogDto>;
+
+/** Query filters for the project-level Time Logs tab. */
+export interface TimeLogFilters {
+  startDate?: string;
+  endDate?: string;
+  userId?: string;
+}
+
+/** POST .../time-logs/timer/stop */
+export interface StopTimerDto {
+  notes?: string;
+}
+
+export type TimeLogPastLimitUnit = "day" | "week" | "month";
+
+/** Workspace-wide time-log restrictions, part of the settings bundle. */
+export interface WorkspacePreferences {
+  allowManualTimeLog: boolean;
+  allowPastTimeLog: boolean;
+  /** Null means unlimited (only meaningful while allowPastTimeLog is true). */
+  pastTimeLogLimitValue: number | null;
+  pastTimeLogLimitUnit: TimeLogPastLimitUnit;
+}
+
+/** PATCH /workspace/settings/preferences */
+export type UpdateWorkspacePreferencesDto = Partial<WorkspacePreferences>;
+
+/** GET /workspace-members/me — the caller's own membership row for this workspace. */
+export interface MyWorkspaceMembership {
+  id: string;
+  roleId: string;
+  status: MembershipStatus;
+  isDefault: boolean;
+  /** The member's own display-theme preference. Self-service, unrestricted by role. */
+  theme: ThemeMode;
+}
+
+/** PATCH /workspace-members/me/theme */
+export interface UpdateMyThemeDto {
+  theme: ThemeMode;
+}

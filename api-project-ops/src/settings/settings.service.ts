@@ -6,7 +6,12 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import {
+  resolveTimeLogPreferences,
+  TimeLogPreferences,
+} from '../common/constants/time-log-preferences';
 import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
+import { UpdateWorkspacePreferencesDto } from './dto/update-workspace-preferences.dto';
 
 /**
  * Aggregates all workspace configuration into one payload the frontend can use
@@ -68,6 +73,18 @@ export class SettingsService {
     }
   }
 
+  async updatePreferences(
+    workspaceId: string,
+    dto: UpdateWorkspacePreferencesDto,
+  ): Promise<TimeLogPreferences> {
+    const row = await this.prisma.workspacePreference.upsert({
+      where: { workspaceId },
+      create: { workspaceId, ...dto },
+      update: dto,
+    });
+    return resolveTimeLogPreferences(row);
+  }
+
   async getSettings(workspaceId: string) {
     const [
       workspace,
@@ -77,6 +94,7 @@ export class SettingsService {
       projectTypes,
       roles,
       permissions,
+      preference,
     ] = await Promise.all([
       this.prisma.workspace.findUnique({
         where: { id: workspaceId },
@@ -135,6 +153,7 @@ export class SettingsService {
         orderBy: { code: 'asc' },
         select: { id: true, code: true, description: true },
       }),
+      this.prisma.workspacePreference.findUnique({ where: { workspaceId } }),
     ]);
 
     if (!workspace) {
@@ -156,6 +175,7 @@ export class SettingsService {
         permissions: r.rolePermissions.map((rp) => rp.permission.code).sort(),
       })),
       permissions,
+      preferences: resolveTimeLogPreferences(preference),
     };
   }
 }

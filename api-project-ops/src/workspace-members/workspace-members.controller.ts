@@ -15,6 +15,7 @@ import { RequirePermission } from '../common/decorators/require-permission.decor
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
+import { UpdateMyThemeDto } from './dto/update-my-theme.dto';
 import { WorkspaceMembersService } from './workspace-members.service';
 
 @ApiTags('workspace-members')
@@ -28,6 +29,26 @@ export class WorkspaceMembersController {
   @ApiOperation({ summary: 'List workspace members' })
   list(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.members.list(workspaceId);
+  }
+
+  @Get('me')
+  @UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+  @ApiOperation({ summary: "Get the caller's own membership (role, status, theme)" })
+  getOwn(@CurrentWorkspace('membershipId') membershipId: string) {
+    return this.members.getOwn(membershipId);
+  }
+
+  @Patch('me/theme')
+  @UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+  @ApiOperation({
+    summary:
+      "Set the caller's own display-theme preference for this workspace — any active member, not gated by role",
+  })
+  updateOwnTheme(
+    @CurrentWorkspace('membershipId') membershipId: string,
+    @Body() dto: UpdateMyThemeDto,
+  ) {
+    return this.members.updateTheme(membershipId, dto.theme);
   }
 
   @Patch(':memberId')

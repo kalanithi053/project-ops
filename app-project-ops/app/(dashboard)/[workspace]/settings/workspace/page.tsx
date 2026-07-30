@@ -9,6 +9,7 @@ import {
   SettingsFormCard,
   SettingsSection,
 } from "@/components/settings/settings-section";
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton } from "@/components/shared/skeletons";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import {
   useUpdateWorkspace,
   useWorkspaceSettings,
 } from "@/lib/api/hooks/use-settings";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { WorkspaceSettings } from "@/lib/api/types";
 
@@ -36,8 +38,20 @@ export default function WorkspaceSettingsPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const settings = useWorkspaceSettings(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const saved = settings.data?.workspace;
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Workspace"
+        description="Update your workspace identity and URL."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
 
   return (
     <SettingsSection

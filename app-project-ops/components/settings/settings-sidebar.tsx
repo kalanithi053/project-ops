@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 
 /**
  * Settings sub-navigation rail.
@@ -13,10 +14,19 @@ import { SETTINGS_NAV } from "@/components/settings/settings-nav";
  * scrollable strip so all seven sections stay reachable without a second
  * disclosure layer. Active detection matches the section prefix so nested
  * routes (a plan's module editor, say) keep their parent highlighted.
+ *
+ * `ownerOnly` items are hidden until we've resolved that the viewer *is* the
+ * owner — never shown-then-yanked for a non-owner, and briefly absent for
+ * the owner while resolving instead.
  */
 export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
   const pathname = usePathname();
   const base = `/${workspaceSlug}/settings`;
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspaceSlug);
+
+  const visibleNav = SETTINGS_NAV.filter(
+    (item) => !item.ownerOnly || (isResolved && isOwner),
+  );
 
   return (
     <nav
@@ -27,7 +37,7 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
         "md:sticky md:top-20 md:self-start",
       )}
     >
-      {SETTINGS_NAV.map((item) => {
+      {visibleNav.map((item) => {
         const href = `${base}/${item.segment}`;
         const isActive = pathname === href || pathname.startsWith(`${href}/`);
 

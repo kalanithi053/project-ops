@@ -84,6 +84,7 @@ model User {
   assignedWorkItems   WorkItem[]        @relation("WorkItemAssignee")
   qaAssignedWorkItems WorkItem[]        @relation("WorkItemQaAssignee")
   createdWorkItems    WorkItem[]        @relation("WorkItemCreator")
+  timeLogs            TimeLog[]
 
   @@map("user")
 }
@@ -127,6 +128,8 @@ model Workspace {
   projectTypes   ProjectType[]
   comments       Comment[]
   activityLogs   ActivityLog[]
+  timeLogs       TimeLog[]
+  preference     WorkspacePreference?
 
   @@index([ownerId])
   @@map("workspace")
@@ -139,6 +142,9 @@ model WorkspaceMember {
   roleId      String           @map("role_id")
   status      MembershipStatus @default(active)
   isDefault   Boolean          @default(false) @map("is_default")
+  // The member's own display-theme preference for this workspace. Self-service
+  // only — any active member may read/set their own, unrestricted by role.
+  theme       ThemeMode        @default(system)
   joinedAt    DateTime         @default(now()) @map("joined_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -149,6 +155,14 @@ model WorkspaceMember {
   @@index([userId])
   @@index([workspaceId])
   @@map("workspace_member")
+}
+
+enum ThemeMode {
+  light
+  dark
+  system
+
+  @@map("theme_mode")
 }
 
 // ---------------------------------------------------------------------------
@@ -246,6 +260,7 @@ model Project {
   members         ProjectMember[]
   moduleInstances ModuleInstance[]
   workItems       WorkItem[]
+  timeLogs        TimeLog[]
 
   @@index([workspaceId])
   @@index([ownerId])
@@ -373,6 +388,7 @@ model WorkItem {
   qaAssignee     User?           @relation("WorkItemQaAssignee", fields: [qaAssigneeId], references: [id])
   creator        User            @relation("WorkItemCreator", fields: [createdBy], references: [id])
   comments       Comment[]
+  timeLogs       TimeLog[]
 
   @@index([projectId])
   @@index([moduleInstanceId])
@@ -508,4 +524,84 @@ model ActivityLog {
   @@index([workspaceId])
   @@index([entityType, entityId])
   @@map("activity_log")
+}
+
+// ---------------------------------------------------------------------------
+// Time logs (manual entries or timer sessions against a work item)
+// ---------------------------------------------------------------------------
+
+enum TimeLogBillingType {
+  billable
+  non_billable
+
+  @@map("time_log_billing_type")
+}
+
+enum TimeLogSource {
+  manual
+  timer
+
+  @@map("time_log_source")
+}
+
+model TimeLog {
+  id              String             @id @default(uuid())
+  workspaceId     String             @map("workspace_id")
+  projectId       String             @map("project_id")
+  workItemId      String             @map("work_item_id")
+  userId          String             @map("user_id")
+  date            DateTime           @map("log_date") @db.Date
+  startTime       DateTime?          @map("start_time")
+  // Null while a timer-sourced entry is still running.
+  endTime         DateTime?          @map("end_time")
+  durationMinutes Int                @map("duration_minutes")
+  billingType     TimeLogBillingType @default(billable) @map("billing_type")
+  source          TimeLogSource      @default(manual)
+  notes           String?
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workItem  WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@index([workItemId])
+  @@index([userId])
+  @@map("time_log")
+}
+
+// ---------------------------------------------------------------------------
+// Workspace preferences (currently: time-log restrictions). One row per
+// workspace, created lazily on first save — a missing row means defaults.
+// ---------------------------------------------------------------------------
+
+enum TimeLogPastLimitUnit {
+  day
+  week
+  month
+
+  @@map("time_log_past_limit_unit")
+}
+
+model WorkspacePreference {
+  id                    String               @id @default(uuid())
+  workspaceId           String               @unique @map("workspace_id")
+  // Whether members can add manual (non-timer) time log entries at all.
+  allowManualTimeLog    Boolean              @default(true) @map("allow_manual_time_log")
+  // Whether a log entry may be dated before today. Off by default: until an
+  // admin opts in, members can only log time against today's date.
+  allowPastTimeLog      Boolean              @default(false) @map("allow_past_time_log")
+  // How far back a past-dated entry may go, in `pastTimeLogLimitUnit` units.
+  // Null means unlimited (only meaningful while allowPastTimeLog is true).
+  pastTimeLogLimitValue Int?                 @map("past_time_log_limit_value")
+  pastTimeLogLimitUnit  TimeLogPastLimitUnit @default(day) @map("past_time_log_limit_unit")
+  createdAt             DateTime             @default(now()) @map("created_at")
+  updatedAt             DateTime             @updatedAt @map("updated_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@map("workspace_preference")
 }

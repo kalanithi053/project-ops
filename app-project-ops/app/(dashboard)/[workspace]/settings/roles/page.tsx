@@ -10,11 +10,13 @@ import { Card } from "@/components/ui/card";
 import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton } from "@/components/shared/skeletons";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { SettingsSection } from "@/components/settings/settings-section";
 import { RolePanel } from "@/components/settings/role-panel";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useDeleteRole } from "@/lib/api/hooks/use-roles";
 import { useMyPermissions, usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { Role } from "@/lib/api/types";
 
@@ -24,6 +26,7 @@ export default function RolesPage() {
   const { data: mine } = useMyPermissions(workspace);
   const remove = useDeleteRole(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const canManage = can(PERMISSIONS.ROLE_MANAGE);
   const roles = settings.data?.roles ?? [];
@@ -39,6 +42,17 @@ export default function RolesPage() {
       Add New Role
     </Button>
   ) : null;
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Role"
+        description="Define access levels and permissions for members."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
 
   return (
     <SettingsSection

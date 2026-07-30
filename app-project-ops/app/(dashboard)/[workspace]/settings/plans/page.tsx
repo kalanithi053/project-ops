@@ -24,6 +24,7 @@ import {
   type SelectOption,
 } from "@/components/shared/select-field";
 import { CardsSkeleton } from "@/components/shared/skeletons";
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -35,6 +36,7 @@ import {
   useUpdatePlan,
 } from "@/lib/api/hooks/use-plans";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { PlanWithModules, ProjectType } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -44,6 +46,7 @@ export default function PlansPage() {
   const settings = useWorkspaceSettings(workspace);
   const activate = useActivatePlan(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const canManage = can(PERMISSIONS.PLAN_MANAGE);
   // Memoized so the `?? []` fallbacks keep a stable identity across renders
@@ -95,6 +98,18 @@ export default function PlansPage() {
   React.useEffect(() => {
     setProjectTypeId(typeOptions[0]?.value);
   }, [typeOptions]);
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Plans"
+        description="Plan tiers per project type, and the modules each one provisions."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
+
   return (
     <SettingsSection
       title="Plans"

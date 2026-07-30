@@ -22,6 +22,33 @@ export function todayDateInput(now = new Date()): string {
 }
 
 /**
+ * Earliest date a member may log time against, given the workspace's
+ * time-log preferences — as the value expected by an HTML date input, or
+ * `undefined` when there's no lower bound. Mirrors the backend's
+ * `assertLogDateAllowed` (see api-project-ops time-logs.service.ts).
+ */
+export function minLoggableDate(preferences?: {
+  allowPastTimeLog: boolean;
+  pastTimeLogLimitValue: number | null;
+  pastTimeLogLimitUnit: "day" | "week" | "month";
+}): string | undefined {
+  if (!preferences) return undefined;
+  if (!preferences.allowPastTimeLog) return todayDateInput();
+  if (!preferences.pastTimeLogLimitValue) return undefined;
+
+  const cutoff = new Date();
+  const value = preferences.pastTimeLogLimitValue;
+  if (preferences.pastTimeLogLimitUnit === "week") {
+    cutoff.setDate(cutoff.getDate() - value * 7);
+  } else if (preferences.pastTimeLogLimitUnit === "month") {
+    cutoff.setMonth(cutoff.getMonth() - value);
+  } else {
+    cutoff.setDate(cutoff.getDate() - value);
+  }
+  return todayDateInput(cutoff);
+}
+
+/**
  * Format a date string as "18 July 2026".
  *
  * Parses the calendar parts directly (from a `YYYY-MM-DD` or ISO string)
@@ -52,6 +79,25 @@ export function formatDate(value?: string | null, fallback = "—"): string {
   }
 
   return value;
+}
+
+/** Minutes as "1h 30m" (or just "2h" / "45m" when one part is zero). */
+export function formatDurationMinutes(minutes: number): string {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours && mins) return `${hours}h ${mins}m`;
+  if (hours) return `${hours}h`;
+  return `${mins}m`;
+}
+
+/** A full ISO timestamp as local "09:30". */
+export function formatTimeOfDay(value?: string | null, fallback = "—"): string {
+  if (!value) return fallback;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${hours}:${minutes}`;
 }
 
 export function formatDateTime(value?: string | null, fallback = "—"): string {

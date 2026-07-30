@@ -29,12 +29,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import { TimeLogPanel } from "@/components/projects/time-log-panel";
+import { TimeLogTimerButton } from "@/components/projects/time-log-timer-button";
 import {
   useCreateIncident,
   useUpdateIncident,
 } from "@/lib/api/hooks/use-incidents";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
+import { useMe } from "@/lib/api/hooks/use-users";
 import type { Incident, TicketStatus } from "@/lib/api/types";
 import { getFullname } from "@/lib/utils";
 
@@ -61,6 +64,7 @@ export function IncidentEditor({
   const router = useRouter();
   const create = useCreateIncident(workspaceSlug, projectId);
   const update = useUpdateIncident(workspaceSlug, projectId);
+  const { data: me } = useMe();
   const { data: members } = useWorkspaceMembers(workspaceSlug);
   const { data: ticketStatuses } = useTicketStatuses(workspaceSlug);
   const isEdit = Boolean(incident);
@@ -83,8 +87,11 @@ export function IncidentEditor({
   const [statusId, setStatusId] = React.useState(incident?.statusId ?? "");
   const [error, setError] = React.useState<string | null>(null);
   const savedTitle = React.useRef(incident?.title ?? "");
-  const [activeTab, setActiveTab] = React.useState<"details" | "activity">(
-    "details",
+  const [activeTab, setActiveTab] = React.useState<
+    "details" | "activity" | "timeLogs"
+  >("details");
+  const canLogTime = Boolean(
+    incident && me?.id && me.id === incident.assigneeId,
   );
 
   const assigneeOptions = React.useMemo(
@@ -219,6 +226,13 @@ export function IncidentEditor({
                 >
                   Cancel
                 </Button>
+                {canLogTime && incident && (
+                  <TimeLogTimerButton
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    workItemId={incident.id}
+                  />
+                )}
                 <Button type="submit" disabled={pending}>
                   {pending ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -342,6 +356,21 @@ export function IncidentEditor({
                 Activity
               </button>
             )}
+            {incident && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "timeLogs"}
+                onClick={() => setActiveTab("timeLogs")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "timeLogs"
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Time Logs
+              </button>
+            )}
           </div>
         </CardHeader>
 
@@ -427,11 +456,18 @@ export function IncidentEditor({
                 </p>
               )}
             </>
-          ) : incident ? (
+          ) : activeTab === "activity" && incident ? (
             <IncidentActivity
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               incidentId={incident.id}
+            />
+          ) : activeTab === "timeLogs" && incident ? (
+            <TimeLogPanel
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              workItemId={incident.id}
+              canLog={canLogTime}
             />
           ) : null}
         </CardContent>

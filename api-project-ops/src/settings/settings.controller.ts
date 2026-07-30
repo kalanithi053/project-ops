@@ -7,6 +7,7 @@ import { RequirePermission } from '../common/decorators/require-permission.decor
 import { PERMISSIONS } from '../common/constants/permissions';
 import { SettingsService } from './settings.service';
 import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
+import { UpdateWorkspacePreferencesDto } from './dto/update-workspace-preferences.dto';
 
 @ApiTags('settings')
 @ApiBearerAuth()
@@ -32,5 +33,15 @@ export class SettingsController {
     @Body() dto: UpdateWorkspaceSettingsDto,
   ) {
     return this.settings.updateWorkspace(workspaceId, dto);
+  }
+
+  @Patch('preferences')
+  @RequirePermission(PERMISSIONS.WORKSPACE_MANAGE)
+  @ApiOperation({ summary: 'Update the workspace time-log restrictions' })
+  updatePreferences(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Body() dto: UpdateWorkspacePreferencesDto,
+  ) {
+    return this.settings.updatePreferences(workspaceId, dto);
   }
 }

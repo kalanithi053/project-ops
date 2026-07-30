@@ -27,6 +27,9 @@ export const PERMISSIONS = {
   PLAN_MANAGE: 'plan.manage',
   PERMISSION_READ: 'permission.read',
   WORKSPACE_MANAGE: 'workspace.manage',
+
+  TIMELOG_READ: 'timelog.read',
+  TIMELOG_MANAGE: 'timelog.manage',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -73,6 +76,11 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     code: PERMISSIONS.WORKSPACE_MANAGE,
     description: 'Manage workspace settings',
   },
+  { code: PERMISSIONS.TIMELOG_READ, description: 'View time logs' },
+  {
+    code: PERMISSIONS.TIMELOG_MANAGE,
+    description: 'Log time (manual or timer) and edit/delete your own entries',
+  },
 ] as const;
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_CATALOG.map(
@@ -118,6 +126,8 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.WORKTYPE_MANAGE,
       PERMISSIONS.PROJECTTYPE_MANAGE,
       PERMISSIONS.PERMISSION_READ,
+      PERMISSIONS.TIMELOG_READ,
+      PERMISSIONS.TIMELOG_MANAGE,
     ],
   },
   {
@@ -131,13 +141,19 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.WORKITEM_UPDATE,
       PERMISSIONS.WORKITEM_DELETE,
       PERMISSIONS.COMMENT_CREATE,
+      PERMISSIONS.TIMELOG_READ,
+      PERMISSIONS.TIMELOG_MANAGE,
     ],
   },
   {
     name: 'Viewer',
     isDefault: false,
     isSystem: false,
-    permissions: [PERMISSIONS.PROJECT_READ, PERMISSIONS.WORKITEM_READ],
+    permissions: [
+      PERMISSIONS.PROJECT_READ,
+      PERMISSIONS.WORKITEM_READ,
+      PERMISSIONS.TIMELOG_READ,
+    ],
   },
   {
     // External customer role: can follow the work and comment on it.

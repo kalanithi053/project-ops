@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ThemeMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
@@ -92,6 +93,33 @@ export class WorkspaceMembersService {
       data: { status: 'removed' },
     });
     return { id: memberId, removed: true };
+  }
+
+  /** The caller's own membership row — role, status and their theme preference. */
+  async getOwn(membershipId: string) {
+    return this.prisma.workspaceMember.findUniqueOrThrow({
+      where: { id: membershipId },
+      select: {
+        id: true,
+        roleId: true,
+        status: true,
+        isDefault: true,
+        theme: true,
+      },
+    });
+  }
+
+  /**
+   * Sets the caller's own display-theme preference for this workspace.
+   * Self-service — unrestricted by role, since it only ever touches the
+   * caller's own row.
+   */
+  async updateTheme(membershipId: string, theme: ThemeMode) {
+    return this.prisma.workspaceMember.update({
+      where: { id: membershipId },
+      data: { theme },
+      select: { id: true, theme: true },
+    });
   }
 
   // --- helpers ---

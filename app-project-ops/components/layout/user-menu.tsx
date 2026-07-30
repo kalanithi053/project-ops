@@ -90,11 +90,11 @@ export function UserMenu({ user }: { user: AuthUser }) {
           </span>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onSelect={() => goTo("/preferences")}>
+        <DropdownMenuItem onSelect={() => goTo("/settings/account")}>
           <User className="h-4 w-4" />
           Profile
         </DropdownMenuItem>
-        <DropdownMenuItem onSelect={() => goTo("/preferences")}>
+        <DropdownMenuItem onSelect={() => goTo("/settings/preferences")}>
           <SlidersHorizontal className="h-4 w-4" />
           Preferences
         </DropdownMenuItem>

@@ -4,6 +4,7 @@ import { ListChecks, Loader2, Plus } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import {
   SettingsField,
   SettingsSection,
@@ -28,6 +29,7 @@ import {
   useDeleteTicketStatus,
   useUpdateTicketStatus,
 } from "@/lib/api/hooks/use-ticket-statuses";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import {
   STATUS_CATEGORIES,
@@ -46,6 +48,7 @@ export default function TicketStatusesPage() {
   const settings = useWorkspaceSettings(workspace);
   const remove = useDeleteTicketStatus(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const canManage = can(PERMISSIONS.TICKETSTATUS_MANAGE);
   const statuses = settings.data?.ticketStatuses ?? [];
@@ -60,6 +63,17 @@ export default function TicketStatusesPage() {
       Add Status
     </Button>
   ) : null;
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Ticket Status"
+        description="Manage the workflow states for your tasks."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
 
   return (
     <SettingsSection

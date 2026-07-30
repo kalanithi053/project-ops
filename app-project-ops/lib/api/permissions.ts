@@ -24,6 +24,8 @@ export const PERMISSIONS = {
   PLAN_MANAGE: "plan.manage",
   PERMISSION_READ: "permission.read",
   WORKSPACE_MANAGE: "workspace.manage",
+  TIMELOG_READ: "timelog.read",
+  TIMELOG_MANAGE: "timelog.manage",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

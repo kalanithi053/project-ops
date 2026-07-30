@@ -31,6 +31,9 @@ describe('SettingsService', () => {
     userPermission: {
       findMany: jest.fn(),
     },
+    workspacePreference: {
+      findUnique: jest.fn(),
+    },
   };
 
   const workspace = {
@@ -95,6 +98,7 @@ describe('SettingsService', () => {
       mockPrismaService.projectType.findMany.mockResolvedValue(projectTypes);
       mockPrismaService.userRole.findMany.mockResolvedValue(roles);
       mockPrismaService.userPermission.findMany.mockResolvedValue(permissions);
+      mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);
 
       const result = await service.getSettings(workspaceId);
 
@@ -126,6 +130,12 @@ describe('SettingsService', () => {
           },
         ],
         permissions,
+        preferences: {
+          allowManualTimeLog: true,
+          allowPastTimeLog: false,
+          pastTimeLogLimitValue: null,
+          pastTimeLogLimitUnit: 'day',
+        },
       });
     });
 
@@ -139,6 +149,7 @@ describe('SettingsService', () => {
       mockPrismaService.projectType.findMany.mockResolvedValue([]);
       mockPrismaService.userRole.findMany.mockResolvedValue([]);
       mockPrismaService.userPermission.findMany.mockResolvedValue([]);
+      mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);
 
       const result = await service.getSettings(workspaceId);
 
@@ -153,6 +164,7 @@ describe('SettingsService', () => {
       mockPrismaService.projectType.findMany.mockResolvedValue([]);
       mockPrismaService.userRole.findMany.mockResolvedValue([]);
       mockPrismaService.userPermission.findMany.mockResolvedValue([]);
+      mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);
 
       await expect(service.getSettings(workspaceId)).rejects.toThrow(
         NotFoundException,

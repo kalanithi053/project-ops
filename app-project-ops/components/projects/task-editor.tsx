@@ -33,6 +33,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
+import { TimeLogPanel } from "@/components/projects/time-log-panel";
+import { TimeLogTimerButton } from "@/components/projects/time-log-timer-button";
 import { usePriorities } from "@/lib/api/hooks/use-priorities";
 import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
 import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
@@ -41,6 +43,7 @@ import {
   useUpdateTask,
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
+import { useMe } from "@/lib/api/hooks/use-users";
 import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
 import type { CreateTaskDto, Task, UpdateMeDto } from "@/lib/api/types";
 import { todayDateInput } from "@/lib/format";
@@ -94,6 +97,7 @@ export function TaskEditor({
   const create = useCreateTask(workspaceSlug, projectId);
   const update = useUpdateTask(workspaceSlug, projectId);
   const { data: workTypes } = useWorkTypes(workspaceSlug);
+  const { data: me } = useMe();
 
   const { data: modules } = useProjectModules(workspaceSlug, projectId);
   const { data: project } = useProject(workspaceSlug, projectId);
@@ -146,9 +150,10 @@ export function TaskEditor({
   );
   const [dueDate, setDueDate] = React.useState(toDateInput(task?.dueDate));
   const [error, setError] = React.useState<string | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"details" | "activity">(
-    "details",
-  );
+  const [activeTab, setActiveTab] = React.useState<
+    "details" | "activity" | "timeLogs"
+  >("details");
+  const canLogTime = Boolean(task && me?.id && me.id === task.assigneeId);
 
   const moduleOptions: SelectOption[] = (modules ?? []).map((instance) => ({
     label: instance.module.name,
@@ -303,6 +308,13 @@ export function TaskEditor({
                 >
                   Back to work items
                 </Button>
+                {canLogTime && task && (
+                  <TimeLogTimerButton
+                    workspaceSlug={workspaceSlug}
+                    projectId={projectId}
+                    workItemId={task.id}
+                  />
+                )}
                 {canSave && (
                   <Button type="submit" disabled={pending}>
                     {pending ? (
@@ -487,6 +499,21 @@ export function TaskEditor({
                 Activity
               </button>
             )}
+            {task && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "timeLogs"}
+                onClick={() => setActiveTab("timeLogs")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "timeLogs"
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Time Logs
+              </button>
+            )}
           </div>
         </CardHeader>
 
@@ -621,11 +648,18 @@ export function TaskEditor({
                 </p>
               )}
             </>
-          ) : task ? (
+          ) : activeTab === "activity" && task ? (
             <TaskActivity
               workspaceSlug={workspaceSlug}
               projectId={projectId}
               taskId={task.id}
+            />
+          ) : activeTab === "timeLogs" && task ? (
+            <TimeLogPanel
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              workItemId={task.id}
+              canLog={canLogTime}
             />
           ) : null}
         </CardContent>

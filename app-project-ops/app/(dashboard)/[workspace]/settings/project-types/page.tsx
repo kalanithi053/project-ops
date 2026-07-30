@@ -16,6 +16,7 @@ import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton } from "@/components/shared/skeletons";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { SettingsField, SettingsSection } from "@/components/settings/settings-section";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import {
@@ -24,6 +25,7 @@ import {
   useUpdateProjectType,
 } from "@/lib/api/hooks/use-project-types";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { ProjectType } from "@/lib/api/types";
 
@@ -32,6 +34,7 @@ export default function ProjectTypesPage() {
   const settings = useWorkspaceSettings(workspace);
   const remove = useDeleteProjectType(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const canManage = can(PERMISSIONS.PROJECTTYPE_MANAGE);
   const projectTypes = settings.data?.projectTypes ?? [];
@@ -46,6 +49,17 @@ export default function ProjectTypesPage() {
       Add New Project Type
     </Button>
   ) : null;
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Project Type"
+        description="Configure plans and modules per project category."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
 
   return (
     <SettingsSection

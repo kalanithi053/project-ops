@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 const TABS = [
   { segment: "", label: "Dashboard" },
   { segment: "work-items", label: "Work items" },
+  { segment: "time-logs", label: "Time Logs" },
   { segment: "users", label: "Users" },
   // { segment: "files", label: "Files" },
 ];

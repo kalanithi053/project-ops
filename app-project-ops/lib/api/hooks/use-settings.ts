@@ -6,8 +6,10 @@ import { apiFetch } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { toast } from "@/lib/toast/toast-store";
 import type {
+  UpdateWorkspacePreferencesDto,
   UpdateWorkspaceSettingsDto,
   Workspace,
+  WorkspacePreferences,
   WorkspaceSettings,
 } from "@/lib/api/types";
 
@@ -69,6 +71,29 @@ export function useUpdateWorkspace(workspaceSlug: string) {
       // The workspace switcher and any slug-keyed list need to see the rename.
       queryClient.invalidateQueries({ queryKey: ["workspaces"] });
       toast.success("Workspace updated", workspace?.name);
+    },
+  });
+}
+
+/**
+ * PATCH /workspace/settings/preferences — the workspace's time-log
+ * restrictions (manual entries on/off, past-date logging window).
+ * Requires `workspace.manage`.
+ */
+export function useUpdateWorkspacePreferences(workspaceSlug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UpdateWorkspacePreferencesDto) =>
+      apiFetch<WorkspacePreferences>("/workspace/settings/preferences", {
+        method: "PATCH",
+        body: dto,
+        workspaceSlug,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: workspaceSettingsKey(workspaceSlug),
+      });
+      toast.success("Preferences updated");
     },
   });
 }

@@ -12,6 +12,7 @@ import { QueryState } from "@/components/shared/query-state";
 import { TableSkeleton } from "@/components/shared/skeletons";
 import { ColorPicker, isValidHex } from "@/components/shared/color-picker";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
+import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { SettingsField, SettingsSection } from "@/components/settings/settings-section";
 import { TaxonomyTable } from "@/components/settings/taxonomy-table";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
@@ -21,6 +22,7 @@ import {
   useUpdatePriority,
 } from "@/lib/api/hooks/use-priorities";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { Priority } from "@/lib/api/types";
 
@@ -29,6 +31,7 @@ export default function PrioritiesPage() {
   const settings = useWorkspaceSettings(workspace);
   const remove = useDeletePriority(workspace);
   const { can } = usePermissions(workspace);
+  const { isOwner, isResolved } = useIsWorkspaceOwner(workspace);
 
   const canManage = can(PERMISSIONS.PRIORITY_MANAGE);
   const priorities = settings.data?.priorities ?? [];
@@ -43,6 +46,17 @@ export default function PrioritiesPage() {
       Add Priority
     </Button>
   ) : null;
+
+  if (isResolved && !isOwner) {
+    return (
+      <SettingsSection
+        title="Priorities"
+        description="Define the urgency scale available on tasks."
+      >
+        <OwnerOnlyNotice />
+      </SettingsSection>
+    );
+  }
 
   return (
     <SettingsSection

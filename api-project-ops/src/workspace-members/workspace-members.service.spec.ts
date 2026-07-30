@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
+import { ThemeMode } from '@prisma/client';
 import { WorkspaceMembersService } from './workspace-members.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
@@ -15,6 +16,7 @@ describe('WorkspaceMembersService', () => {
     workspaceMember: {
       findMany: jest.Mock;
       findUnique: jest.Mock;
+      findUniqueOrThrow: jest.Mock;
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
@@ -31,6 +33,7 @@ describe('WorkspaceMembersService', () => {
       workspaceMember: {
         findMany: jest.fn(),
         findUnique: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -377,6 +380,49 @@ describe('WorkspaceMembersService', () => {
         isDefault: true,
         workspace: { id: 'ws-1', name: 'Acme Inc' },
       });
+    });
+  });
+
+  describe('getOwn', () => {
+    it("returns the caller's own membership row", async () => {
+      const own = {
+        id: 'member-1',
+        roleId: 'role-1',
+        status: 'active',
+        isDefault: true,
+        theme: 'dark',
+      };
+      prisma.workspaceMember.findUniqueOrThrow.mockResolvedValue(own);
+
+      const result = await service.getOwn('member-1');
+
+      expect(prisma.workspaceMember.findUniqueOrThrow).toHaveBeenCalledWith({
+        where: { id: 'member-1' },
+        select: {
+          id: true,
+          roleId: true,
+          status: true,
+          isDefault: true,
+          theme: true,
+        },
+      });
+      expect(result).toEqual(own);
+    });
+  });
+
+  describe('updateTheme', () => {
+    it("updates the caller's own theme preference", async () => {
+      const updated = { id: 'member-1', theme: 'dark' };
+      prisma.workspaceMember.update.mockResolvedValue(updated);
+
+      const result = await service.updateTheme('member-1', ThemeMode.dark);
+
+      expect(prisma.workspaceMember.update).toHaveBeenCalledWith({
+        where: { id: 'member-1' },
+        data: { theme: 'dark' },
+        select: { id: true, theme: true },
+      });
+      expect(result).toEqual(updated);
     });
   });
 });

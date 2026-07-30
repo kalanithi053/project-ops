@@ -40,7 +40,7 @@ export class PlansService {
       if (dto.isActive) {
         await tx.plan.updateMany({
           where: { workspaceId, isActive: true },
-          data: { isActive: true },
+          data: { isActive: false },
         });
       }
       const plan = await tx.plan.create({

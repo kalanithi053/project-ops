@@ -8,6 +8,7 @@ import {
   DEFAULT_PRIORITIES,
   DEFAULT_PROJECT_TYPES,
   DEFAULT_TICKET_STATUSES,
+  DEFAULT_WORK_TYPES,
   PLAN_TEMPLATES,
 } from '../common/constants/workspace-defaults';
 
@@ -20,7 +21,8 @@ export interface ProvisionedDefaults {
 /**
  * Seeds a brand-new workspace with its default permission catalog, roles
  * (Owner/Admin/Member/Viewer) + role-permission assignments, modules, ticket
- * statuses and a Free plan. Must run inside a transaction (`tx`).
+ * statuses, priorities, work types and a Free plan. Must run inside a
+ * transaction (`tx`).
  *
  * Shared by WorkspacesService.create() and the seed script so both stay in sync.
  */
@@ -150,6 +152,17 @@ export async function provisionWorkspaceDefaults(
       color: p.color,
       order: p.order,
       isDefault: p.isDefault,
+    })),
+    skipDuplicates: true,
+  });
+
+  // 8. Work types
+  await tx.workType.createMany({
+    data: DEFAULT_WORK_TYPES.map((w) => ({
+      workspaceId,
+      name: w.name,
+      color: w.color,
+      category: w.category,
     })),
     skipDuplicates: true,
   });

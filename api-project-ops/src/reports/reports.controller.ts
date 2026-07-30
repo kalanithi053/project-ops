@@ -18,7 +18,7 @@ export class ReportsController {
   @RequirePermission(PERMISSIONS.PROJECT_READ)
   @ApiOperation({
     summary:
-      'Project report: per-module task usage, blocked/done/review counts, priority x status matrix, overall progress',
+      'Project report: per-module work item usage, status/priority matrices, work type breakdown, overall progress',
   })
   get(
     @CurrentWorkspace('workspaceId') workspaceId: string,
@@ -37,7 +37,7 @@ export class WorkspaceReportsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.PROJECT_READ)
-  @ApiOperation({ summary: 'Workspace-wide task and incident status breakdown' })
+  @ApiOperation({ summary: 'Workspace-wide work item type and status breakdown' })
   getWorkspaceReport(
     @CurrentWorkspace('workspaceId') workspaceId: string,
   ) {

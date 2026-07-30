@@ -17,8 +17,8 @@ export default function ProjectWorkItemsPage() {
     <TaskWorkItems
       workspaceSlug={workspace}
       projectId={projectId}
-      canCreate={can(PERMISSIONS.TASK_CREATE)}
-      canCreateIncident={can(PERMISSIONS.INCIDENT_CREATE)}
+      canCreate={can(PERMISSIONS.WORKITEM_CREATE)}
+      canUpdate={can(PERMISSIONS.WORKITEM_UPDATE)}
     />
   );
 }

@@ -10,13 +10,13 @@
 ```bash
 BASE="http://localhost:3000/api/v1"
 TOKEN="<accessToken>"
-WORKSPACE_SLUG="amwhizcom"
+WORKSPACE_SLUG="demo.workspace"
 ```
 
 Workspace-scoped routes return **400** if `x-workspace-slug` is missing, **404** if
 the slug is unknown, and **403** if you are not an active member.
 
-Seed data (dev): user **`demo.owner@amwhiz.com`**, workspace **`amwhizcom`**, OTP **`123456`**.
+Seed data (dev): user **`demo.workspace@projectops.com`**, workspace **`demo.workspace`**, OTP **`123456`**.
 
 ---
 
@@ -153,14 +153,14 @@ curl -s -X POST "$BASE/roles" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Project Lead","isDefault":false,"permissionCodes":["project.create","task.create"]}'
+  -d '{"name":"Project Lead","isDefault":false,"permissionCodes":["project.create","workitem.create"]}'
 
 # Update a role
 curl -s -X PATCH "$BASE/roles/<roleId>" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Lead","permissionCodes":["project.read","task.read"]}'
+  -d '{"name":"Lead","permissionCodes":["project.read","workitem.read"]}'
 
 # Delete a custom role
 curl -s -X DELETE "$BASE/roles/<roleId>" \
@@ -284,6 +284,40 @@ curl -s -X DELETE "$BASE/priorities/<id>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```
 
+## work-types (Bearer + x-workspace-slug)
+
+Work types classify a work item as a task, incident, bug, or any other category
+a workspace defines (`category` is one of `task` | `incident` | `bug`). Every
+new workspace is seeded with Task/Incident/Bug by default.
+
+```bash
+# List work types
+curl -s "$BASE/work-types" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Get one work type
+curl -s "$BASE/work-types/<id>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Create a work type (category: task|incident|bug)
+curl -s -X POST "$BASE/work-types" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Spike","color":"#8b5cf6","category":"task","isActive":true}'
+
+# Update a work type
+curl -s -X PATCH "$BASE/work-types/<id>" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"isActive":false}'
+
+# Delete a work type
+curl -s -X DELETE "$BASE/work-types/<id>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
 ## project-types (Bearer + x-workspace-slug)
 
 ```bash
@@ -397,99 +431,132 @@ curl -s -X DELETE "$BASE/projects/<projectId>/modules/<instanceId>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```
 
-## tasks (Bearer + x-workspace-slug)
+## work-items (Bearer + x-workspace-slug)
+
+Work items are the unified unit of work — a task, incident, bug, or anything
+else defined in `work-types` — replacing the old separate tasks/incidents
+split. `workItemTypeId` (optional, from `GET /work-types`) classifies the
+item; activity-log entries for it use that type's `category` as `entityType`.
 
 ```bash
-# List tasks (optional filters: moduleInstanceId, statusId, priorityId)
-curl -s "$BASE/projects/<projectId>/tasks?moduleInstanceId=<id>&statusId=<id>&priorityId=<id>" \
+# List work items in a project
+curl -s "$BASE/projects/<projectId>/work-items" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Create a task.
-# - moduleInstanceId is REQUIRED when the project's type has isPlanAdd=true (400 otherwise).
-# - prefix is auto-generated when omitted (an explicit prefix always wins):
-#     module-bound task -> "{Module Name} - N" (N continues across ALL same-named
-#     module instances in the project, so numbering never restarts)
-#     unbound task      -> "{first letter of project name}-T{task count + 1}" (e.g. "W-T48")
-# - Overflow: if the requested instance is at its taskLimit, the task is stored on
-#   another instance in the project whose module has the SAME NAME and spare capacity
-#   (multi-plan projects). Only when every same-named instance is full does the task
-#   stay on the requested instance with its addonTask counter incremented.
-curl -s -X POST "$BASE/projects/<projectId>/tasks" \
+# Create a work item. moduleInstanceId is REQUIRED; workItemTypeId is optional
+# (falls back to a generic "task" entityType in the activity log when omitted).
+curl -s -X POST "$BASE/projects/<projectId>/work-items" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"name":"Design landing page","description":"hero + CTA","moduleInstanceId":"<id>","startDate":"2026-01-05T00:00:00.000Z","dueDate":"2026-01-12T00:00:00.000Z","statusId":"<id>","priorityId":"<id>","assigneeId":"<userId>","position":0}'
+  -d '{"name":"Design landing page","description":"hero + CTA","moduleInstanceId":"<id>","workItemTypeId":"<workTypeId>","startDate":"2026-01-05T00:00:00.000Z","dueDate":"2026-01-12T00:00:00.000Z","statusId":"<id>","priorityId":"<id>","assigneeId":"<userId>"}'
 
-# Update ONLY a task's status. Needs the narrow task.status.update permission —
-# held by Owner/Admin/Member and the Client role (which lacks full task.update).
-curl -s -X PATCH "$BASE/projects/<projectId>/tasks/<taskId>/status" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-workspace-slug: $WORKSPACE_SLUG" \
-  -H "Content-Type: application/json" \
-  -d '{"statusId":"<statusId>"}'
-
-# Get a task
-curl -s "$BASE/projects/<projectId>/tasks/<taskId>" \
+# Get a work item
+curl -s "$BASE/projects/<projectId>/work-items/<workItemId>" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 
-# Update a task
-curl -s -X PATCH "$BASE/projects/<projectId>/tasks/<taskId>" \
+# Update a work item (any subset of the create fields; reassigning
+# `assigneeId` emails the new assignee a "reassigned by <actor>" notice
+# instead of the generic "updated" notice everyone else gets)
+curl -s -X PATCH "$BASE/projects/<projectId>/work-items/<workItemId>" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
   -d '{"name":"Design landing page v2","statusId":"<id>","priorityId":"<id>"}'
 
-# Soft-delete a task
-curl -s -X DELETE "$BASE/projects/<projectId>/tasks/<taskId>" \
+# Delete a work item
+curl -s -X DELETE "$BASE/projects/<projectId>/work-items/<workItemId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Get a work item's activity log (create/update/comment events, oldest first)
+curl -s "$BASE/projects/<projectId>/work-items/<workItemId>/activity" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# On-demand nudge — emails the assignee a reminder (400 if unassigned)
+curl -s -X POST "$BASE/projects/<projectId>/work-items/<workItemId>/notify" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```
 
-## incidents (Bearer + x-workspace-slug)
-
-Incidents are **standalone project-level tickets** — they are not tied to a task.
-
-```bash
-# Create an incident ticket on a project.
-# Needs incident.create — held by Owner/Admin and the Client role.
-curl -s -X POST "$BASE/projects/<projectId>/incidents" \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "x-workspace-slug: $WORKSPACE_SLUG" \
-  -H "Content-Type: application/json" \
-  -d '{"title":"Sync fails after go-live","description":"Contacts are not syncing"}'
-
-# List the project's incident tickets (needs project.read)
-curl -s "$BASE/projects/<projectId>/incidents" \
-  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
-
-# Get one incident (needs project.read)
-curl -s "$BASE/projects/<projectId>/incidents/<incidentId>" \
-  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
-```
+Project owner, assignee, and QA assignee (deduped) get an email on create and
+on any update that actually changes a field.
 
 ## comments (Bearer + x-workspace-slug)
 
+Comments come in two flavors: standalone workspace comments, and comments on a
+specific work item (which also appear in that work item's activity log).
+
 ```bash
-# Comment on a task. Needs comment.create (Owner/Admin/Member/Client).
-# mentions: tag other users by email — each must be a member of the workspace,
-# otherwise 400 listing the offending emails.
-curl -s -X POST "$BASE/projects/<projectId>/tasks/<taskId>/comments" \
+# --- workspace-wide comments ---
+
+# List all comments in the workspace
+curl -s "$BASE/comments" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Create a comment. Needs comment.create. mentions: tag other users by email —
+# each must be a member of the workspace, otherwise 400 listing the offending emails.
+curl -s -X POST "$BASE/comments" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Heads up team","mentions":["john@acme.com"]}'
+
+# Edit / delete your own comment
+curl -s -X PATCH "$BASE/comments/<commentId>" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "x-workspace-slug: $WORKSPACE_SLUG" \
+  -H "Content-Type: application/json" \
+  -d '{"body":"Heads up team (edited)"}'
+
+curl -s -X DELETE "$BASE/comments/<commentId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# --- comments on a work item ---
+
+# List comments on a work item (needs workitem.read)
+curl -s "$BASE/projects/<projectId>/work-items/<workItemId>/comments" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Comment on a work item (needs comment.create)
+curl -s -X POST "$BASE/projects/<projectId>/work-items/<workItemId>/comments" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
   -d '{"body":"Stage order is wrong, please check","mentions":["john@acme.com"]}'
 
-# List comments on a task (needs task.read)
-curl -s "$BASE/projects/<projectId>/tasks/<taskId>/comments" \
-  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
-
-# Comment on an incident ticket (same body shape / permissions)
-curl -s -X POST "$BASE/projects/<projectId>/incidents/<incidentId>/comments" \
+# Edit / delete your own comment on a work item
+curl -s -X PATCH "$BASE/projects/<projectId>/work-items/<workItemId>/comments/<commentId>" \
   -H "Authorization: Bearer $TOKEN" \
   -H "x-workspace-slug: $WORKSPACE_SLUG" \
   -H "Content-Type: application/json" \
-  -d '{"body":"On it — fix lands tomorrow","mentions":["client@customer.com"]}'
+  -d '{"body":"Stage order is wrong, please check (edited)"}'
 
-# List comments on an incident ticket (needs task.read)
-curl -s "$BASE/projects/<projectId>/incidents/<incidentId>/comments" \
+curl -s -X DELETE "$BASE/projects/<projectId>/work-items/<workItemId>/comments/<commentId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## activity log (Bearer + x-workspace-slug)
+
+```bash
+# Timeline for one entity (a work item, or anything else logged against an id),
+# oldest first. Matched by entityId alone, so the caller doesn't need to know
+# which entityType it is.
+curl -s "$BASE/activity/<entityId>" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+```
+
+## reports (Bearer + x-workspace-slug)
+
+Computed live from `WorkItem` rows — every breakdown groups by whatever
+`WorkType`s the workspace actually has configured, not a fixed task/incident
+split.
+
+```bash
+# Project report: per-module usage, status/priority matrices, dynamic work-type
+# breakdown (byType), overall progress, per-member workload
+curl -s "$BASE/projects/<projectId>/reports" \
+  -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
+
+# Workspace-wide work-item type + status breakdown
+curl -s "$BASE/reports" \
   -H "Authorization: Bearer $TOKEN" -H "x-workspace-slug: $WORKSPACE_SLUG"
 ```

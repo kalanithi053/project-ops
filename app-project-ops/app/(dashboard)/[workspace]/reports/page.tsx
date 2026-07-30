@@ -44,9 +44,7 @@ export default function ReportsPage() {
     { label: "Members", value: members.length, icon: Users },
     {
       label: "Work items",
-      value:
-        (workReportQuery.data?.totalTasks ?? 0) +
-        (workReportQuery.data?.totalIncidents ?? 0),
+      value: workReportQuery.data?.totalItems ?? 0,
       icon: BarChart3,
     },
   ];
@@ -55,7 +53,7 @@ export default function ReportsPage() {
     {
       type: "breakdown",
       title: "Work by status",
-      description: "All tasks and incidents in this workspace",
+      description: "All work items in this workspace",
       span: 2,
       items: (workReportQuery.data?.statusBreakdown ?? []).map(
         (status, index) => ({

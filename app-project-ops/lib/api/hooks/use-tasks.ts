@@ -57,7 +57,7 @@ export function useTasks(
     queryKey: [...tasksKey(workspaceSlug, projectId), queryString],
     queryFn: () =>
       apiFetch<Task[]>(
-        `/projects/${projectId}/tasks${queryString ? `?${queryString}` : ""}`,
+        `/projects/${projectId}/work-items${queryString ? `?${queryString}` : ""}`,
         { workspaceSlug },
       ),
     enabled: Boolean(token && workspaceSlug && projectId),
@@ -74,7 +74,7 @@ export function useTask(
   return useQuery({
     queryKey: ["task", workspaceSlug, projectId, taskId],
     queryFn: () =>
-      apiFetch<Task>(`/projects/${projectId}/tasks/${taskId}`, {
+      apiFetch<Task>(`/projects/${projectId}/work-items/${taskId}`, {
         workspaceSlug,
       }),
     enabled: Boolean(token && workspaceSlug && projectId && taskId),
@@ -100,7 +100,7 @@ export function useTaskActivity(
     queryKey: taskActivityKey(workspaceSlug, projectId, taskId ?? ""),
     queryFn: () =>
       apiFetch<TaskActivityEntry[]>(
-        `/projects/${projectId}/tasks/${taskId}/activity`,
+        `/projects/${projectId}/work-items/${taskId}/activity`,
         { workspaceSlug },
       ),
     enabled: Boolean(token && workspaceSlug && projectId && taskId),
@@ -117,7 +117,7 @@ export function useCreateTask(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateTaskDto) =>
-      apiFetch<Task>(`/projects/${projectId}/tasks`, {
+      apiFetch<Task>(`/projects/${projectId}/work-items`, {
         method: "POST",
         body: dto,
         workspaceSlug,
@@ -138,7 +138,7 @@ export function useUpdateTask(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateTaskDto }) =>
-      apiFetch<Task>(`/projects/${projectId}/tasks/${id}`, {
+      apiFetch<Task>(`/projects/${projectId}/work-items/${id}`, {
         method: "PATCH",
         body: dto,
         workspaceSlug,
@@ -192,7 +192,7 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
     mutationFn: (placements: TaskPlacement[]) =>
       Promise.all(
         placements.map(({ id, position, statusId }) =>
-          apiFetch<Task>(`/projects/${projectId}/tasks/${id}`, {
+          apiFetch<Task>(`/projects/${projectId}/work-items/${id}`, {
             method: "PATCH",
             body: statusId ? { statusId, position } : { position },
             workspaceSlug,
@@ -237,7 +237,7 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
   });
 }
 
-/** POST /projects/:projectId/tasks/:taskId/notify — email the assignee. */
+/** POST /projects/:projectId/work-items/:taskId/notify — email the assignee. */
 export function useNotifyTaskAssignee(
   workspaceSlug: string,
   projectId: string,
@@ -245,9 +245,9 @@ export function useNotifyTaskAssignee(
   return useMutation({
     mutationFn: (taskId: string) =>
       apiFetch<{ notified: boolean; assignee: string }>(
-        `/projects/${projectId}/tasks/${taskId}/notify`,
+        `/projects/${projectId}/work-items/${taskId}/notify`,
         { method: "POST", workspaceSlug },
       ),
-    onSuccess: () => toast.success("Task assignee notified"),
+    onSuccess: () => toast.success("Work item assignee notified"),
   });
 }

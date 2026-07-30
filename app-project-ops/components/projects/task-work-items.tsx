@@ -3,11 +3,13 @@
 import {
   AlertTriangle,
   BellRing,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
-  ChevronDown,
   Columns3,
   Filter,
+  Kanban,
+  List,
   ListChecks,
   Plus,
   X,
@@ -18,6 +20,8 @@ import * as React from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
+import { CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
+import { TaskBoard } from "@/components/projects/task-board";
 import { QueryState } from "@/components/shared/query-state";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { TableSkeleton } from "@/components/shared/skeletons";
@@ -37,7 +41,6 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
-  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
@@ -49,15 +52,14 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useProjectModules } from "@/lib/api/hooks/use-projects";
-import {
-  useIncidents,
-  useNotifyIncidentAssignee,
-} from "@/lib/api/hooks/use-incidents";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { useNotifyTaskAssignee, useTasks } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { formatDate } from "@/lib/format";
+import type { WorkType } from "@/lib/api/types";
+
+type WorkItemsView = "list" | "kanban";
 
 const OPTIONAL_COLUMNS = [
   "type",
@@ -95,15 +97,34 @@ export function TaskWorkItems({
   workspaceSlug,
   projectId,
   canCreate,
-  canCreateIncident,
+  canUpdate,
 }: {
   workspaceSlug: string;
   projectId: string;
   canCreate: boolean;
-  canCreateIncident: boolean;
+  canUpdate: boolean;
 }) {
   const router = useRouter();
   const { data: me } = useMe();
+  const viewStorageKey = `project-ops:work-items-view:${workspaceSlug}:${projectId}`;
+  const [view, setView] = React.useState<WorkItemsView>(() => {
+    if (typeof window === "undefined") return "list";
+    return window.localStorage.getItem(viewStorageKey) === "kanban"
+      ? "kanban"
+      : "list";
+  });
+  React.useEffect(() => {
+    try {
+      window.localStorage.setItem(viewStorageKey, view);
+    } catch {}
+  }, [viewStorageKey, view]);
+  function goToCreate(workType: WorkType, statusId?: string) {
+    const params = new URLSearchParams({ workItemTypeId: workType.id });
+    if (statusId) params.set("statusId", statusId);
+    router.push(
+      `/${workspaceSlug}/projects/${projectId}/work-items/new?${params.toString()}`,
+    );
+  }
   const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
   const [keyword, setKeyword] = React.useState("");
   const [debouncedKeyword, setDebouncedKeyword] = React.useState("");
@@ -114,25 +135,32 @@ export function TaskWorkItems({
   const [endDate, setEndDate] = React.useState("");
   const [page, setPage] = React.useState(1);
   const columnStorageKey = `project-ops:work-items-columns:${workspaceSlug}:${projectId}`;
-  const [visibleColumns, setVisibleColumns] = React.useState<OptionalColumn[]>(() => {
-    if (typeof window === "undefined") return [...OPTIONAL_COLUMNS];
-    try {
-      const stored = window.localStorage.getItem(columnStorageKey);
-      const values: unknown = stored ? JSON.parse(stored) : null;
-      if (Array.isArray(values)) {
-        const columns = values.filter(
-          (value): value is OptionalColumn =>
-            typeof value === "string" && OPTIONAL_COLUMNS.includes(value as OptionalColumn),
-        );
-        return [
-          ...columns,
-          ...(columns.includes("startDate") ? [] : (["startDate"] as OptionalColumn[])),
-          ...(columns.includes("endDate") ? [] : (["endDate"] as OptionalColumn[])),
-        ] as OptionalColumn[];
-      }
-    } catch {}
-    return [...OPTIONAL_COLUMNS];
-  });
+  const [visibleColumns, setVisibleColumns] = React.useState<OptionalColumn[]>(
+    () => {
+      if (typeof window === "undefined") return [...OPTIONAL_COLUMNS];
+      try {
+        const stored = window.localStorage.getItem(columnStorageKey);
+        const values: unknown = stored ? JSON.parse(stored) : null;
+        if (Array.isArray(values)) {
+          const columns = values.filter(
+            (value): value is OptionalColumn =>
+              typeof value === "string" &&
+              OPTIONAL_COLUMNS.includes(value as OptionalColumn),
+          );
+          return [
+            ...columns,
+            ...(columns.includes("startDate")
+              ? []
+              : (["startDate"] as OptionalColumn[])),
+            ...(columns.includes("endDate")
+              ? []
+              : (["endDate"] as OptionalColumn[])),
+          ] as OptionalColumn[];
+        }
+      } catch {}
+      return [...OPTIONAL_COLUMNS];
+    },
+  );
   const initializedAssignee = React.useRef(false);
   React.useEffect(() => {
     if (!initializedAssignee.current && me?.id) {
@@ -142,7 +170,10 @@ export function TaskWorkItems({
   }, [me?.id]);
   React.useEffect(() => {
     try {
-      window.localStorage.setItem(columnStorageKey, JSON.stringify(visibleColumns));
+      window.localStorage.setItem(
+        columnStorageKey,
+        JSON.stringify(visibleColumns),
+      );
     } catch {}
   }, [columnStorageKey, visibleColumns]);
   React.useEffect(() => {
@@ -167,9 +198,7 @@ export function TaskWorkItems({
       ...(moduleIds.length ? { moduleInstanceIds: moduleIds } : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
-      ...(selectedStatusIds.length
-        ? { statusIds: selectedStatusIds }
-        : {}),
+      ...(selectedStatusIds.length ? { statusIds: selectedStatusIds } : {}),
     }),
     [
       assigneeIds,
@@ -181,9 +210,7 @@ export function TaskWorkItems({
     ],
   );
   const tasksQuery = useTasks(workspaceSlug, projectId, taskFilters);
-  const incidentsQuery = useIncidents(workspaceSlug, projectId, assigneeIds);
   const notifyTask = useNotifyTaskAssignee(workspaceSlug, projectId);
-  const notifyIncident = useNotifyIncidentAssignee(workspaceSlug, projectId);
   const [nudgingId, setNudgingId] = React.useState<string | null>(null);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
   const membersQuery = useWorkspaceMembers(workspaceSlug);
@@ -213,10 +240,7 @@ export function TaskWorkItems({
     [statusesQuery.data],
   );
   const tasks = React.useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
-  const incidents = React.useMemo(
-    () => incidentsQuery.data ?? [],
-    [incidentsQuery.data],
-  );
+
   const assigneeOptions = React.useMemo(
     () =>
       (membersQuery.data ?? [])
@@ -228,14 +252,16 @@ export function TaskWorkItems({
             label:
               [user.firstName, user.lastName].filter(Boolean).join(" ") ||
               user.username ||
-              user.email || "Unknown user",
+              user.email?.split("@")[0] ||
+              "Unknown user",
           };
         })
         .filter((option) => Boolean(option.value)),
     [membersQuery.data],
   );
   const assigneeNames = React.useMemo(
-    () => new Map(assigneeOptions.map((option) => [option.value, option.label])),
+    () =>
+      new Map(assigneeOptions.map((option) => [option.value, option.label])),
     [assigneeOptions],
   );
   const assigneeFilterOptions = React.useMemo(
@@ -251,8 +277,12 @@ export function TaskWorkItems({
     return [
       ...(workTypes.length === 0 || workTypes.includes("task")
         ? tasks
-            .filter((task) =>
-              !query || `${task.prefix ?? ""} ${task.name}`.toLowerCase().includes(query),
+            .filter(
+              (task) =>
+                !query ||
+                `${task.prefix ?? ""} ${task.name}`
+                  .toLowerCase()
+                  .includes(query),
             )
             .map((task) => ({
               type: "Task" as const,
@@ -260,25 +290,17 @@ export function TaskWorkItems({
               date: task.updatedAt ?? task.createdAt ?? "",
             }))
         : []),
-      ...(workTypes.length === 0 || workTypes.includes("incident")
-        ? incidents
-            .filter((incident) => {
-              const matchesKeyword =
-                !query || incident.title.toLowerCase().includes(query);
-              const matchesStatus =
-                selectedStatusIds.length === 0 ||
-                selectedStatusIds.includes(incident.statusId);
-              return matchesKeyword && matchesStatus && !startDate && !endDate;
-            })
-            .map((incident) => ({
-              type: "Incident" as const,
-              item: incident,
-              date: incident.updatedAt ?? incident.createdAt,
-            }))
-        : []),
     ].sort((left, right) => right.date.localeCompare(left.date));
-  }, [endDate, incidents, keyword, selectedStatusIds, startDate, tasks, workTypes]);
-  const columnVisible = (column: OptionalColumn) => visibleColumns.includes(column);
+  }, [
+    endDate,
+    keyword,
+    selectedStatusIds,
+    startDate,
+    tasks,
+    workTypes,
+  ]);
+  const columnVisible = (column: OptionalColumn) =>
+    visibleColumns.includes(column);
   const pageCount = Math.max(1, Math.ceil(workItems.length / PAGE_SIZE));
   const currentPage = Math.min(page, pageCount);
   const paginatedWorkItems = workItems.slice(
@@ -303,31 +325,55 @@ export function TaskWorkItems({
   }
 
   return (
-      <section className="flex flex-col gap-4">
-        <div className="sticky top-[6rem] z-20 -mx-4 flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">Work items</h2>
-              <p className="text-sm text-muted-foreground">Your assigned tasks and incidents.</p>
+    <section className="flex flex-col gap-4">
+      <div className="sticky top-[6rem] z-20 -mx-4 flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold">Work items</h2>
+            <p className="text-sm text-muted-foreground">
+              Your assigned tasks and incidents.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="inline-flex items-center rounded-md border border-border p-0.5">
+              <Button
+                type="button"
+                variant={view === "list" ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={view === "list"}
+                onClick={() => setView("list")}
+              >
+                <List className="h-4 w-4" />
+                List
+              </Button>
+              <Button
+                type="button"
+                variant={view === "kanban" ? "secondary" : "ghost"}
+                size="sm"
+                aria-pressed={view === "kanban"}
+                onClick={() => setView("kanban")}
+              >
+                <Kanban className="h-4 w-4" />
+                Kanban
+              </Button>
             </div>
-            {(canCreate || canCreateIncident) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button type="button">
-                    <Plus className="h-4 w-4" />
-                    Work item
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  {canCreate && <DropdownMenuItem onSelect={() => router.push(`/${workspaceSlug}/projects/${projectId}/tasks/new`)}>Task</DropdownMenuItem>}
-                  {canCreateIncident && <DropdownMenuItem onSelect={() => router.push(`/${workspaceSlug}/projects/${projectId}/incidents/new`)}>Incident</DropdownMenuItem>}
-                </DropdownMenuContent>
-              </DropdownMenu>
+            {canCreate && (
+              <CreateWorkItemMenu
+                workspaceSlug={workspaceSlug}
+                onSelect={(workType) => goToCreate(workType)}
+              >
+                <Button type="button">
+                  <Plus className="h-4 w-4" />
+                  Work item
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </CreateWorkItemMenu>
             )}
           </div>
+        </div>
 
-          <div className="flex items-center justify-between gap-3">
+        {view === "list" && (
+        <div className="flex items-center justify-between gap-3">
           <Sheet>
             <SheetTrigger asChild>
               <Button type="button" variant="outline" size="sm">
@@ -349,7 +395,11 @@ export function TaskWorkItems({
               <SheetBody>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Keyword
-                  <Input value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="Filter by keyword" />
+                  <Input
+                    value={keyword}
+                    onChange={(event) => setKeyword(event.target.value)}
+                    placeholder="Filter by keyword"
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Type
@@ -363,23 +413,51 @@ export function TaskWorkItems({
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Assignees
-                  <MultiSelectField aria-label="Filter by assignees" options={assigneeFilterOptions} values={assigneeIds} onValuesChange={setAssigneeIds} placeholder="Assignee" />
+                  <MultiSelectField
+                    aria-label="Filter by assignees"
+                    options={assigneeFilterOptions}
+                    values={assigneeIds}
+                    onValuesChange={setAssigneeIds}
+                    placeholder="Assignee"
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   States
-                  <MultiSelectField aria-label="Filter by states" options={statusOptions} values={selectedStatusIds} onValuesChange={setStatusIds} placeholder="Open items" />
+                  <MultiSelectField
+                    aria-label="Filter by states"
+                    options={statusOptions}
+                    values={selectedStatusIds}
+                    onValuesChange={setStatusIds}
+                    placeholder="Open items"
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Areas
-                  <MultiSelectField aria-label="Filter by areas" options={moduleOptions} values={moduleIds} onValuesChange={setModuleIds} placeholder="Area" />
+                  <MultiSelectField
+                    aria-label="Filter by areas"
+                    options={moduleOptions}
+                    values={moduleIds}
+                    onValuesChange={setModuleIds}
+                    placeholder="Area"
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   Start date
-                  <Input type="date" value={startDate} onChange={(event) => setStartDate(event.target.value)} aria-label="Filter by start date" />
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(event) => setStartDate(event.target.value)}
+                    aria-label="Filter by start date"
+                  />
                 </label>
                 <label className="flex flex-col gap-1.5 text-sm font-medium">
                   End date
-                  <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} aria-label="Filter by end date" />
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(event) => setEndDate(event.target.value)}
+                    aria-label="Filter by end date"
+                  />
                 </label>
               </SheetBody>
               <SheetFooter>
@@ -410,28 +488,54 @@ export function TaskWorkItems({
               ))}
             </DropdownMenuContent>
           </DropdownMenu>
-          </div>
         </div>
+        )}
+      </div>
 
-        <QueryState
-          isLoading={tasksQuery.isLoading || incidentsQuery.isLoading || modulesQuery.isLoading || statusesQuery.isLoading}
-          isError={tasksQuery.isError || incidentsQuery.isError || modulesQuery.isError || statusesQuery.isError}
-          error={tasksQuery.error ?? incidentsQuery.error ?? modulesQuery.error ?? statusesQuery.error}
-          onRetry={() => {
-            tasksQuery.refetch();
-            incidentsQuery.refetch();
-            modulesQuery.refetch();
-            statusesQuery.refetch();
-          }}
-          skeleton={<TableSkeleton columns={6} rows={6} />}
-        >
+      {view === "kanban" ? (
+        <TaskBoard
+          workspaceSlug={workspaceSlug}
+          projectId={projectId}
+          canCreate={canCreate}
+          canUpdate={canUpdate}
+          onCreate={(statusId, workType) => goToCreate(workType, statusId)}
+        />
+      ) : (
+      <QueryState
+        isLoading={
+          tasksQuery.isLoading ||
+          modulesQuery.isLoading ||
+          statusesQuery.isLoading
+        }
+        isError={
+          tasksQuery.isError || modulesQuery.isError || statusesQuery.isError
+        }
+        error={tasksQuery.error ?? modulesQuery.error ?? statusesQuery.error}
+        onRetry={() => {
+          tasksQuery.refetch();
+          modulesQuery.refetch();
+          statusesQuery.refetch();
+        }}
+        skeleton={<TableSkeleton columns={6} rows={6} />}
+      >
         {workItems.length === 0 ? (
           <EmptyState
             icon={ListChecks}
             title="No work items"
-            description="No tasks or incidents match this assignee."
+            description="No work items match this assignee."
             action={
-              canCreate || canCreateIncident ? <Button type="button" onClick={() => router.push(`/${workspaceSlug}/projects/${projectId}/tasks/new`)}><Plus className="h-4 w-4" />Create task</Button> : undefined
+              canCreate ? (
+                <CreateWorkItemMenu
+                  workspaceSlug={workspaceSlug}
+                  onSelect={(workType) => goToCreate(workType)}
+                  align="start"
+                >
+                  <Button type="button">
+                    <Plus className="h-4 w-4" />
+                    Create work item
+                  </Button>
+                </CreateWorkItemMenu>
+              ) : undefined
             }
           />
         ) : (
@@ -443,7 +547,9 @@ export function TaskWorkItems({
                 {columnVisible("module") && <TableHead>Module</TableHead>}
                 {columnVisible("assignee") && <TableHead>Assignee</TableHead>}
                 {columnVisible("status") && <TableHead>Status</TableHead>}
-                {columnVisible("startDate") && <TableHead>Start date</TableHead>}
+                {columnVisible("startDate") && (
+                  <TableHead>Start date</TableHead>
+                )}
                 {columnVisible("endDate") && <TableHead>End date</TableHead>}
                 <TableHead className="w-24 text-right">Nudge</TableHead>
               </TableRow>
@@ -453,18 +559,18 @@ export function TaskWorkItems({
                 <TableRow key={`${type}-${item.id}`}>
                   {columnVisible("type") && (
                     <TableCell className="text-xs font-medium text-muted-foreground">
-                      {type === "Task" ? <ListChecks className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+                      {<ListChecks className="h-4 w-4" />}
                     </TableCell>
                   )}
                   <TableCell>
-                    {type === "Task" ? (
+                    {
                       <div className="group/title flex items-center gap-1">
                         <button
                           type="button"
                           className="text-left font-medium hover:text-primary hover:underline"
                           onClick={() =>
                             router.push(
-                              `/${workspaceSlug}/projects/${projectId}/tasks/${item.id}`,
+                              `/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`,
                             )
                           }
                         >
@@ -474,47 +580,36 @@ export function TaskWorkItems({
                         <CopyWorkItemLink
                           prefix={item.prefix ?? "Task"}
                           title={item.name}
-                          url={`/${workspaceSlug}/projects/${projectId}/tasks/${item.id}`}
+                          url={`/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`}
                         />
                       </div>
-                    ) : (
-                      <div className="group/title flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="text-left font-medium hover:text-primary hover:underline"
-                          onClick={() =>
-                            router.push(
-                              `/${workspaceSlug}/projects/${projectId}/incidents/${item.id}`,
-                            )
-                          }
-                        >
-                          {item.title}
-                        </button>
-                        <CopyWorkItemLink
-                          prefix="Incident"
-                          title={item.title}
-                          url={`/${workspaceSlug}/projects/${projectId}/incidents/${item.id}`}
-                        />
-                      </div>
-                    )}
+                    }
                   </TableCell>
-                  {columnVisible("module") && <TableCell>{type === "Task" && item.moduleInstanceId ? moduleNames.get(item.moduleInstanceId) ?? "—" : "—"}</TableCell>}
-                  {columnVisible("assignee") && (() => {
-                    const assigneeName =
-                      assigneeNames.get(item.assigneeId ?? "") ?? "Unassigned";
-                    return (
-                      <TableCell>
-                        <span className="inline-flex items-center gap-2">
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback className="text-[9px]">
-                              {item.assigneeId ? initials(assigneeName) : "—"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span>{assigneeName}</span>
-                        </span>
-                      </TableCell>
-                    );
-                  })()}
+                  {columnVisible("module") && (
+                    <TableCell>
+                      {type === "Task" && item.moduleInstanceId
+                        ? (moduleNames.get(item.moduleInstanceId) ?? "—")
+                        : "—"}
+                    </TableCell>
+                  )}
+                  {columnVisible("assignee") &&
+                    (() => {
+                      const assigneeName =
+                        assigneeNames.get(item.assigneeId ?? "") ??
+                        "Unassigned";
+                      return (
+                        <TableCell>
+                          <span className="inline-flex items-center gap-2">
+                            <Avatar className="h-6 w-6">
+                              <AvatarFallback className="text-[9px]">
+                                {item.assigneeId ? initials(assigneeName) : "—"}
+                              </AvatarFallback>
+                            </Avatar>
+                            <span>{assigneeName}</span>
+                          </span>
+                        </TableCell>
+                      );
+                    })()}
                   {columnVisible("status") && (
                     <TableCell>
                       <span className="inline-flex items-center gap-1.5">
@@ -522,25 +617,23 @@ export function TaskWorkItems({
                           className="h-2 w-2 shrink-0 rounded-full"
                           style={{
                             backgroundColor:
-                              type === "Task"
-                                ? item.status?.color ?? "var(--status-neutral)"
-                                : item.status.color ?? "var(--status-neutral)",
+                              item.status?.color ?? "var(--status-neutral)",
                           }}
                           aria-hidden
                         />
-                        <span>
-                          {type === "Task"
-                            ? item.status?.name ?? "No status"
-                            : item.status.name}
-                        </span>
+                        <span>{item.status?.name ?? "No status"}</span>
                       </span>
                     </TableCell>
                   )}
                   {columnVisible("startDate") && (
-                    <TableCell>{type === "Task" ? formatDate(item.startDate) : "—"}</TableCell>
+                    <TableCell>
+                      {type === "Task" ? formatDate(item.startDate) : "—"}
+                    </TableCell>
                   )}
                   {columnVisible("endDate") && (
-                    <TableCell>{type === "Task" ? formatDate(item.dueDate) : "—"}</TableCell>
+                    <TableCell>
+                      {type === "Task" ? formatDate(item.dueDate) : "—"}
+                    </TableCell>
                   )}
                   <TableCell className="text-right">
                     <Button
@@ -548,13 +641,16 @@ export function TaskWorkItems({
                       variant="ghost"
                       size="sm"
                       disabled={!item.assigneeId || nudgingId === item.id}
-                      title={item.assigneeId ? "Email the assignee" : "This item has no assignee"}
+                      title={
+                        item.assigneeId
+                          ? "Email the assignee"
+                          : "This item has no assignee"
+                      }
                       onClick={() => {
                         setNudgingId(item.id);
-                        (type === "Task" ? notifyTask : notifyIncident).mutate(
-                          item.id,
-                          { onSettled: () => setNudgingId(null) },
-                        );
+                        notifyTask.mutate(item.id, {
+                          onSettled: () => setNudgingId(null),
+                        });
                       }}
                     >
                       <BellRing className="h-3.5 w-3.5" />
@@ -570,7 +666,8 @@ export function TaskWorkItems({
           <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
             <span>
               {(currentPage - 1) * PAGE_SIZE + 1}–
-              {Math.min(currentPage * PAGE_SIZE, workItems.length)} of {workItems.length}
+              {Math.min(currentPage * PAGE_SIZE, workItems.length)} of{" "}
+              {workItems.length}
             </span>
             <div className="flex items-center gap-1">
               <Button
@@ -601,7 +698,8 @@ export function TaskWorkItems({
             </div>
           </div>
         )}
-        </QueryState>
-      </section>
+      </QueryState>
+      )}
+    </section>
   );
 }

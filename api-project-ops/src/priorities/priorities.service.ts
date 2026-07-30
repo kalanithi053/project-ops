@@ -56,12 +56,12 @@ export class PrioritiesService {
 
   async remove(workspaceId: string, id: string) {
     await this.getOwned(workspaceId, id);
-    const taskCount = await this.prisma.task.count({
+    const workItemCount = await this.prisma.workItem.count({
       where: { priorityId: id },
     });
-    if (taskCount > 0) {
+    if (workItemCount > 0) {
       throw new ConflictException(
-        'Priority is still used by tasks; reassign them first.',
+        'Priority is still used by work items; reassign them first.',
       );
     }
     await this.prisma.priority.delete({ where: { id } });

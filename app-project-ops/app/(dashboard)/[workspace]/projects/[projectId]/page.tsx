@@ -92,12 +92,12 @@ export default function ProjectOverviewPage() {
   );
 
   const stats = [
-    { label: "Tasks", value: String(report?.progress.totalTasks ?? tasks.length), icon: ListChecks },
+    { label: "Work items", value: String(report?.progress.totalItems ?? tasks.length), icon: ListChecks },
     {
       label: "Completed",
       value: report ? `${report.progress.percentComplete}%` : "—",
       icon: ListChecks,
-      hint: report ? `${report.progress.doneTasks} of ${report.progress.totalTasks} · ${report.progress.stage}` : undefined,
+      hint: report ? `${report.progress.doneItems} of ${report.progress.totalItems} · ${report.progress.stage}` : undefined,
     },
     { label: "Modules", value: String(report?.modules.length ?? 0), icon: Boxes },
     {
@@ -146,7 +146,7 @@ export default function ProjectOverviewPage() {
                 <EmptyState
                   icon={Boxes}
                   title="No modules"
-                  description="This project type doesn't provision modules, so tasks stand on their own."
+                  description="This project type doesn't provision modules, so work items stand on their own."
                   className="border-0 py-6"
                 />
               ) : (
@@ -195,7 +195,7 @@ export default function ProjectOverviewPage() {
           <Card>
             <CardHeader>
               <CardTitle>Work by status</CardTitle>
-              <CardDescription>Where the tasks currently sit.</CardDescription>
+              <CardDescription>Where the work currently sits.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               {!report ? null : (
@@ -208,7 +208,7 @@ export default function ProjectOverviewPage() {
                   ))}
                 </ul>
               )}
-              {report?.progress.totalTasks === 0 && (
+              {report?.progress.totalItems === 0 && (
                 <p className="text-sm text-muted-foreground">
                   No work has been reported yet.
                 </p>
@@ -216,11 +216,11 @@ export default function ProjectOverviewPage() {
 
               <Button asChild variant="outline" size="sm" className="mt-1">
                 <Link
-                  href={`/${workspace}/projects/${projectId}/board`}
+                  href={`/${workspace}/projects/${projectId}/work-items`}
                   className="justify-center"
                 >
                   <ListChecks className="h-4 w-4" />
-                  Open board
+                  Open work items
                 </Link>
               </Button>
             </CardContent>
@@ -282,8 +282,7 @@ export default function ProjectOverviewPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Member</TableHead>
-                      <TableHead className="text-right">Tasks</TableHead>
-                      <TableHead className="text-right">Incidents</TableHead>
+                      <TableHead className="text-right">Assigned</TableHead>
                       <TableHead className="text-right">Completed</TableHead>
                       <TableHead className="text-right">Hours</TableHead>
                     </TableRow>
@@ -292,10 +291,9 @@ export default function ProjectOverviewPage() {
                     {report.user.map((user) => (
                       <TableRow key={user.name}>
                         <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell className="text-right">{user.totalTasks}</TableCell>
-                        <TableCell className="text-right">{user.totalIncidents}</TableCell>
+                        <TableCell className="text-right">{user.totalItems}</TableCell>
                         <TableCell className="text-right">
-                          {user.completedTasks + user.completedIncidents}
+                          {user.completedItems}
                         </TableCell>
                         <TableCell className="text-right">
                           {user.totalCompletedHours}h / {user.totalEstimateHours}h

@@ -1,13 +1,10 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
-import { assignmentNotificationEmailTemplate } from './templates/assignment-notification-email.template';
 import { commentMentionEmailTemplate } from './templates/comment-mention-email.template';
-import { incidentCreatedEmailTemplate } from './templates/incident-created-email.template';
 import { otpEmailTemplate } from './templates/otp-email.template';
 import { projectInviteEmailTemplate } from './templates/project-invite-email.template';
-import { statusNotificationEmailTemplate } from './templates/status-notification-email.template';
-import { taskStatusEmailTemplate } from './templates/task-status-email.template';
+import { workItemNotificationEmailTemplate } from './templates/work-item-notification-email.template';
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -62,26 +59,6 @@ export class MailService implements OnModuleInit {
     this.logger.log(`OTP email sent to=${to} code=${code}`);
   }
 
-  async sendTaskStatusChangedEmail(
-    to: string,
-    params: {
-      taskName: string;
-      taskPrefix: string | null;
-      projectName: string;
-      oldStatusName: string;
-      newStatusName: string;
-      actionUrl: string;
-    },
-  ): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.from,
-      to,
-      subject: `[${params.projectName}] ${params.taskPrefix ?? params.taskName} moved to ${params.newStatusName}`,
-      html: taskStatusEmailTemplate(params),
-    });
-    this.logger.log(`Task status email sent to=${to}`);
-  }
-
   async sendProjectInviteEmail(
     to: string,
     params: { projectName: string; roleName: string },
@@ -98,71 +75,38 @@ export class MailService implements OnModuleInit {
     this.logger.log(`Project invite email sent to=${to}`);
   }
 
-  async sendIncidentCreatedEmail(
+  async sendWorkItemNotificationEmail(
     to: string,
     params: {
-      reporterName: string;
-      assigneeName: string | null;
-      incidentTitle: string;
+      action: 'created' | 'updated' | 'reminder' | 'assigned';
+      entityType: string;
+      workItemName: string;
       projectName: string;
-      incidentId: string;
       actionUrl: string;
+      /** Who reassigned it — only used for the 'assigned' action. */
+      actorName?: string;
     },
   ): Promise<void> {
+    const subject =
+      params.action === 'reminder'
+        ? `[${params.projectName}] Reminder: ${params.workItemName}`
+        : params.action === 'assigned'
+          ? `[${params.projectName}] You've been assigned ${params.workItemName}`
+          : `[${params.projectName}] ${params.workItemName} ${params.action}`;
     await this.transporter.sendMail({
       from: this.from,
       to,
-      subject: `${params.projectName} - ${params.incidentTitle}`,
-      html: incidentCreatedEmailTemplate(params),
+      subject,
+      html: workItemNotificationEmailTemplate(params),
     });
-    this.logger.log(`Incident created email sent to=${to}`);
-  }
-
-  async sendStatusNotificationEmail(
-    to: string,
-    params: {
-      entityLabel: string;
-      entityName: string;
-      projectName: string;
-      statusName: string;
-      actionUrl: string;
-    },
-  ): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.from,
-      to,
-      subject: `${params.projectName} - ${params.entityName} is ${params.statusName}`,
-      html: statusNotificationEmailTemplate(params),
-    });
-    this.logger.log(`Status notification email sent to=${to}`);
-  }
-
-  async sendAssignmentNotificationEmail(
-    to: string,
-    params: {
-      entityLabel: 'task' | 'incident';
-      entityName: string;
-      projectName: string;
-      assignmentRole?: string;
-      actionUrl: string;
-    },
-  ): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.from,
-      to,
-      subject: `[${params.projectName}] You've been assigned${params.assignmentRole ? ` as ${params.assignmentRole}` : ''} ${params.entityName}`,
-      html: assignmentNotificationEmailTemplate(params),
-    });
-    this.logger.log(`Assignment notification email sent to=${to}`);
+    this.logger.log(`Work item ${params.action} email sent to=${to}`);
   }
 
   async sendCommentMentionEmail(
     to: string,
     params: {
       authorName: string;
-      projectName: string;
-      entityLabel: 'task' | 'incident';
-      entityName: string;
+      workspaceName: string;
       body: string;
       actionUrl: string;
     },
@@ -170,7 +114,7 @@ export class MailService implements OnModuleInit {
     await this.transporter.sendMail({
       from: this.from,
       to,
-      subject: `[${params.projectName}] ${params.authorName} mentioned you on a ${params.entityLabel}`,
+      subject: `${params.authorName} mentioned you in a comment`,
       html: commentMentionEmailTemplate(params),
     });
     this.logger.log(`Comment mention email sent to=${to}`);

@@ -23,12 +23,10 @@ function commentsKey(
   return ["comments", itemType, workspaceSlug, projectId, itemId] as const;
 }
 
-function commentPath(
-  projectId: string,
-  itemType: CommentableItemType,
-  itemId: string,
-) {
-  return `/projects/${projectId}/${itemType}s/${itemId}/comments`;
+// Every commentable item (task/incident/bug) is now a WorkItem under one
+// unified endpoint — itemType is kept only to key the query cache per editor.
+function commentPath(projectId: string, itemId: string) {
+  return `/projects/${projectId}/work-items/${itemId}/comments`;
 }
 
 function invalidateComments(
@@ -41,11 +39,9 @@ function invalidateComments(
   queryClient.invalidateQueries({
     queryKey: commentsKey(workspaceSlug, projectId, itemType, itemId),
   });
-  if (itemType === "task") {
-    queryClient.invalidateQueries({
-      queryKey: taskActivityKey(workspaceSlug, projectId, itemId),
-    });
-  }
+  queryClient.invalidateQueries({
+    queryKey: taskActivityKey(workspaceSlug, projectId, itemId),
+  });
 }
 
 export function useWorkItemComments(
@@ -59,7 +55,7 @@ export function useWorkItemComments(
     queryKey: commentsKey(workspaceSlug, projectId, itemType, itemId ?? ""),
     queryFn: () =>
       apiFetch<TaskComment[]>(
-        commentPath(projectId, itemType, itemId ?? ""),
+        commentPath(projectId, itemId ?? ""),
         { workspaceSlug },
       ),
     enabled: Boolean(token && workspaceSlug && projectId && itemId),
@@ -75,7 +71,7 @@ export function useCreateWorkItemComment(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: CreateTaskCommentDto) =>
-      apiFetch<TaskComment>(commentPath(projectId, itemType, itemId), {
+      apiFetch<TaskComment>(commentPath(projectId, itemId), {
         method: "POST",
         body: dto,
         workspaceSlug,
@@ -96,7 +92,7 @@ export function useUpdateWorkItemComment(
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ id, dto }: { id: string; dto: UpdateTaskCommentDto }) =>
-      apiFetch<TaskComment>(`${commentPath(projectId, itemType, itemId)}/${id}`, {
+      apiFetch<TaskComment>(`${commentPath(projectId, itemId)}/${id}`, {
         method: "PATCH",
         body: dto,
         workspaceSlug,
@@ -118,7 +114,7 @@ export function useDeleteWorkItemComment(
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch<{ id: string; deleted: boolean }>(
-        `${commentPath(projectId, itemType, itemId)}/${id}`,
+        `${commentPath(projectId, itemId)}/${id}`,
         { method: "DELETE", workspaceSlug },
       ),
     onSuccess: () => {

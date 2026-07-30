@@ -19,7 +19,14 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { AlertTriangle, Filter, GripVertical, Plus, Search, X } from "lucide-react";
+import {
+  AlertTriangle,
+  Filter,
+  GripVertical,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import * as React from "react";
 
 import {
@@ -27,6 +34,7 @@ import {
   TaskCardView,
 } from "@/components/projects/task-card";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
+import { CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { QueryState } from "@/components/shared/query-state";
 import { SelectField } from "@/components/shared/select-field";
@@ -58,6 +66,7 @@ import type {
   Task,
   TaskStatusRef,
   TicketStatus,
+  WorkType,
 } from "@/lib/api/types";
 import { taskBoardSyncKey } from "@/lib/tasks/tab-sync";
 import { toast } from "@/lib/toast/toast-store";
@@ -89,10 +98,7 @@ function columnIdFor(task: Task, known: Set<string>): string {
   return UNASSIGNED;
 }
 
-function columnIdForIncident(
-  incident: Incident,
-  known: Set<string>,
-): string {
+function columnIdForIncident(incident: Incident, known: Set<string>): string {
   return incident.statusId && known.has(incident.statusId)
     ? incident.statusId
     : UNASSIGNED;
@@ -103,6 +109,12 @@ interface TaskBoardProps {
   projectId: string;
   canCreate: boolean;
   canUpdate: boolean;
+  /**
+   * Called after a work type is chosen from a column's "+" dropdown —
+   * lets the caller navigate to the create page with both the type and
+   * this column's status pre-selected.
+   */
+  onCreate?: (statusId: string, workType: WorkType) => void;
 }
 
 /**
@@ -118,6 +130,7 @@ export function TaskBoard({
   projectId,
   canCreate,
   canUpdate,
+  onCreate,
 }: TaskBoardProps) {
   const statusesQuery = useTicketStatuses(workspaceSlug);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
@@ -138,13 +151,8 @@ export function TaskBoard({
   );
 
   const tasksQuery = useTasks(workspaceSlug, projectId, appliedFilters);
-  const incidentsQuery = useIncidents(
-    workspaceSlug,
-    projectId,
-    appliedFilters.assigneeIds ?? [],
-  );
+
   const refetchTasks = tasksQuery.refetch;
-  const refetchIncidents = incidentsQuery.refetch;
   const refetchModules = modulesQuery.refetch;
 
   const tasks = React.useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
@@ -185,7 +193,7 @@ export function TaskBoard({
       const name =
         [user.firstName, user.lastName].filter(Boolean).join(" ") ||
         user.username ||
-        user.email;
+        user.email?.split("@")[0];
       if (name) users.set(user.id, name);
     }
     for (const task of tasks) {
@@ -225,19 +233,12 @@ export function TaskBoard({
     function handleStorage(event: StorageEvent) {
       if (event.key !== syncKey) return;
       refetchTasks();
-      refetchIncidents();
       refetchModules();
     }
 
     window.addEventListener("storage", handleStorage);
     return () => window.removeEventListener("storage", handleStorage);
-  }, [
-    projectId,
-    refetchIncidents,
-    refetchModules,
-    refetchTasks,
-    workspaceSlug,
-  ]);
+  }, [projectId, refetchModules, refetchTasks, workspaceSlug]);
 
   const columns = React.useMemo<BoardColumnDef[]>(() => {
     const ordered = [...statuses].sort((a, b) => a.order - b.order);
@@ -257,10 +258,7 @@ export function TaskBoard({
     // drop target: PATCH treats `statusId: null` as "no change", so the API
     // offers no way to move a task back out of a status.
     if (
-      tasks.some((task) => columnIdFor(task, knownStatusIds) === UNASSIGNED) ||
-      (incidentsQuery.data ?? []).some(
-        (incident) => columnIdForIncident(incident, knownStatusIds) === UNASSIGNED,
-      )
+      tasks.some((task) => columnIdFor(task, knownStatusIds) === UNASSIGNED)
     ) {
       base.unshift({
         id: UNASSIGNED,
@@ -269,22 +267,21 @@ export function TaskBoard({
       });
     }
     return base;
-  }, [statuses, tasks, knownStatusIds, incidentsQuery.data]);
+  }, [statuses, tasks, knownStatusIds]);
   const router = useRouter();
   const grouped = React.useMemo(() => {
     const map = new Map<string, { tasks: Task[]; incidents: Incident[] }>();
-    for (const column of columns) map.set(column.id, { tasks: [], incidents: [] });
+    for (const column of columns)
+      map.set(column.id, { tasks: [], incidents: [] });
     for (const task of tasks) {
       map.get(columnIdFor(task, knownStatusIds))?.tasks.push(task);
     }
-    for (const incident of incidentsQuery.data ?? []) {
-      map.get(columnIdForIncident(incident, knownStatusIds))?.incidents.push(incident);
-    }
+
     for (const { tasks: columnTasks } of map.values()) {
       columnTasks.sort((a, b) => a.position - b.position);
     }
     return map;
-  }, [columns, incidentsQuery.data, knownStatusIds, statuses, tasks]);
+  }, [columns, knownStatusIds, statuses, tasks]);
 
   function clearFilters() {
     setSearch("");
@@ -320,9 +317,6 @@ export function TaskBoard({
     const id = String(event.active.id);
     const task = tasks.find((item) => item.id === id);
     if (task) return setActiveItem({ type: "task", item: task });
-
-    const incident = (incidentsQuery.data ?? []).find((item) => item.id === id);
-    setActiveItem(incident ? { type: "incident", item: incident } : null);
   }
 
   function handleDragEnd(event: DragEndEvent) {
@@ -332,37 +326,18 @@ export function TaskBoard({
 
     const activeId = String(active.id);
     const draggedTask = tasks.find((task) => task.id === activeId);
-    const draggedIncident = (incidentsQuery.data ?? []).find(
-      (incident) => incident.id === activeId,
-    );
-    if (!draggedTask && !draggedIncident) return;
+    if (!draggedTask) return;
 
     const overId = String(over.id);
 
     // `over` is either a column (dropped on empty space) or another card.
     const overTask = tasks.find((task) => task.id === overId);
-    const overIncident = (incidentsQuery.data ?? []).find(
-      (incident) => incident.id === overId,
-    );
     const targetColumn = overTask
       ? columnIdFor(overTask, knownStatusIds)
-      : overIncident
-        ? columnIdForIncident(overIncident, knownStatusIds)
-        : overId;
+      : overId;
 
     const target = columns.find((column) => column.id === targetColumn);
     if (!target) return;
-    if (draggedIncident) {
-      if (!target.statusRef || target.id === draggedIncident.statusId) return;
-      updateIncident.mutate(
-        { id: draggedIncident.id, dto: { statusId: target.id } },
-        {
-          onSuccess: () =>
-            toast.success("Incident moved", `${draggedIncident.title} → ${target.name}`),
-        },
-      );
-      return;
-    }
 
     const dragged = draggedTask;
     if (!dragged) return;
@@ -419,29 +394,17 @@ export function TaskBoard({
     router.push(path);
   }
 
-  const isLoading =
-    tasksQuery.isLoading || statusesQuery.isLoading || incidentsQuery.isLoading;
+  const isLoading = tasksQuery.isLoading || statusesQuery.isLoading;
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <h2 className="text-lg font-semibold">Board</h2>
-          <p className="text-sm text-muted-foreground">
-            Your assigned tasks and incidents.
-          </p>
-        </div>
-      </div>
       <QueryState
         isLoading={isLoading}
-        isError={
-          tasksQuery.isError || statusesQuery.isError || incidentsQuery.isError
-        }
-        error={tasksQuery.error ?? statusesQuery.error ?? incidentsQuery.error}
+        isError={tasksQuery.isError || statusesQuery.isError}
+        error={tasksQuery.error ?? statusesQuery.error}
         onRetry={() => {
           tasksQuery.refetch();
           statusesQuery.refetch();
-          incidentsQuery.refetch();
         }}
         skeleton={<TableSkeleton columns={4} rows={4} />}
       >
@@ -569,14 +532,16 @@ export function TaskBoard({
                 canUpdate={canUpdate}
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
-                onCreate={() =>
-                  openTaskTab(
-                    `/${workspaceSlug}/projects/${projectId}/tasks/new?statusId=${encodeURIComponent(column.id)}`,
-                  )
+                onCreate={(workType) =>
+                  onCreate
+                    ? onCreate(column.id, workType)
+                    : openTaskTab(
+                        `/${workspaceSlug}/projects/${projectId}/work-items/new?statusId=${encodeURIComponent(column.id)}&workItemTypeId=${encodeURIComponent(workType.id)}`,
+                      )
                 }
                 onOpenTask={(task) =>
                   openTaskTab(
-                    `/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`,
+                    `/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`,
                   )
                 }
                 onOpenIncident={(incident) =>
@@ -640,7 +605,11 @@ function IncidentCard({
     <article
       ref={setNodeRef}
       style={{ transform: CSS.Translate.toString(transform) }}
-      className={cn("group/title relative rounded-md border border-status-error/30 bg-card p-3 shadow-sm", isDragging && "opacity-40", overlay && "rotate-2 shadow-lg")}
+      className={cn(
+        "group/title relative rounded-md border border-status-error/30 bg-card p-3 shadow-sm",
+        isDragging && "opacity-40",
+        overlay && "rotate-2 shadow-lg",
+      )}
     >
       <button
         type="button"
@@ -651,11 +620,15 @@ function IncidentCard({
           <AlertTriangle className="h-3.5 w-3.5" />
           Incident
         </div>
-        <p className="pr-4 text-sm font-medium leading-snug">{incident.title}</p>
+        <p className="pr-4 text-sm font-medium leading-snug">
+          {incident.title}
+        </p>
         <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
           <span
             className="h-2 w-2 rounded-full"
-            style={{ backgroundColor: incident.status.color ?? "var(--status-error)" }}
+            style={{
+              backgroundColor: incident.status.color ?? "var(--status-error)",
+            }}
           />
           {incident.status.name}
         </span>
@@ -705,7 +678,7 @@ function BoardColumn({
   dragDisabled: boolean;
   canCreate: boolean;
   canUpdate: boolean;
-  onCreate: () => void;
+  onCreate: (workType: WorkType) => void;
   onOpenTask: (task: Task) => void;
   onOpenIncident: (incident: Incident) => void;
   workspaceSlug: string;
@@ -737,20 +710,28 @@ function BoardColumn({
           </span>
         </div>
         {canCreate && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            aria-label={`Add task to ${column.name}`}
-            onClick={onCreate}
+          <CreateWorkItemMenu
+            workspaceSlug={workspaceSlug}
+            onSelect={onCreate}
+            align="start"
           >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-6 w-6"
+              aria-label={`Add work item to ${column.name}`}
+            >
+              <Plus className="h-3.5 w-3.5" />
+            </Button>
+          </CreateWorkItemMenu>
         )}
       </header>
 
       <SortableContext
-        items={[...tasks.map((task) => task.id), ...incidents.map((incident) => incident.id)]}
+        items={[
+          ...tasks.map((task) => task.id),
+          ...incidents.map((incident) => incident.id),
+        ]}
         strategy={verticalListSortingStrategy}
       >
         <div
@@ -771,7 +752,7 @@ function BoardColumn({
               }
               onOpen={() => onOpenTask(task)}
               disabled={dragDisabled}
-              copyUrl={`/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`}
+              copyUrl={`/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`}
             />
           ))}
 

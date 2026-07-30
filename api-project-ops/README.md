@@ -20,6 +20,7 @@ re-authenticating.
 - [Task limits](#task-limits)
 - [Project creation side effects](#project-creation-side-effects)
 - [API surface](#api-surface)
+- [Testing](#testing)
 - [Design decisions / assumptions](#design-decisions--assumptions)
 
 ---
@@ -36,11 +37,19 @@ src/
   roles/             UserRole CRUD + permission assignment
   permissions/       permission catalog (read)
   plans/             active plan get/update (+ limit-enforcement helper)
-  projects/          project CRUD + transactional auto-module/auto-task creation
+  projects/          project CRUD + transactional auto-module/auto-work-item creation
   project-members/   invite (auto-invite to workspace) / update / remove
   modules-catalog/   Module catalog CRUD + per-project ModuleInstance management
-  tasks/             task CRUD + per-module task-limit enforcement
+  work-items/        the unified unit of work (task/incident/bug/…) + activity + nudge-notify
+  work-types/        per-workspace WorkType catalog (classifies work items; category: task|incident|bug)
   ticket-status/     configurable status pipeline per workspace
+  priorities/        per-workspace priority scale
+  project-types/     project type catalog (isPlanAdd toggles module/work-item provisioning)
+  comments/          workspace-wide comments + comments on a specific work item (with @mentions)
+  activity-log/      generic per-entity audit trail (entityType/entityId + a human description)
+  reports/           project + workspace reports computed live from WorkItem rows, grouped by WorkType
+  settings/          aggregated workspace config bundle
+  access/             caller's effective permissions (workspace-level, project-level)
   common/
     constants/       permission catalog, default roles, workspace defaults
     decorators/      @Public, @RequirePermission, @CurrentUser, @CurrentWorkspace
@@ -110,7 +119,7 @@ npm run db:seed
 npm run prisma:studio
 ```
 
-The **seed** creates a demo user `demo.owner`, a `Demo Workspace`, the four default
+The **seed** creates a demo user `demo.workspace@projectops.com`, a workspace slugged `demo.workspace`, the four default
 roles (Owner/Admin/Member/Viewer) with permissions, the plan catalog
 (Professional/Ultimate/Enterprise, with **Professional** active), the module
 catalog **per plan** (Pipeline → limit 10, Custom Properties → limit 20 under each
@@ -145,16 +154,16 @@ BASE=http://localhost:3000/api/v1
 # 1. request an OTP. Unknown emails are NOT created — the response returns
 #    { "slug": "Create-User" }; register first (step 1a). Existing users get an OTP.
 curl -X POST $BASE/auth/otp/request -H 'Content-Type: application/json' \
-  -d '{"email":"demo.owner@amwhiz.com"}'
+  -d '{"email":"demo.workspace@projectops.com"}'
 
 # 1a. (only if step 1 returned Create-User) create the user, which also sends an OTP
 curl -X POST $BASE/auth/register -H 'Content-Type: application/json' \
-  -d '{"email":"demo.owner@amwhiz.com","firstName":"Demo","lastName":"Owner"}'
+  -d '{"email":"demo.workspace@projectops.com","firstName":"Demo","lastName":"Owner"}'
 
 # 2. verify -> access + refresh token pair (token carries userId only)
 # Dev default OTP is 123456 (User.staticOtp); override per user for a different fixed code.
 curl -X POST $BASE/auth/otp/verify -H 'Content-Type: application/json' \
-  -d '{"email":"demo.owner@amwhiz.com","otp":"123456"}'
+  -d '{"email":"demo.workspace@projectops.com","otp":"123456"}'
 # -> data.accessToken, data.refreshToken
 
 # 3. list workspaces you belong to (token only)
@@ -195,11 +204,14 @@ same file and are seeded per workspace.
 
 ## Task limits
 
-Plans carry no numeric quotas (no maxProjects/maxMembers). The only limit is the
-per-project **`ModuleInstance.taskLimit`**: tasks created beyond it are not
-rejected — they spill into another same-named module instance with capacity, or
-increment the instance's **`addonTask`** counter when every same-named instance
-is full.
+Plans carry no numeric quotas (no maxProjects/maxMembers). `ModuleInstance`
+still carries **`taskLimit`** / **`addonTask`** columns from the original
+design, but **`WorkItemsService` does not currently enforce them** — creating
+a work item never checks the owning instance's `taskLimit` or increments
+`addonTask`. Those fields are only used for the "used / limit" display in the
+project dashboard and report. (This is a known gap from the tasks → work-items
+migration, not an intentional design choice — worth reinstating if per-module
+quotas matter to you.)
 
 ## Project creation side effects
 
@@ -210,11 +222,12 @@ is full.
 2. adds the creator as an active **Owner** `ProjectMember`,
 3. **only when the project type's `isPlanAdd` is true:** attaches each chosen
    plan's default (`isDefault`) modules as `ModuleInstance`s (carrying over
-   `defaultTaskLimit`) and seeds tasks per instance named
-   **`{Module Name} - N`**.
+   `defaultTaskLimit`) and seeds `defaultTaskLimit` work items per instance,
+   named **`{Module Name}-N`**, classified under the workspace's `task`
+   WorkType, assigned to the creator.
 
 A project type with `isPlanAdd = false` produces a **bare project** — module
-attachment and seed tasks are skipped.
+attachment and seed work items are skipped.
 
 ## API surface
 
@@ -234,10 +247,32 @@ attachment and seed tasks are skipped.
 | Project members    | `GET/POST /projects/:projectId/members`, `PATCH/DELETE /projects/:projectId/members/:memberId`   |
 | Modules (catalog)  | `GET/POST /modules`, `PATCH/DELETE /modules/:id`                                                 |
 | Module instances   | `GET/POST /projects/:projectId/modules`, `PATCH/DELETE /projects/:projectId/modules/:instanceId` |
-| Tasks              | `GET/POST /projects/:projectId/tasks`, `GET/PATCH/DELETE /projects/:projectId/tasks/:taskId`     |
+| Work items         | `GET/POST /projects/:projectId/work-items`, `GET/PATCH/DELETE /projects/:projectId/work-items/:id`, `GET .../work-items/:id/activity`, `POST .../work-items/:id/notify` |
+| Work types         | `GET/POST /work-types`, `GET/PATCH/DELETE /work-types/:id`                                       |
 | Ticket statuses    | `GET/POST /ticket-statuses`, `PATCH/DELETE /ticket-statuses/:id`                                 |
+| Comments           | `GET/POST /comments`, `PATCH/DELETE /comments/:id`, and the same on `/projects/:projectId/work-items/:id/comments` |
+| Activity log       | `GET /activity/:entityId`                                                                        |
+| Reports            | `GET /projects/:projectId/reports`, `GET /reports`                                               |
+| Access             | `GET /workspace/permission`, `GET /project/:projectId/permission`                                 |
 
 Full request/response schemas are in Swagger at `/api/doc`.
+
+## Testing
+
+```bash
+npm test              # unit tests (Jest + ts-jest, mocked PrismaService — no DB needed)
+npm run test:cov      # with coverage
+npm run test:e2e      # e2e config exists (test/jest-e2e.json) but no e2e specs yet
+```
+
+Every service under `src/` has a colocated `*.service.spec.ts` using
+`@nestjs/testing`'s `Test.createTestingModule` with `PrismaService` (and any
+other injected service) mocked via `jest.fn()` — no real database is touched.
+`$transaction` callbacks are exercised by mocking `$transaction` to invoke the
+callback against the same mocked client. There's also a live curl smoke-test
+script (ad hoc, not checked in) that walks the full auth flow and every real
+endpoint against a running dev server — see `API_CURL.md` for the same
+requests you'd use to reproduce it by hand.
 
 ## Design decisions / assumptions
 
@@ -253,18 +288,23 @@ Confirmed with the product owner:
   yet). _(Note: workspace and project invite endpoints still create a bare user row
   by email on demand.)_
 - **`User.staticOtp`**: a fixed per-user OTP code (defaults to the dev value
-  `123456`). `OtpService` uses it instead of generating a random code whenever it's
-  set — override a user's row for a predictable demo/test login code.
+  `123456`). `AuthService.verifyOtp()` accepts it as an unthrottled bypass — a
+  submitted code matching `user.staticOtp` skips `OtpService.verify()` entirely
+  (no expiry/attempt-count check) — for a predictable demo/test login code.
+  Override a user's row to change it, or clear it in production so only the
+  real generated-and-emailed OTP works.
 - **Project invite auto-invites to the workspace**: if the invitee is not yet a
   workspace member, a `WorkspaceMember` (status `invited`) is created, then the
   `ProjectMember`.
 - **One active Plan per workspace** (no plan-history table).
-- Seed task naming pattern: **`{Module Name} - 1`**.
+- Seed work-item naming pattern: **`{Module Name}-1`**, classified under the
+  workspace's `task` WorkType.
 
 Other notes:
 
 - OTP delivery is stubbed — codes are logged via `OtpService.deliver()`. Wire a real
   SMS/email provider there for production.
-- Projects and tasks use **soft delete** (`deletedAt`); workspace/project membership
-  removal is a status change (`removed`), not a hard delete.
+- Projects use **soft delete** (`deletedAt`); work items use a **hard delete**
+  (no `deletedAt` column); workspace/project membership removal is a status
+  change (`removed`), not a delete at all.
 - System roles (`isSystem`, e.g. Owner) are protected from deletion.

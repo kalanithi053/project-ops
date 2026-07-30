@@ -27,140 +27,110 @@ import { CreateCommentDto } from './dto/create-comment.dto';
 export class CommentsController {
   constructor(private readonly comments: CommentsService) {}
 
-  @Post('projects/:projectId/tasks/:taskId/comments')
+  @Get('comments')
+  @ApiOperation({ summary: 'List comments in the workspace' })
+  list(@CurrentWorkspace('workspaceId') workspaceId: string) {
+    return this.comments.list(workspaceId);
+  }
+
+  @Post('comments')
   @RequirePermission(PERMISSIONS.COMMENT_CREATE)
   @ApiOperation({
-    summary: 'Comment on a task (tag workspace members via mentions: [emails])',
+    summary: 'Create a comment (tag workspace members via mentions: [emails])',
   })
-  createTaskComment(
+  create(
     @CurrentWorkspace() ws: WorkspaceContext,
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.comments.createForTask(
-      ws.workspaceId,
-      projectId,
-      taskId,
-      ws.userId,
-      dto,
-    );
+    return this.comments.create(ws.workspaceId, ws.userId, dto);
   }
 
-  @Get('projects/:projectId/tasks/:taskId/comments')
-  @RequirePermission(PERMISSIONS.TASK_READ)
-  @ApiOperation({ summary: 'List comments on a task' })
-  listTaskComments(
+  @Patch('comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Edit your own comment' })
+  update(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('commentId') commentId: string,
+    @Body() dto: CreateCommentDto,
+  ) {
+    return this.comments.update(ws.workspaceId, commentId, ws.userId, dto);
+  }
+
+  @Delete('comments/:commentId')
+  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
+  @ApiOperation({ summary: 'Delete your own comment' })
+  remove(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('commentId') commentId: string,
+  ) {
+    return this.comments.remove(ws.workspaceId, commentId, ws.userId);
+  }
+
+  @Get('projects/:projectId/work-items/:workItemId/comments')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({ summary: 'List comments on a work item' })
+  listWorkItemComments(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
+    @Param('workItemId') workItemId: string,
   ) {
-    return this.comments.listForTask(workspaceId, projectId, taskId);
+    return this.comments.listForWorkItem(workspaceId, projectId, workItemId);
   }
 
-  @Patch('projects/:projectId/tasks/:taskId/comments/:commentId')
-  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
-  @ApiOperation({ summary: 'Edit your own task comment' })
-  updateTaskComment(
-    @CurrentWorkspace() ws: WorkspaceContext,
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
-    @Param('commentId') commentId: string,
-    @Body() dto: CreateCommentDto,
-  ) {
-    return this.comments.updateForTask(
-      ws.workspaceId,
-      projectId,
-      taskId,
-      commentId,
-      ws.userId,
-      dto,
-    );
-  }
-
-  @Delete('projects/:projectId/tasks/:taskId/comments/:commentId')
-  @RequirePermission(PERMISSIONS.COMMENT_CREATE)
-  @ApiOperation({ summary: 'Delete your own task comment' })
-  removeTaskComment(
-    @CurrentWorkspace() ws: WorkspaceContext,
-    @Param('projectId') projectId: string,
-    @Param('taskId') taskId: string,
-    @Param('commentId') commentId: string,
-  ) {
-    return this.comments.removeForTask(
-      ws.workspaceId,
-      projectId,
-      taskId,
-      commentId,
-      ws.userId,
-    );
-  }
-
-  @Post('projects/:projectId/incidents/:incidentId/comments')
+  @Post('projects/:projectId/work-items/:workItemId/comments')
   @RequirePermission(PERMISSIONS.COMMENT_CREATE)
   @ApiOperation({
     summary:
-      'Comment on an incident ticket (tag workspace members via mentions: [emails])',
+      'Comment on a work item (tag workspace members via mentions: [emails])',
   })
-  createIncidentComment(
+  createWorkItemComment(
     @CurrentWorkspace() ws: WorkspaceContext,
     @Param('projectId') projectId: string,
-    @Param('incidentId') incidentId: string,
+    @Param('workItemId') workItemId: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.comments.createForIncident(
+    return this.comments.createForWorkItem(
       ws.workspaceId,
       projectId,
-      incidentId,
+      workItemId,
       ws.userId,
       dto,
     );
   }
 
-  @Get('projects/:projectId/incidents/:incidentId/comments')
-  @RequirePermission(PERMISSIONS.PROJECT_READ)
-  @ApiOperation({ summary: 'List comments on an incident ticket' })
-  listIncidentComments(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Param('projectId') projectId: string,
-    @Param('incidentId') incidentId: string,
-  ) {
-    return this.comments.listForIncident(workspaceId, projectId, incidentId);
-  }
-
-  @Patch('projects/:projectId/incidents/:incidentId/comments/:commentId')
+  @Patch('projects/:projectId/work-items/:workItemId/comments/:commentId')
   @RequirePermission(PERMISSIONS.COMMENT_CREATE)
-  @ApiOperation({ summary: 'Edit your own incident comment' })
-  updateIncidentComment(
+  @ApiOperation({ summary: 'Edit your own work item comment' })
+  updateWorkItemComment(
     @CurrentWorkspace() ws: WorkspaceContext,
     @Param('projectId') projectId: string,
-    @Param('incidentId') incidentId: string,
+    @Param('workItemId') workItemId: string,
     @Param('commentId') commentId: string,
     @Body() dto: CreateCommentDto,
   ) {
-    return this.comments.updateForIncident(
+    return this.comments.updateForWorkItem(
       ws.workspaceId,
       projectId,
-      incidentId,
+      workItemId,
       commentId,
       ws.userId,
       dto,
     );
   }
 
-  @Delete('projects/:projectId/incidents/:incidentId/comments/:commentId')
+  @Delete('projects/:projectId/work-items/:workItemId/comments/:commentId')
   @RequirePermission(PERMISSIONS.COMMENT_CREATE)
-  @ApiOperation({ summary: 'Delete your own incident comment' })
-  removeIncidentComment(
+  @ApiOperation({ summary: 'Delete your own work item comment' })
+  removeWorkItemComment(
     @CurrentWorkspace() ws: WorkspaceContext,
     @Param('projectId') projectId: string,
-    @Param('incidentId') incidentId: string,
+    @Param('workItemId') workItemId: string,
     @Param('commentId') commentId: string,
   ) {
-    return this.comments.removeForIncident(
+    return this.comments.removeForWorkItem(
       ws.workspaceId,
       projectId,
-      incidentId,
+      workItemId,
       commentId,
       ws.userId,
     );

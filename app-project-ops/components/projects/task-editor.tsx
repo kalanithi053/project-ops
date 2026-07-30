@@ -41,6 +41,7 @@ import {
   useUpdateTask,
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
+import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
 import type { CreateTaskDto, Task, UpdateMeDto } from "@/lib/api/types";
 import { todayDateInput } from "@/lib/format";
 import { getFullname } from "@/lib/utils";
@@ -65,6 +66,8 @@ interface TaskEditorProps {
   /** null creates a new task. */
   task: Task | null;
   defaultStatusId?: string;
+  /** WorkType chosen in the create-flow picker (task/incident/bug/…). */
+  defaultWorkItemTypeId?: string;
   canSave: boolean;
   canComment: boolean;
   onDone: () => void;
@@ -83,12 +86,14 @@ export function TaskEditor({
   projectId,
   task,
   defaultStatusId,
+  defaultWorkItemTypeId,
   canSave,
   canComment,
   onDone,
 }: TaskEditorProps) {
   const create = useCreateTask(workspaceSlug, projectId);
   const update = useUpdateTask(workspaceSlug, projectId);
+  const { data: workTypes } = useWorkTypes(workspaceSlug);
 
   const { data: modules } = useProjectModules(workspaceSlug, projectId);
   const { data: project } = useProject(workspaceSlug, projectId);
@@ -111,6 +116,9 @@ export function TaskEditor({
   const [moduleInstanceId, setModuleInstanceId] = React.useState<
     string | undefined
   >(task?.moduleInstanceId ?? undefined);
+  const [workItemTypeId] = React.useState<string | undefined>(
+    task?.workItemTypeId ?? defaultWorkItemTypeId,
+  );
   const [statusId, setStatusId] = React.useState<string | undefined>(
     task?.statusId ?? defaultStatusId,
   );
@@ -175,6 +183,9 @@ export function TaskEditor({
   );
   const taskIdentifier =
     task?.prefix ?? (task ? task.id.slice(0, 8).toUpperCase() : "NEW");
+  const workItemTypeLabel =
+    (workTypes ?? []).find((type) => type.id === workItemTypeId)?.name ??
+    "Task";
   const headerAccent =
     selectedStatus?.color ?? selectedPriority?.color ?? "var(--status-info)";
 
@@ -224,6 +235,7 @@ export function TaskEditor({
       name: trimmed,
       ...(descriptionText ? { description: sanitizedDescription } : {}),
       ...(moduleInstanceId ? { moduleInstanceId } : {}),
+      ...(workItemTypeId ? { workItemTypeId } : {}),
       ...(statusId ? { statusId } : {}),
       ...(priorityId ? { priorityId } : {}),
       ...(eta ? { estimateHours: Number(eta) } : {}),
@@ -272,7 +284,7 @@ export function TaskEditor({
                 <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info">
                   <ListChecks className="h-3.5 w-3.5" />
                   <span className="uppercase tracking-wide">
-                    Task {taskIdentifier}
+                    {workItemTypeLabel} {taskIdentifier}
                   </span>
                 </div>
                 <div className="group/title relative">
@@ -292,7 +304,7 @@ export function TaskEditor({
                     <CopyWorkItemLink
                       prefix={`Task ${task.prefix ?? task.id}`}
                       title={name}
-                      url={`/${workspaceSlug}/projects/${projectId}/tasks/${task.id}`}
+                      url={`/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`}
                       className="absolute right-2 top-1/2 -translate-y-1/2 group-focus-within/title:opacity-100"
                     />
                   )}

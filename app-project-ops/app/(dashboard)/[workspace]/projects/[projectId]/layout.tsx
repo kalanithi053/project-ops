@@ -10,7 +10,6 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { segment: "", label: "Dashboard" },
-  { segment: "board", label: "Board" },
   { segment: "work-items", label: "Work items" },
   { segment: "users", label: "Users" },
   // { segment: "files", label: "Files" },
@@ -32,10 +31,10 @@ export default function ProjectLayout({
     projectId: string;
   }>();
   const pathname = usePathname();
-  const { isLoading } = useProject(workspace, projectId);
 
   const base = `/${workspace}/projects/${projectId}`;
   const isTaskEditor =
+    pathname.startsWith(`${base}/work-items/`) ||
     pathname.startsWith(`${base}/tasks/`) ||
     pathname.startsWith(`${base}/incidents/`);
 

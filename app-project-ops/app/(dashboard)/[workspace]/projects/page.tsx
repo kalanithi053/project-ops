@@ -210,9 +210,9 @@ export default function ProjectsPage() {
         href: (p) => `/${workspace}/projects/${p.id}`,
       },
       {
-        label: "Open board",
+        label: "Open work items",
         icon: ListChecks,
-        href: (p) => `/${workspace}/projects/${p.id}/board`,
+        href: (p) => `/${workspace}/projects/${p.id}/work-items`,
       },
     ],
     [workspace],

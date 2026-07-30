@@ -1,4 +1,4 @@
-import { StatusCategory } from '@prisma/client';
+import { StatusCategory, WorkTypeCategory } from '@prisma/client';
 
 /**
  * Default module catalog (HubSpot implementation modules). Seeded per plan;
@@ -147,6 +147,29 @@ export const DEFAULT_PRIORITIES: Array<{
   { name: 'Medium', color: '#3b82f6', order: 1, isDefault: true },
   { name: 'High', color: '#f59e0b', order: 2, isDefault: false },
   { name: 'Urgent', color: '#ef4444', order: 3, isDefault: false },
+];
+
+/** Default work type catalog for a new workspace. */
+export const DEFAULT_WORK_TYPES: Array<{
+  name: string;
+  color: string;
+  category: WorkTypeCategory;
+}> = [
+  {
+    name: 'Task',
+    color: '#e4f468ff',
+    category: 'task',
+  },
+  {
+    name: 'Incident',
+    color: '#fd0909',
+    category: 'incident',
+  },
+  {
+    name: 'Bug',
+    color: '#f5ee13',
+    category: 'bug',
+  },
 ];
 
 /**

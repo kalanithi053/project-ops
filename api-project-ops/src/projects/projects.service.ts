@@ -15,8 +15,7 @@ export class ProjectsService {
   /**
    * Creates a project and, atomically:
    *   1. attaches each chosen plan's default modules as ModuleInstances,
-   *   2. seeds tasks per instance ("{Module Name} - N"),
-   *   3. adds the creator as an active Owner ProjectMember.
+   *   2. adds the creator as an active Owner ProjectMember.
    */
   async create(workspaceId: string, userId: string, dto: CreateProjectDto) {
     // The chosen project type decides whether plan-based steps run.
@@ -24,7 +23,7 @@ export class ProjectsService {
       where: { id: dto.projectTypeId, workspaceId },
     });
     const isExistingProject = await this.prisma.project.findMany({
-      where: { name: dto.name, workspaceId },
+      where: { name: dto.name, workspaceId, deletedAt: null },
     });
     if (isExistingProject.length) {
       throw new BadRequestException('Project name already exists');
@@ -55,6 +54,9 @@ export class ProjectsService {
     const endDate = new Date(dto.endDate);
     this.assertFutureDate(startDate, 'startDate');
     this.assertFutureDate(endDate, 'endDate');
+    if (endDate < startDate) {
+      throw new BadRequestException('endDate cannot be before startDate');
+    }
 
     return this.prisma.$transaction(async (tx) => {
       const project = await tx.project.create({
@@ -91,8 +93,8 @@ export class ProjectsService {
         });
       }
 
-      // isPlanAdd types auto-provision each chosen plan's default modules +
-      // seed tasks; otherwise the project starts empty.
+      // isPlanAdd types auto-provision each chosen plan's default modules;
+      // otherwise the project starts empty.
       if (projectType.isPlanAdd) {
         for (const plan of selectedPlans) {
           await this.provisionDefaultModules(tx, {
@@ -111,7 +113,6 @@ export class ProjectsService {
         include: {
           projectType: { select: { id: true, name: true, isPlanAdd: true } },
           moduleInstances: { include: { module: true } },
-          tasks: true,
           members: true,
         },
       });
@@ -119,8 +120,9 @@ export class ProjectsService {
   }
 
   /**
-   * Attaches the active plan's default modules to a project and seeds one task
-   * each. Which modules get attached depends on the workspace's active plan.
+   * Attaches the active plan's default modules to a project as
+   * ModuleInstances. Which modules get attached depends on the workspace's
+   * active plan.
    */
   private async provisionDefaultModules(
     tx: Prisma.TransactionClient,
@@ -149,6 +151,10 @@ export class ProjectsService {
     const defaultModules = await tx.module.findMany({
       where: { workspaceId, planId, isDefault: true, isActive: true },
     });
+    const workType = await tx.workType.findFirst({
+      where: { workspaceId, category: 'task' },
+    });
+    const entityType = workType?.category ?? 'task';
 
     for (const module of defaultModules) {
       const instance = await tx.moduleInstance.create({
@@ -159,17 +165,17 @@ export class ProjectsService {
         },
       });
       for (let index = 0; index < (module.defaultTaskLimit ?? 1); index += 1) {
-        const task = await tx.task.create({
+        const workItem = await tx.workItem.create({
           data: {
             projectId: project.id,
             moduleInstanceId: instance.id,
+            workItemTypeId: workType?.id ?? null,
             prefix: `${module.name}-${index + 1}`,
             name: module.name,
             startDate,
             dueDate: endDate,
             statusId: defaultStatus?.id ?? null,
             createdBy: userId,
-            position: 0,
             assigneeId: userId,
           },
         });
@@ -178,15 +184,15 @@ export class ProjectsService {
           data: {
             workspaceId,
             projectId: project.id,
-            entityType: 'task',
-            entityId: task.id,
+            entityType,
+            entityId: workItem.id,
             action: 'created',
             userId,
             metadata: {
-              name: task.name,
-              statusId: task.statusId,
-              assigneeId: task.assigneeId,
-            } as Prisma.InputJsonValue,
+              name: workItem.name,
+              statusId: workItem.statusId,
+              assigneeId: workItem.assigneeId,
+            },
           },
         });
       }
@@ -199,7 +205,7 @@ export class ProjectsService {
       orderBy: { createdAt: 'desc' },
       include: {
         projectType: { select: { id: true, name: true, isPlanAdd: true } },
-        _count: { select: { tasks: true, members: true } },
+        _count: { select: { members: true } },
       },
     });
   }
@@ -213,7 +219,6 @@ export class ProjectsService {
         members: {
           include: { user: { select: { id: true, email: true } } },
         },
-        _count: { select: { tasks: true } },
       },
     });
     if (!project) throw new NotFoundException('Project not found');

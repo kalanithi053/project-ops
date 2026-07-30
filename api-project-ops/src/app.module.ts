@@ -13,13 +13,13 @@ import { PlansModule } from './plans/plans.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ProjectMembersModule } from './project-members/project-members.module';
 import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
-import { TasksModule } from './tasks/tasks.module';
+import { WorkItemsModule } from './work-items/work-items.module';
 import { TicketStatusModule } from './ticket-status/ticket-status.module';
 import { PrioritiesModule } from './priorities/priorities.module';
+import { WorkTypesModule } from './work-types/work-types.module';
 import { ProjectTypesModule } from './project-types/project-types.module';
 import { SettingsModule } from './settings/settings.module';
 import { AccessModule } from './access/access.module';
-import { IncidentsModule } from './incidents/incidents.module';
 import { CommentsModule } from './comments/comments.module';
 import { ReportsModule } from './reports/reports.module';
 import { AppController } from './app.controller';
@@ -39,13 +39,13 @@ import { AppService } from './app.service';
     ProjectsModule,
     ProjectMembersModule,
     ModulesCatalogModule,
-    TasksModule,
+    WorkItemsModule,
     TicketStatusModule,
     PrioritiesModule,
+    WorkTypesModule,
     ProjectTypesModule,
     SettingsModule,
     AccessModule,
-    IncidentsModule,
     CommentsModule,
     ReportsModule,
   ],

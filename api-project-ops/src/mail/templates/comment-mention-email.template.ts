@@ -17,14 +17,11 @@ function commentPreview(value: string): string {
 
 export function commentMentionEmailTemplate(params: {
   authorName: string;
-  projectName: string;
-  entityLabel: 'task' | 'incident';
-  entityName: string;
+  workspaceName: string;
   body: string;
   actionUrl: string;
 }): string {
-  const { authorName, projectName, entityLabel, entityName, body, actionUrl } =
-    params;
+  const { authorName, workspaceName, body, actionUrl } = params;
 
   return `
 <!doctype html>
@@ -42,16 +39,13 @@ export function commentMentionEmailTemplate(params: {
             <tr>
               <td style="padding:0 40px 24px 40px;">
                 <p style="margin:0 0 8px 0;font-size:14px;color:#374151;">
-                  <strong>${escapeHtml(authorName)}</strong> mentioned you on a ${entityLabel} in <strong>${escapeHtml(projectName)}</strong>.
-                </p>
-                <p style="margin:0 0 16px 0;font-size:15px;color:#111827;font-weight:bold;">
-                  ${escapeHtml(entityName)}
+                  <strong>${escapeHtml(authorName)}</strong> mentioned you in a comment in <strong>${escapeHtml(workspaceName)}</strong>.
                 </p>
                 <div style="padding:16px;background-color:#f4f5f7;border-radius:6px;font-size:14px;line-height:1.5;color:#374151;">
                   ${escapeHtml(commentPreview(body))}
                 </div>
                 <p style="margin:20px 0 0 0;">
-                  <a href="${actionUrl}" style="display:inline-block;border-radius:6px;background-color:#2563eb;padding:10px 16px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;">Open ${entityLabel}</a>
+                  <a href="${actionUrl}" style="display:inline-block;border-radius:6px;background-color:#2563eb;padding:10px 16px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;">Open comment</a>
                 </p>
               </td>
             </tr>

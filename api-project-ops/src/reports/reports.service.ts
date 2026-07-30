@@ -1,18 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
-type ReportTask = {
-  moduleInstanceId: string | null;
+type ReportWorkItem = {
+  moduleInstanceId: string;
   assigneeId: string | null;
+  workItemType: { id: string; name: string; category: string } | null;
   status: { name: string; category: string; isDefault: boolean } | null;
   priority: { name: string } | null;
-  estimateHours: number | null;
-  completedHours: number | null;
-};
-
-type ReportIncident = {
-  assigneeId: string | null;
-  status: { name: string; category: string; isDefault: boolean } | null;
   estimateHours: number | null;
   completedHours: number | null;
 };
@@ -25,15 +19,22 @@ const PROGRESS_STAGES: Array<{ max: number; stage: string }> = [
   { max: 100, stage: 'Completed' },
 ];
 
+const UNCATEGORIZED = 'Uncategorized';
+
 function displayName(user: {
   email: string;
   firstName: string | null;
   lastName: string | null;
 }): string {
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-  return name || user.email;
+  return name || user.email.split('@')[0];
 }
 
+/**
+ * Reports are computed live from WorkItem rows — every breakdown groups by
+ * whatever WorkTypes (task/incident/bug/...) the workspace actually has
+ * configured, rather than assuming a fixed set of categories.
+ */
 @Injectable()
 export class ReportsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -41,123 +42,85 @@ export class ReportsService {
   async getProjectReport(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
 
-    const [instances, tasks, incidents, members, ticketStatuses] =
-      await Promise.all([
-        this.prisma.moduleInstance.findMany({
-          where: { projectId },
-          include: { module: { select: { name: true } } },
-          orderBy: { createdAt: 'asc' },
-        }),
-        this.prisma.task.findMany({
-          where: {
-            projectId,
-            deletedAt: null,
-            NOT: {
-              status: {
-                is: { name: { equals: 'Removed', mode: 'insensitive' } },
-              },
-            },
-          },
-          select: {
-            moduleInstanceId: true,
-            assigneeId: true,
-            status: { select: { name: true, category: true, isDefault: true } },
-            priority: { select: { name: true } },
-            estimateHours: true,
-            completedHours: true,
-          },
-        }),
-        this.prisma.incident.findMany({
-          where: {
-            projectId,
-            NOT: {
-              status: {
-                is: { name: { equals: 'Removed', mode: 'insensitive' } },
-              },
-            },
-          },
-          select: {
-            assigneeId: true,
-            status: { select: { name: true, category: true, isDefault: true } },
-            estimateHours: true,
-            completedHours: true,
-          },
-        }),
-        this.prisma.projectMember.findMany({
-          where: { projectId, status: { not: 'removed' } },
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        }),
-        this.prisma.ticketStatus.findMany({
-          where: {
-            workspaceId,
-            NOT: { name: { equals: 'Removed', mode: 'insensitive' } },
-          },
-          select: { name: true, color: true, order: true },
-          orderBy: { order: 'asc' },
-        }),
-      ]);
-
-    return {
-      modules: this.buildModuleUsage(instances, tasks),
-      statusBreakdown: this.buildStatusBreakdown(ticketStatuses, tasks),
-      byPriority: this.buildPriorityMatrix(tasks),
-      progress: this.buildProgress(tasks),
-      user: this.buildUserWorkload(members, tasks, incidents),
-    };
-  }
-
-  /** Every live task and incident in a workspace, grouped by its current status. */
-  async getWorkspaceReport(workspaceId: string) {
-    const [tasks, incidents] = await Promise.all([
-      this.prisma.task.findMany({
-        where: {
-          deletedAt: null,
-          project: { workspaceId, deletedAt: null },
-          NOT: {
-            status: {
-              is: { category: 'removed' },
-            },
-          },
-        },
-        select: { status: { select: { name: true, category: true } } },
+    const [instances, items, members, ticketStatuses] = await Promise.all([
+      this.prisma.moduleInstance.findMany({
+        where: { projectId },
+        include: { module: { select: { name: true } } },
+        orderBy: { createdAt: 'asc' },
       }),
-      this.prisma.incident.findMany({
+      this.prisma.workItem.findMany({
         where: {
-          workspaceId,
-          project: { deletedAt: null },
-          NOT: {
-            status: {
-              is: { category: 'removed' },
+          projectId,
+          NOT: { status: { is: { category: 'removed' } } },
+        },
+        select: {
+          moduleInstanceId: true,
+          assigneeId: true,
+          workItemType: { select: { id: true, name: true, category: true } },
+          status: { select: { name: true, category: true, isDefault: true } },
+          priority: { select: { name: true } },
+          estimateHours: true,
+          completedHours: true,
+        },
+      }),
+      this.prisma.projectMember.findMany({
+        where: { projectId, status: { not: 'removed' } },
+        include: {
+          user: {
+            select: {
+              id: true,
+              email: true,
+              firstName: true,
+              lastName: true,
             },
           },
         },
-        select: { status: { select: { name: true, category: true } } },
+      }),
+      this.prisma.ticketStatus.findMany({
+        where: { workspaceId, NOT: { category: 'removed' } },
+        select: { name: true, color: true, order: true },
+        orderBy: { order: 'asc' },
       }),
     ]);
 
+    return {
+      modules: this.buildModuleUsage(instances, items),
+      statusBreakdown: this.buildStatusBreakdown(ticketStatuses, items),
+      byPriority: this.buildPriorityMatrix(items),
+      byType: this.buildTypeBreakdown(items),
+      progress: this.buildProgress(items),
+      user: this.buildUserWorkload(members, items),
+    };
+  }
+
+  /** Every live work item in a workspace, grouped by its WorkType and status. */
+  async getWorkspaceReport(workspaceId: string) {
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        project: { workspaceId, deletedAt: null },
+        NOT: { status: { is: { category: 'removed' } } },
+      },
+      select: {
+        workItemType: { select: { name: true, category: true } },
+        status: { select: { name: true } },
+      },
+    });
+
+    const byType = new Map<string, number>();
     const byStatus = new Map<string, number>();
-    for (const task of tasks) {
-      const status = task?.status?.name ?? 'No status';
-      const label = `Task · ${status}`;
-      byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
-    }
-    for (const incident of incidents) {
-      const label = `Incident · ${incident?.status?.name ?? 'No status'}`;
+    for (const item of items) {
+      const typeName = item.workItemType?.name ?? UNCATEGORIZED;
+      const statusName = item.status?.name ?? 'No status';
+      byType.set(typeName, (byType.get(typeName) ?? 0) + 1);
+      const label = `${typeName} · ${statusName}`;
       byStatus.set(label, (byStatus.get(label) ?? 0) + 1);
     }
 
     return {
-      totalTasks: tasks.length,
-      totalIncidents: incidents.length,
+      totalItems: items.length,
+      byType: [...byType.entries()]
+        .map(([name, count]) => ({ name, count }))
+        .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
       statusBreakdown: [...byStatus.entries()]
         .map(([label, count]) => ({ label, count }))
         .sort(
@@ -167,7 +130,7 @@ export class ReportsService {
     };
   }
 
-  /** Per module instance: how many tasks are past "New", against its limit/addon. */
+  /** Per module instance: how many work items are past "New", against its limit/addon. */
   private buildModuleUsage(
     instances: Array<{
       id: string;
@@ -175,13 +138,13 @@ export class ReportsService {
       addonTask: number;
       module: { name: string };
     }>,
-    tasks: ReportTask[],
+    items: ReportWorkItem[],
   ) {
     return instances.map((instance) => {
-      const moduleTasks = tasks.filter(
-        (t) => t.moduleInstanceId === instance.id,
+      const moduleItems = items.filter(
+        (i) => i.moduleInstanceId === instance.id,
       );
-      const used = moduleTasks.filter((t) => !t.status?.isDefault).length;
+      const used = moduleItems.filter((i) => !i.status?.isDefault).length;
       return {
         id: instance.id,
         module: instance.module.name,
@@ -195,11 +158,11 @@ export class ReportsService {
   /** Includes every configured workflow status, even when a project has no work there. */
   private buildStatusBreakdown(
     statuses: Array<{ name: string; color: string | null; order: number }>,
-    tasks: ReportTask[],
+    items: ReportWorkItem[],
   ) {
     const counts = new Map<string, number>();
-    for (const task of tasks) {
-      const name = task.status?.name;
+    for (const item of items) {
+      const name = item.status?.name;
       if (name) counts.set(name, (counts.get(name) ?? 0) + 1);
     }
     return statuses.map((status) => ({
@@ -209,11 +172,11 @@ export class ReportsService {
     }));
   }
 
-  private buildPriorityMatrix(tasks: ReportTask[]) {
+  private buildPriorityMatrix(items: ReportWorkItem[]) {
     const byPriority = new Map<string, Map<string, number>>();
-    for (const task of tasks) {
-      const priorityName = task.priority?.name ?? 'Unassigned';
-      const statusName = task.status?.name ?? 'Unassigned';
+    for (const item of items) {
+      const priorityName = item.priority?.name ?? 'Unassigned';
+      const statusName = item.status?.name ?? 'Unassigned';
       if (!byPriority.has(priorityName)) {
         byPriority.set(priorityName, new Map());
       }
@@ -226,18 +189,42 @@ export class ReportsService {
     }));
   }
 
-  private buildProgress(tasks: ReportTask[]) {
-    const total = tasks.length;
-    const done = tasks.filter((t) => t.status?.category === 'done').length;
+  /** Dynamic breakdown by WorkType — one entry per category/name actually in use. */
+  private buildTypeBreakdown(items: ReportWorkItem[]) {
+    const byType = new Map<
+      string,
+      { name: string; category: string; total: number; done: number }
+    >();
+    for (const item of items) {
+      const key = item.workItemType?.id ?? 'uncategorized';
+      if (!byType.has(key)) {
+        byType.set(key, {
+          name: item.workItemType?.name ?? UNCATEGORIZED,
+          category: item.workItemType?.category ?? 'uncategorized',
+          total: 0,
+          done: 0,
+        });
+      }
+      const entry = byType.get(key);
+      entry.total += 1;
+      if (item.status?.category === 'done') entry.done += 1;
+    }
+    return [...byType.values()].sort((a, b) => b.total - a.total);
+  }
+
+  private buildProgress(items: ReportWorkItem[]) {
+    const total = items.length;
+    const done = items.filter((i) => i.status?.category === 'done').length;
     const percentComplete = total === 0 ? 0 : Math.round((done / total) * 100);
     const stage =
       PROGRESS_STAGES.find((s) => percentComplete <= s.max)?.stage ??
       'Completed';
 
-    return { totalTasks: total, doneTasks: done, percentComplete, stage };
+    return { totalItems: total, doneItems: done, percentComplete, stage };
   }
 
-  /** Per project member: their assigned task/incident load, completion, and hours. */
+  /** Per project member: their assigned work item load, completion, and hours,
+   * with a dynamic per-WorkType breakdown. */
   private buildUserWorkload(
     members: Array<{
       userId: string;
@@ -248,53 +235,37 @@ export class ReportsService {
         lastName: string | null;
       };
     }>,
-    tasks: ReportTask[],
-    incidents: ReportIncident[],
+    items: ReportWorkItem[],
   ) {
     return members.map((member) => {
-      const myTasks = tasks.filter((t) => t.assigneeId === member.userId);
-      const myIncidents = incidents.filter(
-        (i) => i.assigneeId === member.userId,
-      );
-
-      const completedTasks = myTasks.filter(
-        (t) => t.status?.category === 'done',
-      ).length;
-      const completedIncidents = myIncidents.filter(
+      const mine = items.filter((i) => i.assigneeId === member.userId);
+      const completedItems = mine.filter(
         (i) => i.status?.category === 'done',
       ).length;
+      const totalEstimateHours = mine.reduce(
+        (sum, i) => sum + (i.estimateHours ?? 0),
+        0,
+      );
+      const totalCompletedHours = mine.reduce(
+        (sum, i) => sum + (i.completedHours ?? 0),
+        0,
+      );
 
-      const totalEstimateHours = this.sumHours(
-        myTasks,
-        myIncidents,
-        'estimateHours',
-      );
-      const totalCompletedHours = this.sumHours(
-        myTasks,
-        myIncidents,
-        'completedHours',
-      );
+      const byType = new Map<string, number>();
+      for (const item of mine) {
+        const name = item.workItemType?.name ?? UNCATEGORIZED;
+        byType.set(name, (byType.get(name) ?? 0) + 1);
+      }
 
       return {
         name: displayName(member.user),
-        totalTasks: myTasks.length,
-        totalIncidents: myIncidents.length,
-        completedTasks,
-        completedIncidents,
+        totalItems: mine.length,
+        completedItems,
         totalEstimateHours,
         totalCompletedHours,
+        byType: Object.fromEntries(byType),
       };
     });
-  }
-
-  private sumHours(
-    tasks: ReportTask[],
-    incidents: ReportIncident[],
-    field: 'estimateHours' | 'completedHours',
-  ): number {
-    const taskSum = tasks.reduce((sum, t) => sum + (t[field] ?? 0), 0);
-    const incidentSum = incidents.reduce((sum, i) => sum + (i[field] ?? 0), 0);
-    return taskSum + incidentSum;
   }
 
   private async assertProject(workspaceId: string, projectId: string) {

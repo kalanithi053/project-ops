@@ -18,6 +18,8 @@ const WORKSPACE_ROUTES = [
   "/settings/roles",
   "/settings/ticket-statuses",
   "/settings/workspace",
+  "/work-items/new",
+  "/work-items"
 ] as const;
 
 export function WorkspacePrefetcher({ slug }: { slug: string }) {

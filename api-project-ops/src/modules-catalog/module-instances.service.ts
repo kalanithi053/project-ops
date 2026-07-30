@@ -1,5 +1,4 @@
 import {
-  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -51,16 +50,7 @@ export class ModuleInstancesService {
     instanceId: string,
     dto: UpdateModuleInstanceDto,
   ) {
-    const instance = await this.getInstance(workspaceId, projectId, instanceId);
-
-    const taskCount = await this.prisma.task.count({
-      where: { moduleInstanceId: instance.id },
-    });
-    if (dto.taskLimit < taskCount) {
-      throw new BadRequestException(
-        `Cannot set task limit below current task count (${taskCount}).`,
-      );
-    }
+    await this.getInstance(workspaceId, projectId, instanceId);
 
     return this.prisma.moduleInstance.update({
       where: { id: instanceId },

@@ -1,47 +1,20 @@
 "use client";
 
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import * as React from "react";
 
-import { TaskEditor } from "@/components/projects/task-editor";
-import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
-import { useTask } from "@/lib/api/hooks/use-tasks";
-import { PERMISSIONS } from "@/lib/api/permissions";
-import { notifyTaskBoard } from "@/lib/tasks/tab-sync";
-
+/** Legacy route — task editing now lives at work-items/:workItemId. */
 export default function EditTaskPage() {
   const { workspace, projectId, taskId } = useParams<{
     workspace: string;
     projectId: string;
     taskId: string;
   }>();
-  const taskQuery = useTask(workspace, projectId, taskId);
-  const { can } = usePermissions(workspace);
+  const router = useRouter();
 
-  function finish() {
-    notifyTaskBoard(workspace, projectId);
-  }
+  React.useEffect(() => {
+    router.replace(`/${workspace}/projects/${projectId}/work-items/${taskId}`);
+  }, [workspace, projectId, taskId, router]);
 
-  return (
-    <QueryState
-      isLoading={taskQuery.isLoading}
-      isError={taskQuery.isError}
-      error={taskQuery.error}
-      onRetry={() => taskQuery.refetch()}
-      skeleton={<CardsSkeleton count={1} />}
-      errorLabel="The task could not be loaded."
-    >
-      {taskQuery.data ? (
-        <TaskEditor
-          workspaceSlug={workspace}
-          projectId={projectId}
-          task={taskQuery.data}
-          canSave={can(PERMISSIONS.TASK_UPDATE)}
-          canComment={can(PERMISSIONS.COMMENT_CREATE)}
-          onDone={finish}
-        />
-      ) : null}
-    </QueryState>
-  );
+  return null;
 }

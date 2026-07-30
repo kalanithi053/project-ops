@@ -2,11 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { Prisma, PrismaClient } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 
-export type ActivityEntityType = 'task' | 'incident';
+export type ActivityEntityType = string;
 
 export interface LogActivityParams {
   workspaceId: string;
-  projectId: string;
+  projectId?: string;
   entityType: ActivityEntityType;
   entityId: string;
   action: string;
@@ -21,16 +21,17 @@ interface NamedUser {
   lastName: string | null;
 }
 
+/** Never surfaces a raw email — falls back to its local-part (e.g. "jane"). */
 function displayName(user: NamedUser | null | undefined): string {
   if (!user) return 'Someone';
   const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-  return name || user.email;
+  return name || user.email.split('@')[0];
 }
 
 /**
- * Audit trail for task/incident lifecycle events. `log()` accepts either the
- * default PrismaService or a `$transaction` callback client, so callers can
- * write the log entry atomically alongside the mutation it records.
+ * Generic audit trail. `log()` accepts either the default PrismaService or a
+ * `$transaction` callback client, so callers can write the log entry
+ * atomically alongside the mutation it records.
  */
 @Injectable()
 export class ActivityLogService {
@@ -43,7 +44,7 @@ export class ActivityLogService {
     return client.activityLog.create({
       data: {
         workspaceId: params.workspaceId,
-        projectId: params.projectId,
+        projectId: params.projectId ?? null,
         entityType: params.entityType,
         entityId: params.entityId,
         action: params.action,

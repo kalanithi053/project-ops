@@ -69,13 +69,12 @@ export class TicketStatusService {
     if (!status.canDelete) {
       throw new ConflictException('This status cannot be deleted.');
     }
-    const taskCount = await this.prisma.task.count({ where: { statusId: id } });
-    const incidentCount = await this.prisma.incident.count({
+    const workItemCount = await this.prisma.workItem.count({
       where: { statusId: id },
     });
-    if (taskCount > 0 || incidentCount > 0) {
+    if (workItemCount > 0) {
       throw new ConflictException(
-        'Status is still used by tasks or incidents; reassign them first.',
+        'Status is still used by work items; reassign them first.',
       );
     }
     await this.prisma.ticketStatus.delete({ where: { id } });

@@ -8,10 +8,11 @@ import {
 } from 'class-validator';
 
 export class UpdatePlanDto {
-  @ApiProperty({ required: true, example: 'Pro' })
+  @ApiProperty({ required: false, example: 'Pro' })
+  @IsOptional()
   @IsString()
   @MaxLength(50)
-  name!: string;
+  name?: string;
 
   @ApiProperty({
     required: false,
@@ -22,7 +23,8 @@ export class UpdatePlanDto {
   @IsObject()
   features?: Record<string, unknown>;
 
-  @ApiProperty({ required: true })
+  @ApiProperty({ required: false })
+  @IsOptional()
   @IsBoolean()
-  isActive!: boolean;
+  isActive?: boolean;
 }

@@ -251,6 +251,20 @@ export interface Priority {
   [key: string]: unknown;
 }
 
+/** How a WorkType is grouped for activity-log/report purposes. */
+export type WorkTypeCategory = "task" | "incident" | "bug";
+
+/** A workspace's work-item classification (task/incident/bug/…), GET /work-types. */
+export interface WorkType {
+  id: string;
+  workspaceId: string;
+  name: string;
+  color?: string | null;
+  category: WorkTypeCategory;
+  isActive: boolean;
+  [key: string]: unknown;
+}
+
 /** An entry in the workspace's permission catalog. */
 export interface Permission {
   id: string;
@@ -493,6 +507,9 @@ export interface Task {
   dueDate?: string | null;
   statusId?: string | null;
   priorityId?: string | null;
+  /** WorkType this item is classified as (task/incident/bug). */
+  workItemTypeId?: string | null;
+  workItemType?: Pick<WorkType, "id" | "name" | "category"> | null;
   createdBy?: string;
   /** Flat ordering across the whole project, not per column. */
   position: number;
@@ -563,26 +580,33 @@ export interface ProjectReport {
     count: number;
   }>;
   byPriority: Array<{ priority: string; statuses: Record<string, number> }>;
+  /** Dynamic breakdown by WorkType — one entry per category/name in use. */
+  byType: Array<{
+    name: string;
+    category: string;
+    total: number;
+    done: number;
+  }>;
   progress: {
-    totalTasks: number;
-    doneTasks: number;
+    totalItems: number;
+    doneItems: number;
     percentComplete: number;
     stage: string;
   };
   user: Array<{
     name: string;
-    totalTasks: number;
-    totalIncidents: number;
-    completedTasks: number;
-    completedIncidents: number;
+    totalItems: number;
+    completedItems: number;
     totalEstimateHours: number;
     totalCompletedHours: number;
+    /** Work item count per WorkType name. */
+    byType: Record<string, number>;
   }>;
 }
 
 export interface WorkspaceReport {
-  totalTasks: number;
-  totalIncidents: number;
+  totalItems: number;
+  byType: Array<{ name: string; count: number }>;
   statusBreakdown: Array<{ label: string; count: number }>;
 }
 
@@ -599,6 +623,8 @@ export interface CreateTaskDto {
   dueDate?: string;
   statusId?: string;
   priorityId?: string;
+  /** WorkType this item is classified as (task/incident/bug). */
+  workItemTypeId?: string;
   /**
    * Replace-all on update: the array becomes the complete assignee set, and
    * omitting the key leaves existing assignees untouched.

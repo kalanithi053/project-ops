@@ -1,6 +1,7 @@
 "use client";
 
 import { AppShell } from "@/components/layout/app-shell";
+import { TourProvider } from "@/components/tour/tour-provider";
 import { useMe } from "@/lib/api/hooks/use-users";
 import type { Me, UpdateMeDto } from "@/lib/api/types";
 import { getFullname } from "@/lib/utils";
@@ -27,8 +28,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const user = toAuthUser(me, "Account");
 
   return (
-    <AppShell user={user} notifications={[]}>
-      {children}
-    </AppShell>
+    <>
+      <AppShell user={user} notifications={[]}>
+        {children}
+      </AppShell>
+      <TourProvider />
+    </>
   );
 }

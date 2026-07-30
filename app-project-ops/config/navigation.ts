@@ -18,24 +18,48 @@ import type { NavigationSection } from "@/types/navigation";
  */
 export const navigationConfig: NavigationSection[] = [
   {
-    items: [{ label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }],
+    items: [
+      {
+        label: "Dashboard",
+        href: "/dashboard",
+        icon: LayoutDashboard,
+        tourId: "nav-dashboard",
+      },
+    ],
   },
   {
     label: "Workspace",
     items: [
-      { label: "Projects", href: "/projects", icon: FolderKanban },
-      { label: "Reports", href: "/reports", icon: BarChart3 },
+      {
+        label: "Projects",
+        href: "/projects",
+        icon: FolderKanban,
+        tourId: "nav-projects",
+      },
+      {
+        label: "Reports",
+        href: "/reports",
+        icon: BarChart3,
+        tourId: "nav-reports",
+      },
     ],
   },
   {
     label: "People",
     items: [
-      { label: "Users", href: "/users", icon: Users },
+      { label: "Users", href: "/users", icon: Users, tourId: "nav-users" },
       // { label: "Teams", href: "/teams", icon: UsersRound },
     ],
   },
   {
     label: "Administration",
-    items: [{ label: "Settings", href: "/settings", icon: Settings }],
+    items: [
+      {
+        label: "Settings",
+        href: "/settings",
+        icon: Settings,
+        tourId: "nav-settings",
+      },
+    ],
   },
 ];

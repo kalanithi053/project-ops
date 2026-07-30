@@ -22,8 +22,8 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
     <nav
       aria-label="Settings sections"
       className={cn(
-        "flex gap-1 overflow-x-auto pb-2",
-        "md:w-52 md:shrink-0 md:flex-col md:overflow-visible md:pb-0",
+        "flex gap-1 overflow-x-auto border-b border-border pb-0",
+        "md:w-52 md:shrink-0 md:flex-col md:overflow-visible md:border-r md:border-b-0 md:pb-0",
         "md:sticky md:top-20 md:self-start",
       )}
     >
@@ -37,10 +37,11 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
             href={href}
             aria-current={isActive ? "page" : undefined}
             className={cn(
-              "shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "shrink-0 whitespace-nowrap rounded-t-md border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors",
+              "md:-mr-px md:rounded-l-md md:rounded-r-none md:border-r-2 md:border-b-0",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               isActive
-                ? "bg-accent text-accent-foreground"
+                ? "border-primary bg-accent text-accent-foreground"
                 : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
             )}
           >

@@ -146,7 +146,6 @@ export function TaskEditor({
   );
   const [dueDate, setDueDate] = React.useState(toDateInput(task?.dueDate));
   const [error, setError] = React.useState<string | null>(null);
-  const savedTitle = React.useRef(task?.name ?? "");
   const [activeTab, setActiveTab] = React.useState<"details" | "activity">(
     "details",
   );
@@ -253,21 +252,6 @@ export function TaskEditor({
     }
   }
 
-  function saveTitleOnBlur() {
-    const trimmed = name.trim();
-    if (!task || !canSave || !trimmed || trimmed === savedTitle.current) return;
-
-    setName(trimmed);
-    update.mutate(
-      { id: task.id, dto: { name: trimmed } },
-      {
-        onSuccess: () => {
-          savedTitle.current = trimmed;
-        },
-      },
-    );
-  }
-
   return (
     <Card className="mx-auto w-full max-w-6xl">
       <form onSubmit={handleSubmit} noValidate>
@@ -292,13 +276,12 @@ export function TaskEditor({
                     id="task-name"
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    onBlur={saveTitleOnBlur}
                     placeholder={isEdit ? "Untitled task" : "Task name"}
                     maxLength={200}
                     autoFocus={!isEdit}
                     disabled={!canSave}
                     aria-label="Task name"
-                    className="h-auto rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-input focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-0 placeholder:text-muted-foreground/70"
+                    className="h-auto rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-dashed hover:border-input focus-visible:border-dashed focus-visible:border-primary focus-visible:ring-0 placeholder:text-muted-foreground/70"
                   />
                   {isEdit && task && (
                     <CopyWorkItemLink
@@ -318,7 +301,7 @@ export function TaskEditor({
                   onClick={onDone}
                   disabled={pending}
                 >
-                  {canSave ? "Cancel" : "Close"}
+                  Back to work items
                 </Button>
                 {canSave && (
                   <Button type="submit" disabled={pending}>
@@ -337,120 +320,137 @@ export function TaskEditor({
               </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm">
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  disabled={!canSave || assigneeOptions.length === 0}
-                  className="inline-flex h-8 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-                  aria-label="Change assignee"
-                >
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback>
-                      {assigneeIds ? initials(assigneeLabel) : "—"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="font-medium">{assigneeLabel}</span>
-                  {canSave && assigneeOptions.length > 0 && (
-                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
-                  )}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-56">
-                  {assigneeOptions.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onSelect={() => setAssigneeIds(option.value)}
-                      className="justify-between"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback>
-                            {initials(option.label)}
-                          </AvatarFallback>
-                        </Avatar>
-                        {option.label}
-                      </span>
-                      {option.value === assigneeIds && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  disabled={isEdit || !canSave || moduleOptions.length === 0}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Change module"
-                >
-                  <FolderKanban className="h-4 w-4" />
-                  <span>{selectedModule?.label ?? "Select module"}</span>
-                  {!isEdit && canSave && moduleOptions.length > 0 && (
-                    <ChevronDown className="h-3.5 w-3.5" />
-                  )}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-56">
-                  {moduleOptions.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onSelect={() => setModuleInstanceId(option.value)}
-                      className="justify-between"
-                    >
-                      {option.label}
-                      {option.value === moduleInstanceId && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-
-              <span className="text-muted-foreground">
-                {project?.name ?? "Project"}
-              </span>
-
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  disabled={!canSave || statusOptions.length === 0}
-                  className="inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Change status"
-                >
-                  {selectedStatus?.name ?? "Select status"}
-                  {canSave && statusOptions.length > 0 && (
-                    <ChevronDown className="h-3 w-3" />
-                  )}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-48">
-                  {(statuses ?? [])
-                    .slice()
-                    .sort((a, b) => a.order - b.order)
-                    .map((status) => (
+            <div className="grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm sm:grid-cols-3">
+              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Assignee
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={!canSave || assigneeOptions.length === 0}
+                    className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                    aria-label="Change assignee"
+                  >
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback>
+                        {assigneeIds ? initials(assigneeLabel) : "—"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate font-medium">{assigneeLabel}</span>
+                    {canSave && assigneeOptions.length > 0 && (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-56">
+                    {assigneeOptions.map((option) => (
                       <DropdownMenuItem
-                        key={status.id}
-                        onSelect={() => setStatusId(status.id)}
+                        key={option.value}
+                        onSelect={() => setAssigneeIds(option.value)}
                         className="justify-between"
                       >
                         <span className="inline-flex items-center gap-2">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{
-                              backgroundColor:
-                                status.color ?? "var(--status-info)",
-                            }}
-                            aria-hidden
-                          />
-                          {status.name}
+                          <Avatar className="h-6 w-6">
+                            <AvatarFallback>
+                              {initials(option.label)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {option.label}
                         </span>
-                        {status.id === statusId && (
+                        {option.value === assigneeIds && (
                           <Check className="h-4 w-4" />
                         )}
                       </DropdownMenuItem>
                     ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-              {selectedPriority && (
-                <Badge variant="outline">{selectedPriority.name}</Badge>
-              )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Module
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={isEdit || !canSave || moduleOptions.length === 0}
+                    className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Change module"
+                  >
+                    <FolderKanban className="h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {selectedModule?.label ?? "Select module"}
+                    </span>
+                    {!isEdit && canSave && moduleOptions.length > 0 && (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-56">
+                    {moduleOptions.map((option) => (
+                      <DropdownMenuItem
+                        key={option.value}
+                        onSelect={() => setModuleInstanceId(option.value)}
+                        className="justify-between"
+                      >
+                        {option.label}
+                        {option.value === moduleInstanceId && (
+                          <Check className="h-4 w-4" />
+                        )}
+                      </DropdownMenuItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Stage
+                </span>
+                <div className="flex h-8 items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={!canSave || statusOptions.length === 0}
+                      className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Change status"
+                    >
+                      <span className="truncate">
+                        {selectedStatus?.name ?? "Select status"}
+                      </span>
+                      {canSave && statusOptions.length > 0 && (
+                        <ChevronDown className="h-3 w-3 shrink-0" />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-48">
+                      {(statuses ?? [])
+                        .slice()
+                        .sort((a, b) => a.order - b.order)
+                        .map((status) => (
+                          <DropdownMenuItem
+                            key={status.id}
+                            onSelect={() => setStatusId(status.id)}
+                            className="justify-between"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    status.color ?? "var(--status-info)",
+                                }}
+                                aria-hidden
+                              />
+                              {status.name}
+                            </span>
+                            {status.id === statusId && (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                  {selectedPriority && (
+                    <Badge variant="outline">{selectedPriority.name}</Badge>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
 

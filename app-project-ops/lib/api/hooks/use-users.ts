@@ -29,3 +29,17 @@ export function useUpdateMe() {
     },
   });
 }
+
+/** PATCH /users/me/product-tour — mark the onboarding tour as seen. */
+export function useCompleteProductTour() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<Me>("/users/me/product-tour", { method: "PATCH" }),
+    onSuccess: (me) => {
+      queryClient.setQueryData<Me | undefined>(["me"], (prev) =>
+        prev ? { ...prev, ...me } : prev,
+      );
+    },
+  });
+}

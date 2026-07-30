@@ -251,7 +251,7 @@ export default function ProjectsPage() {
         {can(PERMISSIONS.PROJECT_CREATE) && (
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto" data-tour="new-project-button">
                 <Plus className="h-4 w-4" />
                 New project
               </Button>

@@ -68,6 +68,7 @@ export function NavItems({
                   href={href ?? "#"}
                   onClick={onNavigate}
                   aria-current={isActive ? "page" : undefined}
+                  data-tour={item.tourId}
                   className={cn(
                     "flex items-center gap-3 rounded-md px-2 py-1.5 text-sm font-medium transition-colors",
                     "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",

@@ -15,10 +15,9 @@ import { toast } from "@/lib/toast/toast-store";
  * browser session (useState) so it survives re-renders but never leaks
  * between requests during SSR.
  *
- * A global MutationCache surfaces every failed action as an error toast,
- * unless the mutation opts out with `meta.suppressErrorToast` (e.g. auth
- * screens that render the error inline). Success toasts are fired by the
- * individual mutation hooks where a message makes sense.
+ * A global MutationCache is retained as a fallback for non-API mutation
+ * failures. `apiFetch` surfaces backend success/error messages directly and
+ * briefly deduplicates hook-level notifications for the same request.
  */
 export function QueryProvider({ children }: { children: React.ReactNode }) {
   const [client] = React.useState(

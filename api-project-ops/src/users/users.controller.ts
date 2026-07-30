@@ -35,4 +35,10 @@ export class UsersController {
   update(@CurrentUser('sub') userId: string, @Body() dto: UpdateUserDto) {
     return this.users.updateProfile(userId, dto);
   }
+
+  @Patch('me/product-tour')
+  @ApiOperation({ summary: 'Mark the product tour as completed for the current user' })
+  completeTour(@CurrentUser('sub') userId: string) {
+    return this.users.completeProductTour(userId);
+  }
 }

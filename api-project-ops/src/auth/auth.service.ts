@@ -63,11 +63,11 @@ export class AuthService {
     const user = existing
       ? await this.prisma.user.update({
           where: { email: dto.email },
-          data: { ...dto, isVerified: true },
+          data: { ...dto, isVerified: false },
         })
       : await this.prisma.user.create({
           data: {
-            isVerified: true,
+            isVerified: false,
             email: dto.email,
             firstName: dto.firstName,
             lastName: dto.lastName,

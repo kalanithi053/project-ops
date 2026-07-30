@@ -23,6 +23,7 @@ export class UsersService {
         email: true,
         isActive: true,
         createdAt: true,
+        productTourCompletedAt: true,
       },
     });
     if (!user) {
@@ -42,6 +43,15 @@ export class UsersService {
         lastName: true,
         email: true,
       },
+    });
+  }
+
+  /** Marks the onboarding product tour as seen (finished or skipped). */
+  async completeProductTour(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: { productTourCompletedAt: new Date() },
+      select: { id: true, productTourCompletedAt: true },
     });
   }
 }

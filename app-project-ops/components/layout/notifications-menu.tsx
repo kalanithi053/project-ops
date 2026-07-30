@@ -41,6 +41,7 @@ export function NotificationsMenu({
           size="icon"
           className="relative"
           aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ""}`}
+          data-tour="notifications-bell"
         >
           <Bell className="h-4 w-4" />
           {unreadCount > 0 && (

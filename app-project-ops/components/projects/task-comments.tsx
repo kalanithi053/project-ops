@@ -1,13 +1,7 @@
 "use client";
 
+import { Loader2, MessageSquare, PencilLine, Send, Trash2 } from "lucide-react";
 import * as React from "react";
-import {
-  Loader2,
-  MessageSquare,
-  PencilLine,
-  Send,
-  Trash2,
-} from "lucide-react";
 
 import {
   RichTextEditor,
@@ -20,14 +14,14 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useMe } from "@/lib/api/hooks/use-users";
 import {
   useCreateWorkItemComment,
   useDeleteWorkItemComment,
-  useWorkItemComments,
   useUpdateWorkItemComment,
+  useWorkItemComments,
 } from "@/lib/api/hooks/use-work-item-comments";
-import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
-import { useMe } from "@/lib/api/hooks/use-users";
 import { formatDateTime } from "@/lib/format";
 import { getFullname } from "@/lib/utils";
 
@@ -53,7 +47,11 @@ function commentTime(value: string): string {
 }
 
 function plainText(value: string): string {
-  return new DOMParser().parseFromString(value, "text/html").body.textContent?.trim() ?? "";
+  return (
+    new DOMParser()
+      .parseFromString(value, "text/html")
+      .body.textContent?.trim() ?? ""
+  );
 }
 
 function escapeHtml(value: string): string {
@@ -107,13 +105,22 @@ export function TaskComments({
   const { data: workspaceMembers } = useWorkspaceMembers(workspaceSlug);
   const { data: me } = useMe();
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const editEditorRef = React.useRef<HTMLDivElement>(null);
   const [body, setBody] = React.useState("");
   const [mentionedEmails, setMentionedEmails] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   const [mentionOpen, setMentionOpen] = React.useState(false);
-  const [editingCommentId, setEditingCommentId] = React.useState<string | null>(null);
+  const [editingCommentId, setEditingCommentId] = React.useState<string | null>(
+    null,
+  );
   const [editingBody, setEditingBody] = React.useState("");
-  const [deletingCommentId, setDeletingCommentId] = React.useState<string | null>(null);
+  const [editingMentionedEmails, setEditingMentionedEmails] = React.useState<
+    string[]
+  >([]);
+  const [editMentionOpen, setEditMentionOpen] = React.useState(false);
+  const [deletingCommentId, setDeletingCommentId] = React.useState<
+    string | null
+  >(null);
 
   const mentionableMembers = (workspaceMembers ?? [])
     .filter((member) => member.status !== "removed")
@@ -123,10 +130,18 @@ export function TaskComments({
       const name = getFullname(user) ?? email;
       return email ? { email, name } : null;
     })
-    .filter((member): member is { email: string; name: string } => Boolean(member));
+    .filter((member): member is { email: string; name: string } =>
+      Boolean(member),
+    );
 
-  function syncMentionState(nextBody: string) {
-    const documentValue = new DOMParser().parseFromString(nextBody, "text/html");
+  function syncMentionState(
+    nextBody: string,
+    setEmails: React.Dispatch<React.SetStateAction<string[]>>,
+  ) {
+    const documentValue = new DOMParser().parseFromString(
+      nextBody,
+      "text/html",
+    );
     const activeMentionEmails = new Set(
       Array.from(
         documentValue.querySelectorAll<HTMLElement>("[data-mention-email]"),
@@ -136,10 +151,12 @@ export function TaskComments({
         .filter((email): email is string => Boolean(email)),
     );
     const nextText = plainText(nextBody);
-    setMentionedEmails((current) =>
+    setEmails((current) =>
       current.filter((email) => {
         if (activeMentionEmails.has(email)) return true;
-        const member = mentionableMembers.find((option) => option.email === email);
+        const member = mentionableMembers.find(
+          (option) => option.email === email,
+        );
         return member ? nextText.includes(`@${member.name}`) : false;
       }),
     );
@@ -147,7 +164,12 @@ export function TaskComments({
 
   function changeBody(nextBody: string) {
     setBody(nextBody);
-    syncMentionState(nextBody);
+    syncMentionState(nextBody, setMentionedEmails);
+  }
+
+  function changeEditingBody(nextBody: string) {
+    setEditingBody(nextBody);
+    syncMentionState(nextBody, setEditingMentionedEmails);
   }
 
   function addMention(email: string, name: string) {
@@ -163,6 +185,21 @@ export function TaskComments({
       current.includes(email) ? current : [...current, email],
     );
     setMentionOpen(false);
+  }
+
+  function addEditMention(email: string, name: string) {
+    if (editingMentionedEmails.includes(email)) return;
+    editEditorRef.current?.focus();
+    document.execCommand(
+      "insertHTML",
+      false,
+      `<span data-mention-email="${escapeHtml(email)}">@${escapeHtml(name)}</span>&nbsp;`,
+    );
+    setEditingBody(editEditorRef.current?.innerHTML ?? editingBody);
+    setEditingMentionedEmails((current) =>
+      current.includes(email) ? current : [...current, email],
+    );
+    setEditMentionOpen(false);
   }
 
   function submit() {
@@ -191,16 +228,18 @@ export function TaskComments({
   function startEditing(comment: {
     id: string;
     body: string;
+    mentions: Array<{ user: { email: string } }>;
   }) {
     setEditingCommentId(comment.id);
     setEditingBody(comment.body);
+    setEditingMentionedEmails(
+      comment.mentions.map((mention) => mention.user.email),
+    );
+    setEditMentionOpen(false);
     setDeletingCommentId(null);
   }
 
-  function saveEdit(comment: {
-    id: string;
-    mentions: Array<{ user: { email: string } }>;
-  }) {
+  function saveEdit(comment: { id: string }) {
     const sanitizedBody = sanitizeRichText(editingBody).trim();
     if (!plainText(sanitizedBody)) return;
 
@@ -209,15 +248,24 @@ export function TaskComments({
         id: comment.id,
         dto: {
           body: sanitizedBody,
-          mentions: comment.mentions.map((mention) => mention.user.email),
+          mentions: editingMentionedEmails,
         },
       },
-      { onSuccess: () => setEditingCommentId(null) },
+      {
+        onSuccess: () => {
+          setEditingCommentId(null);
+          setEditingMentionedEmails([]);
+          setEditMentionOpen(false);
+        },
+      },
     );
   }
 
   return (
-    <section className="border-t border-border pt-4" aria-labelledby="comments-heading">
+    <section
+      className="border-t border-border pt-4"
+      aria-labelledby="comments-heading"
+    >
       <div className="mb-3 flex items-center gap-2">
         <MessageSquare className="h-4 w-4 text-muted-foreground" />
         <h2 id="comments-heading" className="text-sm font-semibold">
@@ -278,9 +326,6 @@ export function TaskComments({
                   </Avatar>
                   <span className="min-w-0">
                     <span className="block truncate">{member.name}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {member.email}
-                    </span>
                   </span>
                 </button>
               ))}
@@ -384,29 +429,79 @@ export function TaskComments({
                   </div>
                   {isEditing ? (
                     <div className="mt-2 flex flex-col gap-2">
-                      <RichTextEditor
-                        id={`edit-comment-${comment.id}`}
-                        value={editingBody}
-                        onChange={setEditingBody}
-                        placeholder="Edit comment…"
-                        aria-label="Edit comment"
-                        disabled={updateComment.isPending}
-                        className="[&_[role=textbox]]:min-h-24"
-                      />
+                      <Popover
+                        open={editMentionOpen}
+                        onOpenChange={setEditMentionOpen}
+                      >
+                        <PopoverAnchor asChild>
+                          <div>
+                            <RichTextEditor
+                              ref={editEditorRef}
+                              id={`edit-comment-${comment.id}`}
+                              value={editingBody}
+                              onChange={changeEditingBody}
+                              placeholder="Edit comment…"
+                              aria-label="Edit comment"
+                              disabled={updateComment.isPending}
+                              className="[&_[role=textbox]]:min-h-24"
+                              onAtSign={(event) => {
+                                event.preventDefault();
+                                setEditMentionOpen(true);
+                              }}
+                            />
+                          </div>
+                        </PopoverAnchor>
+                        <PopoverContent
+                          side="top"
+                          align="start"
+                          className="max-h-64 min-w-56 overflow-y-auto p-1"
+                        >
+                          <p className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
+                            Workspace members
+                          </p>
+                          {mentionableMembers.map((member) => (
+                            <button
+                              type="button"
+                              key={member.email}
+                              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent focus-visible:bg-accent"
+                              onClick={() =>
+                                addEditMention(member.email, member.name)
+                              }
+                            >
+                              <Avatar className="h-5 w-5">
+                                <AvatarFallback className="text-[9px]">
+                                  {initials(member.name)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="min-w-0">
+                                <span className="block truncate">
+                                  {member.name}
+                                </span>
+                              </span>
+                            </button>
+                          ))}
+                        </PopoverContent>
+                      </Popover>
                       <div className="flex justify-end gap-2">
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
                           disabled={updateComment.isPending}
-                          onClick={() => setEditingCommentId(null)}
+                          onClick={() => {
+                            setEditingCommentId(null);
+                            setEditingMentionedEmails([]);
+                            setEditMentionOpen(false);
+                          }}
                         >
                           Cancel
                         </Button>
                         <Button
                           type="button"
                           size="sm"
-                          disabled={updateComment.isPending || !plainText(editingBody)}
+                          disabled={
+                            updateComment.isPending || !plainText(editingBody)
+                          }
                           onClick={() => saveEdit(comment)}
                         >
                           {updateComment.isPending && (
@@ -452,18 +547,11 @@ export function TaskComments({
                   ) : (
                     <>
                       <div
-                        className="mt-1 whitespace-pre-wrap text-sm leading-5 [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
+                        className="mt-1 whitespace-pre-wrap text-sm leading-5 [&_[data-mention-email]]:font-semibold [&_[data-mention-email]]:text-primary [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
                         dangerouslySetInnerHTML={{
                           __html: sanitizeRichText(comment.body),
                         }}
                       />
-                      {comment.mentions.length > 0 && (
-                        <p className="mt-2 text-xs text-muted-foreground">
-                          Mentioned: {comment.mentions
-                            .map((mention) => authorName(mention.user))
-                            .join(", ")}
-                        </p>
-                      )}
                     </>
                   )}
                 </div>

@@ -1,12 +1,16 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Patch, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
+import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
+import { RequirePermission } from '../common/decorators/require-permission.decorator';
+import { PERMISSIONS } from '../common/constants/permissions';
 import { SettingsService } from './settings.service';
+import { UpdateWorkspaceSettingsDto } from './dto/update-workspace-settings.dto';
 
 @ApiTags('settings')
 @ApiBearerAuth()
-@UseGuards(WorkspaceScopeGuard)
+@UseGuards(WorkspaceScopeGuard, PermissionsGuard)
 @Controller('workspace/settings')
 export class SettingsController {
   constructor(private readonly settings: SettingsService) {}
@@ -18,5 +22,15 @@ export class SettingsController {
   })
   get(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.settings.getSettings(workspaceId);
+  }
+
+  @Patch()
+  @RequirePermission(PERMISSIONS.WORKSPACE_MANAGE)
+  @ApiOperation({ summary: 'Update the workspace name and/or URL slug' })
+  update(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Body() dto: UpdateWorkspaceSettingsDto,
+  ) {
+    return this.settings.updateWorkspace(workspaceId, dto);
   }
 }

@@ -20,8 +20,6 @@ interface OtpRequestResult {
  */
 export function useRequestOtp() {
   return useMutation({
-    // Auth screens render errors inline, so skip the global error toast.
-    meta: { suppressErrorToast: true },
     mutationFn: (dto: RequestOtpDto) =>
       apiFetch<OtpRequestResult>("/auth/otp/request", {
         method: "POST",
@@ -34,7 +32,6 @@ export function useRequestOtp() {
 /** Register a new user (after a Create-User signal); triggers an OTP. */
 export function useRegister() {
   return useMutation({
-    meta: { suppressErrorToast: true },
     mutationFn: (dto: RegisterDto) =>
       apiFetch("/auth/register", { method: "POST", body: dto, auth: false }),
   });
@@ -44,7 +41,6 @@ export function useRegister() {
 export function useVerifyOtp() {
   const setTokens = useAuthStore((state) => state.setTokens);
   return useMutation({
-    meta: { suppressErrorToast: true },
     mutationFn: (dto: VerifyOtpDto) =>
       apiFetch<unknown>("/auth/otp/verify", {
         method: "POST",

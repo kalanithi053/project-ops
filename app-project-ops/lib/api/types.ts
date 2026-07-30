@@ -138,6 +138,7 @@ export interface Me {
   lastName?: string;
   email?: string;
   phone?: string;
+  productTourCompletedAt?: string | null;
   [key: string]: unknown;
 }
 

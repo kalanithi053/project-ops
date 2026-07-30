@@ -1,4 +1,5 @@
 import { useAuthStore } from "@/lib/store/auth-store";
+import { toast } from "@/lib/toast/toast-store";
 import { API_BASE_URL, WORKSPACE_HEADER } from "./config";
 
 /** Standard response envelope returned by every endpoint. */
@@ -74,6 +75,8 @@ interface RequestOptions {
   workspaceSlug?: string;
   /** Set false for public routes (no Authorization header). */
   auth?: boolean;
+  /** Disable automatic API response toasts for this request. */
+  notify?: boolean;
 }
 
 function buildHeaders(opts: RequestOptions): Record<string, string> {
@@ -105,6 +108,17 @@ function rawFetch(path: string, opts: RequestOptions): Promise<Response> {
   });
 }
 
+function responseMessage(message: unknown, fallback: string): string {
+  if (typeof message === "string" && message.trim()) return message;
+  if (Array.isArray(message)) {
+    const messages = message.filter(
+      (item): item is string => typeof item === "string" && Boolean(item.trim()),
+    );
+    if (messages.length) return messages.join(". ");
+  }
+  return fallback;
+}
+
 /**
  * Fetches a file as a Blob instead of JSON.
  *
@@ -124,7 +138,15 @@ export async function apiDownload(
   }
 
   if (!res.ok) {
-    throw new ApiError(`Download failed (${res.status})`, res.status);
+    const json = (await res
+      .json()
+      .catch(() => null)) as ApiEnvelope<unknown> | null;
+    const message = responseMessage(
+      json?.message,
+      `Download failed (${res.status})`,
+    );
+    toast.apiError(message);
+    throw new ApiError(message, res.status);
   }
 
   return res.blob();
@@ -183,11 +205,26 @@ export async function apiFetch<T>(
 
   if (!res.ok || !json || json.success === false) {
     const slug = pickString(asRecord(json?.data), "slug");
+    const message = responseMessage(
+      json?.message,
+      `Request failed (${res.status})`,
+    );
+    if (opts.notify !== false) {
+      toast.apiError(message);
+    }
     throw new ApiError(
-      json?.message || `Request failed (${res.status})`,
+      message,
       json?.statusCode ?? res.status,
       slug,
       json?.data,
+    );
+  }
+
+  // Successful reads happen frequently during page bootstrap and background
+  // refreshes. Toast successful user-initiated writes; always toast failures.
+  if ((opts.method ?? "GET") !== "GET" && opts.notify !== false) {
+    toast.apiSuccess(
+      responseMessage(json.message, "Request processed successfully"),
     );
   }
 

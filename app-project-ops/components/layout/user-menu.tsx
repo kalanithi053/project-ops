@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Settings, SlidersHorizontal, User } from "lucide-react";
+import { Compass, LogOut, Settings, SlidersHorizontal, User } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -17,6 +17,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { useThemeStore } from "@/lib/store/theme-store";
+import { tour } from "@/lib/store/tour-store";
+import { ONBOARDING_TOUR_ID } from "@/lib/tour/tour-config";
 import { toast, useToastStore } from "@/lib/toast/toast-store";
 import type { AuthUser } from "@/types/auth";
 
@@ -67,6 +69,7 @@ export function UserMenu({ user }: { user: AuthUser }) {
           size="icon"
           className="rounded-full"
           aria-label="Open user menu"
+          data-tour="user-menu"
         >
           <Avatar className="h-8 w-8">
             <AvatarImage src={user.avatarUrl} alt={user.name} />
@@ -98,6 +101,11 @@ export function UserMenu({ user }: { user: AuthUser }) {
         <DropdownMenuItem onSelect={() => goTo("/settings")}>
           <Settings className="h-4 w-4" />
           Settings
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onSelect={() => tour.start(ONBOARDING_TOUR_ID)}>
+          <Compass className="h-4 w-4" />
+          Replay product tour
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

@@ -45,6 +45,7 @@ export function TenantSelector() {
           variant="outline"
           size="sm"
           className="hidden max-w-48 gap-2 sm:flex"
+          data-tour="workspace-switcher"
         >
           <Building2 className="h-4 w-4 shrink-0 text-muted-foreground" />
           <span className="truncate">{tenant.name}</span>

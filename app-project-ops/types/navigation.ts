@@ -12,6 +12,8 @@ export interface NavigationItem {
   icon?: LucideIcon;
   permission?: string;
   children?: NavigationItem[];
+  /** `data-tour` anchor id for the product tour, if this item is a tour stop. */
+  tourId?: string;
 }
 
 export interface NavigationSection {

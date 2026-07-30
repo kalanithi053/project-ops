@@ -23,10 +23,10 @@ function useTourStoreHydrated() {
 
 /**
  * Mounts the onboarding tour engine. Auto-starts the tour once for a user
- * who hasn't completed it yet (`Me.productTourCompletedAt` is null), and
- * renders the coach-mark overlay whenever a tour is running. Also exposes
- * itself to `lib/store/tour-store.ts`'s `tour.start(...)` facade, used by
- * the "Replay product tour" menu item.
+ * who hasn't completed it yet (`Me.isTourDone` is false), and renders the
+ * coach-mark overlay whenever a tour is running. Also exposes itself to
+ * `lib/store/tour-store.ts`'s `tour.start(...)` facade, used by the
+ * "Replay product tour" menu item.
  */
 export function TourProvider() {
   const { data: me } = useMe();
@@ -47,7 +47,7 @@ export function TourProvider() {
   React.useEffect(() => {
     if (autoStartedRef.current || !hydrated || !me) return;
     autoStartedRef.current = true;
-    if (!me.productTourCompletedAt && status === "idle") {
+    if (!me.isTourDone && status === "idle") {
       const timer = setTimeout(() => start(ONBOARDING_TOUR_ID), AUTO_START_DELAY_MS);
       return () => clearTimeout(timer);
     }

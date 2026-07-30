@@ -36,6 +36,8 @@ describe('UsersService', () => {
         email: 'jane@acme.com',
         isActive: true,
         createdAt: new Date('2024-01-01'),
+        productTourCompletedAt: null,
+        isTourDone: false,
       };
       prisma.user.findUnique.mockResolvedValue(user);
 
@@ -50,24 +52,10 @@ describe('UsersService', () => {
           email: true,
           isActive: true,
           createdAt: true,
+          productTourCompletedAt: true,
+          isTourDone: true,
         },
       });
-      expect(result).toEqual(user);
-    });
-
-    it('ignores the workspaceSlug argument and still returns the base profile', async () => {
-      const user = {
-        id: 'user-1',
-        firstName: 'Jane',
-        lastName: 'Doe',
-        email: 'jane@acme.com',
-        isActive: true,
-        createdAt: new Date('2024-01-01'),
-      };
-      prisma.user.findUnique.mockResolvedValue(user);
-
-      const result = await service.getProfile('user-1', 'acme');
-
       expect(result).toEqual(user);
     });
 
@@ -101,6 +89,7 @@ describe('UsersService', () => {
           firstName: true,
           lastName: true,
           email: true,
+          isTourDone: true,
         },
       });
       expect(result).toEqual(updated);

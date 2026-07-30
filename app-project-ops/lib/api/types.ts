@@ -139,6 +139,7 @@ export interface Me {
   email?: string;
   phone?: string;
   productTourCompletedAt?: string | null;
+  isTourDone?: boolean;
   [key: string]: unknown;
 }
 

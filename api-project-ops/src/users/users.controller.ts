@@ -20,14 +20,15 @@ export class UsersController {
   @ApiHeader({
     name: WORKSPACE_SLUG_HEADER,
     required: false,
-    description: 'Include to populate the user\'s role + allowed permissions for that workspace',
+    description:
+      "Include to populate the user's role + allowed permissions for that workspace",
   })
-  @ApiOperation({ summary: 'Get the current user profile (+ permissions for the active workspace)' })
-  me(
-    @CurrentUser('sub') userId: string,
-    @Headers(WORKSPACE_SLUG_HEADER) workspaceSlug?: string,
-  ) {
-    return this.users.getProfile(userId, workspaceSlug);
+  @ApiOperation({
+    summary:
+      'Get the current user profile (+ permissions for the active workspace)',
+  })
+  me(@CurrentUser('sub') userId: string) {
+    return this.users.getProfile(userId);
   }
 
   @Patch('me')
@@ -37,7 +38,9 @@ export class UsersController {
   }
 
   @Patch('me/product-tour')
-  @ApiOperation({ summary: 'Mark the product tour as completed for the current user' })
+  @ApiOperation({
+    summary: 'Mark the product tour as completed for the current user',
+  })
   completeTour(@CurrentUser('sub') userId: string) {
     return this.users.completeProductTour(userId);
   }

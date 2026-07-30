@@ -43,7 +43,9 @@ export class CreateWorkItemDto {
 
   @ApiProperty({ description: 'Module instance this work item belongs to' })
   @IsUUID()
-  moduleInstanceId: string;
+  @ApiProperty({ required: false })
+  @IsOptional()
+  moduleInstanceId?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()

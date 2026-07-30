@@ -68,9 +68,18 @@ export class WorkItemsService {
     dto: CreateWorkItemDto,
   ) {
     const project = await this.assertProject(workspaceId, projectId);
-    await this.assertModuleInstance(projectId, dto.moduleInstanceId);
+
+    let workType: any = {};
     if (dto.workItemTypeId) {
-      await this.assertWorkType(workspaceId, dto.workItemTypeId);
+      workType = await this.assertWorkType(workspaceId, dto.workItemTypeId);
+    }
+    if (workType?.category === 'task') {
+      if (!dto.moduleInstanceId) {
+        throw new BadRequestException(
+          'moduleInstanceId is required for task work items',
+        );
+      }
+      await this.assertModuleInstance(projectId, dto.moduleInstanceId);
     }
     if (dto.statusId) await this.assertStatus(workspaceId, dto.statusId);
     if (dto.priorityId) await this.assertPriority(workspaceId, dto.priorityId);
@@ -88,7 +97,7 @@ export class WorkItemsService {
       const created = await tx.workItem.create({
         data: {
           projectId,
-          moduleInstanceId: dto.moduleInstanceId,
+          moduleInstanceId: dto?.moduleInstanceId,
           workItemTypeId: dto.workItemTypeId ?? null,
           name: dto.name,
           prefix: dto.prefix ?? null,
@@ -379,6 +388,7 @@ export class WorkItemsService {
     projectId: string,
     moduleInstanceId: string,
   ) {
+    if (!moduleInstanceId) throw new BadRequestException('Module is required');
     const instance = await this.prisma.moduleInstance.findFirst({
       where: { id: moduleInstanceId, projectId },
     });
@@ -394,6 +404,7 @@ export class WorkItemsService {
     if (!workType) {
       throw new BadRequestException('Work type not found in workspace');
     }
+    return workType;
   }
 
   private async assertStatus(workspaceId: string, statusId: string) {

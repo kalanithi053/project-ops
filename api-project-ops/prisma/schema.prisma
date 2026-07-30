@@ -56,22 +56,23 @@ enum WorkTypeCategory {
 // ---------------------------------------------------------------------------
 
 model User {
-  id         String   @id @default(uuid())
+  id                     String    @id @default(uuid())
   // Login identifier. Required + unique — replaces the old username field.
-  email      String   @unique
-  firstName  String?  @map("first_name")
-  lastName   String?  @map("last_name")
+  email                  String    @unique
+  firstName              String?   @map("first_name")
+  lastName               String?   @map("last_name")
   // Fixed OTP code for this user (defaults to the dev static code). When set,
   // OtpService issues this value instead of a random one — override per user
   // to give a tester/demo account a predictable login code.
-  staticOtp  String?  @default("123456") @map("static_otp")
-  isActive   Boolean  @default(true) @map("is_active")
-  isVerified Boolean  @default(true) @map("is_verified")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
+  staticOtp              String?   @default("123456") @map("static_otp")
+  isActive               Boolean   @default(true) @map("is_active")
+  isVerified             Boolean   @default(true) @map("is_verified")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
   // Set once the user finishes or skips the onboarding product tour;
   // null means it hasn't been shown/completed yet.
   productTourCompletedAt DateTime? @map("product_tour_completed_at")
+  isTourDone             Boolean   @default(false) @map("is_tour_done")
 
   ownedWorkspaces     Workspace[]       @relation("WorkspaceOwner")
   workspaceMembers    WorkspaceMember[]
@@ -345,7 +346,7 @@ model ModuleInstance {
 model WorkItem {
   id               String    @id @default(uuid())
   projectId        String    @map("project_id")
-  moduleInstanceId String    @map("module_instance_id")
+  moduleInstanceId String?   @map("module_instance_id")
   workItemTypeId   String?   @map("work_item_type_id")
   name             String
   prefix           String?
@@ -362,14 +363,14 @@ model WorkItem {
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
-  project        Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  moduleInstance ModuleInstance @relation(fields: [moduleInstanceId], references: [id], onDelete: Cascade)
-  workItemType   WorkType?      @relation(fields: [workItemTypeId], references: [id])
-  status         TicketStatus?  @relation(fields: [statusId], references: [id])
-  priority       Priority?      @relation(fields: [priorityId], references: [id])
-  assignee       User?          @relation("WorkItemAssignee", fields: [assigneeId], references: [id])
-  qaAssignee     User?          @relation("WorkItemQaAssignee", fields: [qaAssigneeId], references: [id])
-  creator        User           @relation("WorkItemCreator", fields: [createdBy], references: [id])
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  moduleInstance ModuleInstance? @relation(fields: [moduleInstanceId], references: [id], onDelete: SetNull)
+  workItemType   WorkType?       @relation(fields: [workItemTypeId], references: [id])
+  status         TicketStatus?   @relation(fields: [statusId], references: [id])
+  priority       Priority?       @relation(fields: [priorityId], references: [id])
+  assignee       User?           @relation("WorkItemAssignee", fields: [assigneeId], references: [id])
+  qaAssignee     User?           @relation("WorkItemQaAssignee", fields: [qaAssigneeId], references: [id])
+  creator        User            @relation("WorkItemCreator", fields: [createdBy], references: [id])
   comments       Comment[]
 
   @@index([projectId])

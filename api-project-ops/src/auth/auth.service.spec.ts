@@ -123,7 +123,7 @@ describe('AuthService', () => {
 
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: {
-          isVerified: true,
+          isVerified: false,
           email: 'jane@acme.com',
           firstName: 'Jane',
           lastName: 'Doe',
@@ -155,7 +155,7 @@ describe('AuthService', () => {
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { email: 'jane@acme.com' },
-        data: { ...dto, isVerified: true },
+        data: { ...dto, isVerified: false },
       });
       expect(prisma.user.create).not.toHaveBeenCalled();
       expect(result.user).toEqual({ id: 'stub-1', email: 'jane@acme.com' });

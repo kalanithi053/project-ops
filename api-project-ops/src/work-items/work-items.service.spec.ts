@@ -286,10 +286,52 @@ describe('WorkItemsService', () => {
     });
 
     it('throws BadRequestException when the module instance is not in the project', async () => {
+      // moduleInstanceId is only required/validated for 'task' category items.
+      mockPrismaService.workType.findFirst.mockResolvedValue({
+        id: 'wt-task',
+        category: 'task',
+      });
       mockPrismaService.moduleInstance.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.create(workspaceId, projectId, userId, minimalDto as any),
+        service.create(workspaceId, projectId, userId, {
+          ...minimalDto,
+          workItemTypeId: 'wt-task',
+        } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrismaService.workItem.create).not.toHaveBeenCalled();
+    });
+
+    it('does not require moduleInstanceId for a non-task category item', async () => {
+      mockPrismaService.workType.findFirst.mockResolvedValue({
+        id: 'wt-bug',
+        category: 'bug',
+      });
+      mockPrismaService.workItem.create.mockResolvedValue({
+        id: 'wi-bug',
+        moduleInstanceId: null,
+      });
+
+      const result = await service.create(workspaceId, projectId, userId, {
+        name: 'Bug without a module',
+        workItemTypeId: 'wt-bug',
+      } as any);
+
+      expect(mockPrismaService.moduleInstance.findFirst).not.toHaveBeenCalled();
+      expect(result).toEqual({ id: 'wi-bug', moduleInstanceId: null });
+    });
+
+    it('throws BadRequestException when a task item omits moduleInstanceId', async () => {
+      mockPrismaService.workType.findFirst.mockResolvedValue({
+        id: 'wt-task',
+        category: 'task',
+      });
+
+      await expect(
+        service.create(workspaceId, projectId, userId, {
+          name: 'Task without a module',
+          workItemTypeId: 'wt-task',
+        } as any),
       ).rejects.toThrow(BadRequestException);
       expect(mockPrismaService.workItem.create).not.toHaveBeenCalled();
     });

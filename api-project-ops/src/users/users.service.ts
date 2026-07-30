@@ -13,7 +13,7 @@ export class UsersService {
    * permission codes they are allowed. Without a valid workspace context, the
    * `workspace` and `permissions` fields are omitted entirely.
    */
-  async getProfile(userId: string, workspaceSlug?: string) {
+  async getProfile(userId: string) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -24,6 +24,7 @@ export class UsersService {
         isActive: true,
         createdAt: true,
         productTourCompletedAt: true,
+        isTourDone: true,
       },
     });
     if (!user) {
@@ -42,6 +43,7 @@ export class UsersService {
         firstName: true,
         lastName: true,
         email: true,
+        isTourDone: true,
       },
     });
   }
@@ -50,7 +52,7 @@ export class UsersService {
   async completeProductTour(userId: string) {
     return this.prisma.user.update({
       where: { id: userId },
-      data: { productTourCompletedAt: new Date() },
+      data: { productTourCompletedAt: new Date(), isTourDone: true },
       select: { id: true, productTourCompletedAt: true },
     });
   }

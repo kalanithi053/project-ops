@@ -12,6 +12,7 @@ import {
   List,
   ListChecks,
   Plus,
+  Search,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -53,7 +54,11 @@ import {
 } from "@/components/ui/table";
 import { useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
-import { useNotifyTaskAssignee, useTasks } from "@/lib/api/hooks/use-tasks";
+import {
+  useNotifyTaskAssignee,
+  useTasks,
+  type TaskListFilters,
+} from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { formatDate } from "@/lib/format";
@@ -113,6 +118,8 @@ export function TaskWorkItems({
       ? "kanban"
       : "list";
   });
+  const [kanbanFiltersOpen, setKanbanFiltersOpen] = React.useState(false);
+  const [listFiltersOpen, setListFiltersOpen] = React.useState(false);
   React.useEffect(() => {
     try {
       window.localStorage.setItem(viewStorageKey, view);
@@ -127,12 +134,15 @@ export function TaskWorkItems({
   }
   const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
   const [keyword, setKeyword] = React.useState("");
-  const [debouncedKeyword, setDebouncedKeyword] = React.useState("");
   const [workTypes, setWorkTypes] = React.useState<string[]>([]);
   const [moduleIds, setModuleIds] = React.useState<string[]>([]);
   const [statusIds, setStatusIds] = React.useState<string[]>([]);
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
+  const [appliedFilters, setAppliedFilters] = React.useState<TaskListFilters>(
+    {},
+  );
+  const [appliedWorkTypes, setAppliedWorkTypes] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
   const columnStorageKey = `project-ops:work-items-columns:${workspaceSlug}:${projectId}`;
   const [visibleColumns, setVisibleColumns] = React.useState<OptionalColumn[]>(
@@ -163,8 +173,10 @@ export function TaskWorkItems({
   );
   const initializedAssignee = React.useRef(false);
   React.useEffect(() => {
-    if (!initializedAssignee.current && me?.id) {
-      setAssigneeIds([me.id]);
+    const id = me?.id;
+    if (!initializedAssignee.current && id) {
+      setAssigneeIds([id]);
+      setAppliedFilters((current) => ({ ...current, assigneeIds: [id] }));
       initializedAssignee.current = true;
     }
   }, [me?.id]);
@@ -176,40 +188,19 @@ export function TaskWorkItems({
       );
     } catch {}
   }, [columnStorageKey, visibleColumns]);
-  React.useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedKeyword(keyword), 350);
-    return () => window.clearTimeout(timer);
-  }, [keyword]);
   const statusesQuery = useTicketStatuses(workspaceSlug);
-  const defaultOpenStatusIds = React.useMemo(
-    () => [
-      ...(statusesQuery.data ?? [])
-        .filter((status) => status.category !== "done")
-        .map((status) => status.id),
-    ],
-    [statusesQuery.data],
-  );
-  const selectedStatusIds =
-    statusIds.length > 0 ? statusIds : defaultOpenStatusIds;
-  const taskFilters = React.useMemo(
-    () => ({
+  function applyFilters() {
+    setAppliedWorkTypes(workTypes);
+    setAppliedFilters({
       ...(assigneeIds.length ? { assigneeIds } : {}),
-      ...(debouncedKeyword.trim() ? { search: debouncedKeyword.trim() } : {}),
+      ...(keyword.trim() ? { search: keyword.trim() } : {}),
       ...(moduleIds.length ? { moduleInstanceIds: moduleIds } : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
-      ...(selectedStatusIds.length ? { statusIds: selectedStatusIds } : {}),
-    }),
-    [
-      assigneeIds,
-      debouncedKeyword,
-      endDate,
-      moduleIds,
-      selectedStatusIds,
-      startDate,
-    ],
-  );
-  const tasksQuery = useTasks(workspaceSlug, projectId, taskFilters);
+      ...(statusIds.length ? { statusIds } : {}),
+    });
+  }
+  const tasksQuery = useTasks(workspaceSlug, projectId, appliedFilters);
   const notifyTask = useNotifyTaskAssignee(workspaceSlug, projectId);
   const [nudgingId, setNudgingId] = React.useState<string | null>(null);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
@@ -273,9 +264,9 @@ export function TaskWorkItems({
     [assigneeOptions, me?.id],
   );
   const workItems = React.useMemo(() => {
-    const query = keyword.trim().toLowerCase();
+    const query = (appliedFilters.search ?? "").trim().toLowerCase();
     return [
-      ...(workTypes.length === 0 || workTypes.includes("task")
+      ...(appliedWorkTypes.length === 0 || appliedWorkTypes.includes("task")
         ? tasks
             .filter(
               (task) =>
@@ -291,14 +282,7 @@ export function TaskWorkItems({
             }))
         : []),
     ].sort((left, right) => right.date.localeCompare(left.date));
-  }, [
-    endDate,
-    keyword,
-    selectedStatusIds,
-    startDate,
-    tasks,
-    workTypes,
-  ]);
+  }, [appliedFilters.search, appliedWorkTypes, tasks]);
   const columnVisible = (column: OptionalColumn) =>
     visibleColumns.includes(column);
   const pageCount = Math.max(1, Math.ceil(workItems.length / PAGE_SIZE));
@@ -322,6 +306,8 @@ export function TaskWorkItems({
     setStartDate("");
     setEndDate("");
     setAssigneeIds(me?.id ? [me.id] : []);
+    setAppliedWorkTypes([]);
+    setAppliedFilters(me?.id ? { assigneeIds: [me.id] } : {});
   }
 
   return (
@@ -335,6 +321,145 @@ export function TaskWorkItems({
             </p>
           </div>
           <div className="flex items-center gap-2">
+            {view === "kanban" && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setKanbanFiltersOpen(true)}
+              >
+                <Filter className="h-4 w-4" />
+                Filters
+              </Button>
+            )}
+            {view === "list" && (
+              <>
+               <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button type="button" variant="outline">
+                      <Columns3 className="h-4 w-4" />
+                      Columns
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    {OPTIONAL_COLUMNS.map((column) => (
+                      <DropdownMenuCheckboxItem
+                        key={column}
+                        checked={columnVisible(column)}
+                        onSelect={(event) => event.preventDefault()}
+                        onCheckedChange={() => toggleColumn(column)}
+                      >
+                        {COLUMN_LABELS[column]}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Sheet open={listFiltersOpen} onOpenChange={setListFiltersOpen}>
+                  <SheetTrigger asChild>
+                    <Button type="button" variant="outline">
+                      <Filter className="h-4 w-4" />
+                      Filters
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent
+                    side="right"
+                    size="md"
+                    className="data-[state=open]:duration-150 data-[state=closed]:duration-150"
+                  >
+                    <SheetHeader>
+                      <SheetTitle>Filter work items</SheetTitle>
+                      <SheetDescription>
+                        Choose the work items to show in the list.
+                      </SheetDescription>
+                    </SheetHeader>
+                    <SheetBody>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        Keyword
+                        <Input
+                          value={keyword}
+                          onChange={(event) => setKeyword(event.target.value)}
+                          placeholder="Filter by keyword"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        Type
+                        <MultiSelectField
+                          aria-label="Filter by work-item type"
+                          options={WORK_TYPE_OPTIONS}
+                          values={workTypes}
+                          onValuesChange={setWorkTypes}
+                          placeholder="All types"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        Assignees
+                        <MultiSelectField
+                          aria-label="Filter by assignees"
+                          options={assigneeFilterOptions}
+                          values={assigneeIds}
+                          onValuesChange={setAssigneeIds}
+                          placeholder="Assignee"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        States
+                        <MultiSelectField
+                          aria-label="Filter by states"
+                          options={statusOptions}
+                          values={statusIds}
+                          onValuesChange={setStatusIds}
+                          placeholder="All statuses"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        Areas
+                        <MultiSelectField
+                          aria-label="Filter by areas"
+                          options={moduleOptions}
+                          values={moduleIds}
+                          onValuesChange={setModuleIds}
+                          placeholder="Area"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        Start date
+                        <Input
+                          type="date"
+                          value={startDate}
+                          onChange={(event) => setStartDate(event.target.value)}
+                          aria-label="Filter by start date"
+                        />
+                      </label>
+                      <label className="flex flex-col gap-1.5 text-sm font-medium">
+                        End date
+                        <Input
+                          type="date"
+                          value={endDate}
+                          onChange={(event) => setEndDate(event.target.value)}
+                          aria-label="Filter by end date"
+                        />
+                      </label>
+                    </SheetBody>
+                    <SheetFooter>
+                      <Button type="button" variant="ghost" onClick={clearFilters}>
+                        <X className="h-3.5 w-3.5" />
+                        Reset filters
+                      </Button>
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          applyFilters();
+                          setListFiltersOpen(false);
+                        }}
+                      >
+                        <Search className="h-3.5 w-3.5" />
+                        Search
+                      </Button>
+                    </SheetFooter>
+                  </SheetContent>
+                </Sheet>
+
+              </>
+            )}
             <div className="inline-flex items-center rounded-md border border-border p-0.5">
               <Button
                 type="button"
@@ -371,125 +496,6 @@ export function TaskWorkItems({
             )}
           </div>
         </div>
-
-        {view === "list" && (
-        <div className="flex items-center justify-between gap-3">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
-                <Filter className="h-4 w-4" />
-                Filters
-              </Button>
-            </SheetTrigger>
-            <SheetContent
-              side="right"
-              size="md"
-              className="data-[state=open]:duration-200"
-            >
-              <SheetHeader>
-                <SheetTitle>Filter work items</SheetTitle>
-                <SheetDescription>
-                  Choose the work items to show in the list.
-                </SheetDescription>
-              </SheetHeader>
-              <SheetBody>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  Keyword
-                  <Input
-                    value={keyword}
-                    onChange={(event) => setKeyword(event.target.value)}
-                    placeholder="Filter by keyword"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  Type
-                  <MultiSelectField
-                    aria-label="Filter by work-item type"
-                    options={WORK_TYPE_OPTIONS}
-                    values={workTypes}
-                    onValuesChange={setWorkTypes}
-                    placeholder="All types"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  Assignees
-                  <MultiSelectField
-                    aria-label="Filter by assignees"
-                    options={assigneeFilterOptions}
-                    values={assigneeIds}
-                    onValuesChange={setAssigneeIds}
-                    placeholder="Assignee"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  States
-                  <MultiSelectField
-                    aria-label="Filter by states"
-                    options={statusOptions}
-                    values={selectedStatusIds}
-                    onValuesChange={setStatusIds}
-                    placeholder="Open items"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  Areas
-                  <MultiSelectField
-                    aria-label="Filter by areas"
-                    options={moduleOptions}
-                    values={moduleIds}
-                    onValuesChange={setModuleIds}
-                    placeholder="Area"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  Start date
-                  <Input
-                    type="date"
-                    value={startDate}
-                    onChange={(event) => setStartDate(event.target.value)}
-                    aria-label="Filter by start date"
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm font-medium">
-                  End date
-                  <Input
-                    type="date"
-                    value={endDate}
-                    onChange={(event) => setEndDate(event.target.value)}
-                    aria-label="Filter by end date"
-                  />
-                </label>
-              </SheetBody>
-              <SheetFooter>
-                <Button type="button" variant="ghost" onClick={clearFilters}>
-                  <X className="h-3.5 w-3.5" />
-                  Reset filters
-                </Button>
-              </SheetFooter>
-            </SheetContent>
-          </Sheet>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" size="sm">
-                <Columns3 className="h-4 w-4" />
-                Columns
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              {OPTIONAL_COLUMNS.map((column) => (
-                <DropdownMenuCheckboxItem
-                  key={column}
-                  checked={columnVisible(column)}
-                  onSelect={(event) => event.preventDefault()}
-                  onCheckedChange={() => toggleColumn(column)}
-                >
-                  {COLUMN_LABELS[column]}
-                </DropdownMenuCheckboxItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        )}
       </div>
 
       {view === "kanban" ? (
@@ -499,6 +505,8 @@ export function TaskWorkItems({
           canCreate={canCreate}
           canUpdate={canUpdate}
           onCreate={(statusId, workType) => goToCreate(workType, statusId)}
+          filtersOpen={kanbanFiltersOpen}
+          onFiltersOpenChange={setKanbanFiltersOpen}
         />
       ) : (
       <QueryState

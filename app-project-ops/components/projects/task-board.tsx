@@ -21,7 +21,6 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangle,
-  Filter,
   GripVertical,
   Plus,
   Search,
@@ -49,7 +48,6 @@ import {
   SheetFooter,
   SheetHeader,
   SheetTitle,
-  SheetTrigger,
 } from "@/components/ui/sheet";
 import { useIncidents, useUpdateIncident } from "@/lib/api/hooks/use-incidents";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
@@ -115,6 +113,10 @@ interface TaskBoardProps {
    * this column's status pre-selected.
    */
   onCreate?: (statusId: string, workType: WorkType) => void;
+  /** The filters Sheet's trigger lives in the parent header, next to the
+   * list/kanban switch, so its open state is controlled from there. */
+  filtersOpen: boolean;
+  onFiltersOpenChange: (open: boolean) => void;
 }
 
 /**
@@ -131,6 +133,8 @@ export function TaskBoard({
   canCreate,
   canUpdate,
   onCreate,
+  filtersOpen,
+  onFiltersOpenChange,
 }: TaskBoardProps) {
   const statusesQuery = useTicketStatuses(workspaceSlug);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
@@ -302,6 +306,7 @@ export function TaskBoard({
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
     });
+    onFiltersOpenChange(false);
   }
 
   const sensors = useSensors(
@@ -415,20 +420,13 @@ export function TaskBoard({
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveItem(null)}
         >
-          <div className="mb-4 flex items-center justify-between gap-3">
-            <Sheet>
-              <SheetTrigger asChild>
-                <Button type="button" variant="outline" size="sm">
-                  <Filter className="h-4 w-4" />
-                  Filters
-                  {filtersActive && (
-                    <span className="rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
-                      {tasks.length}
-                    </span>
-                  )}
-                </Button>
-              </SheetTrigger>
-              <SheetContent side="right" size="md">
+          <>
+            <Sheet open={filtersOpen} onOpenChange={onFiltersOpenChange}>
+              <SheetContent
+                side="right"
+                size="md"
+                className="data-[state=open]:duration-150 data-[state=closed]:duration-150"
+              >
                 <SheetHeader>
                   <SheetTitle>Filter work items</SheetTitle>
                   <SheetDescription>
@@ -514,11 +512,11 @@ export function TaskBoard({
               </SheetContent>
             </Sheet>
             {filtersActive && (
-              <span className="text-xs text-muted-foreground">
+              <div className="fixed bottom-4 right-4 z-30 rounded-full border border-border bg-popover px-3 py-1.5 text-xs text-muted-foreground shadow-lg">
                 {tasks.length} matching work items
-              </span>
+              </div>
             )}
-          </div>
+          </>
           <div className="flex gap-4 overflow-x-auto pb-4">
             {columns.map((column) => (
               <BoardColumn

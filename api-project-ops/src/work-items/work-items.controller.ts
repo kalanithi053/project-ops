@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -20,6 +21,7 @@ import { PERMISSIONS } from '../common/constants/permissions';
 import { WorkItemsService } from './work-items.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
+import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
 
 @ApiTags('work-items')
 @ApiBearerAuth()
@@ -34,8 +36,9 @@ export class WorkItemsController {
   list(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
+    @Query() query: ListWorkItemsQueryDto,
   ) {
-    return this.workItems.list(workspaceId, projectId);
+    return this.workItems.list(workspaceId, projectId, query);
   }
 
   @Post()

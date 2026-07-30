@@ -140,6 +140,143 @@ describe('WorkItemsService', () => {
       );
       expect(mockPrismaService.workItem.findMany).not.toHaveBeenCalled();
     });
+
+    it('filters by a case-insensitive match on name or prefix', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, { search: 'pipelines' });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [
+              {
+                OR: [
+                  { name: { contains: 'pipelines', mode: 'insensitive' } },
+                  { prefix: { contains: 'pipelines', mode: 'insensitive' } },
+                ],
+              },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('filters by assigneeIds', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        assigneeIds: ['user-1', 'user-2'],
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [{ assigneeId: { in: ['user-1', 'user-2'] } }],
+          },
+        }),
+      );
+    });
+
+    it('merges moduleInstanceId and moduleInstanceIds into one filter', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        moduleInstanceId: 'mod-1',
+        moduleInstanceIds: ['mod-1', 'mod-2'],
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [{ moduleInstanceId: { in: ['mod-1', 'mod-2'] } }],
+          },
+        }),
+      );
+    });
+
+    it('filters by statusIds', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        statusIds: ['status-1', 'status-2'],
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [{ statusId: { in: ['status-1', 'status-2'] } }],
+          },
+        }),
+      );
+    });
+
+    it('translates the "__unassigned__" sentinel status into a null match', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        statusId: '__unassigned__',
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { projectId, AND: [{ statusId: null }] },
+        }),
+      );
+    });
+
+    it('ORs real statuses with a null match when the sentinel is mixed in', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        statusIds: ['status-1', '__unassigned__'],
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [
+              { OR: [{ statusId: { in: ['status-1'] } }, { statusId: null }] },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('filters by priorityId and a start/end date range', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findMany.mockResolvedValue([]);
+
+      await service.list(workspaceId, projectId, {
+        priorityId: 'priority-1',
+        startDate: '2026-08-01',
+        endDate: '2026-08-31',
+      });
+
+      expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            projectId,
+            AND: [
+              { priorityId: 'priority-1' },
+              { startDate: { gte: new Date('2026-08-01') } },
+              { dueDate: { lte: new Date('2026-08-31') } },
+            ],
+          },
+        }),
+      );
+    });
   });
 
   describe('findOne', () => {

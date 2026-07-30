@@ -4,11 +4,16 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
+import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
+
+/** Matches the Kanban board's "No status" column — see task-board.tsx's UNASSIGNED. */
+const UNASSIGNED_STATUS = '__unassigned__';
 
 const WORK_ITEM_UPDATE_FIELDS = [
   'name',
@@ -48,13 +53,72 @@ export class WorkItemsService {
     private readonly mail: MailService,
   ) {}
 
-  async list(workspaceId: string, projectId: string) {
+  async list(
+    workspaceId: string,
+    projectId: string,
+    filters: ListWorkItemsQueryDto = {},
+  ) {
     await this.assertProject(workspaceId, projectId);
+
+    const moduleInstanceIds = new Set(filters.moduleInstanceIds ?? []);
+    if (filters.moduleInstanceId)
+      moduleInstanceIds.add(filters.moduleInstanceId);
+
+    const and: Prisma.WorkItemWhereInput[] = [];
+    if (filters.search) {
+      and.push({
+        OR: [
+          { name: { contains: filters.search, mode: 'insensitive' } },
+          { prefix: { contains: filters.search, mode: 'insensitive' } },
+        ],
+      });
+    }
+    if (filters.assigneeIds?.length) {
+      and.push({ assigneeId: { in: filters.assigneeIds } });
+    }
+    if (moduleInstanceIds.size) {
+      and.push({ moduleInstanceId: { in: [...moduleInstanceIds] } });
+    }
+    if (filters.priorityId) and.push({ priorityId: filters.priorityId });
+    const statusFilter = this.buildStatusFilter(
+      filters.statusId,
+      filters.statusIds,
+    );
+    if (statusFilter) and.push(statusFilter);
+    if (filters.startDate) {
+      and.push({ startDate: { gte: new Date(filters.startDate) } });
+    }
+    if (filters.endDate) {
+      and.push({ dueDate: { lte: new Date(filters.endDate) } });
+    }
+
     return this.prisma.workItem.findMany({
-      where: { projectId },
+      where: { projectId, ...(and.length ? { AND: and } : {}) },
       orderBy: { createdAt: 'asc' },
       include: WORK_ITEM_INCLUDE,
     });
+  }
+
+  /** Combines the board's single `statusId` and the list's `statusIds`, translating the
+   * "__unassigned__" sentinel into a `statusId: null` match. */
+  private buildStatusFilter(
+    statusId?: string,
+    statusIds?: string[],
+  ): Prisma.WorkItemWhereInput | undefined {
+    const ids = new Set<string>();
+    let includeUnassigned = false;
+    for (const value of [statusId, ...(statusIds ?? [])]) {
+      if (!value) continue;
+      if (value === UNASSIGNED_STATUS) includeUnassigned = true;
+      else ids.add(value);
+    }
+    if (!ids.size && !includeUnassigned) return undefined;
+    if (includeUnassigned && ids.size) {
+      return { OR: [{ statusId: { in: [...ids] } }, { statusId: null }] };
+    }
+    return includeUnassigned
+      ? { statusId: null }
+      : { statusId: { in: [...ids] } };
   }
 
   async findOne(workspaceId: string, projectId: string, id: string) {

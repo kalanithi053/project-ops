@@ -5,17 +5,23 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { TimeLogsService } from './time-logs.service';
 
 describe('TimeLogsService', () => {
   let service: TimeLogsService;
+  let activityLog: { log: jest.Mock };
 
   const workspaceId = 'ws-1';
   const projectId = 'proj-1';
   const workItemId = 'wi-1';
   const userId = 'user-1';
   const otherUserId = 'user-2';
+
+  // Fake transaction client used by $transaction mock — create()/stopTimer()
+  // write the entry and its activity log entry atomically.
+  const txTimeLog = { create: jest.fn(), update: jest.fn() };
 
   const mockPrismaService = {
     timeLog: {
@@ -28,12 +34,16 @@ describe('TimeLogsService', () => {
     workItem: {
       findFirst: jest.fn(),
     },
+    workType: {
+      findFirst: jest.fn(),
+    },
     project: {
       findFirst: jest.fn(),
     },
     workspacePreference: {
       findUnique: jest.fn(),
     },
+    $transaction: jest.fn(async (cb) => cb({ timeLog: txTimeLog })),
   };
 
   const assignedWorkItem = { id: workItemId, assigneeId: userId };
@@ -41,10 +51,13 @@ describe('TimeLogsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    activityLog = { log: jest.fn().mockResolvedValue({ id: 'activity-1' }) };
+
     const module = await Test.createTestingModule({
       providers: [
         TimeLogsService,
         { provide: PrismaService, useValue: mockPrismaService },
+        { provide: ActivityLogService, useValue: activityLog },
       ],
     }).compile();
 
@@ -52,16 +65,17 @@ describe('TimeLogsService', () => {
   });
 
   describe('create', () => {
-    it('creates a manual entry from a bare duration', async () => {
+    it('creates a manual entry from a bare duration and logs activity', async () => {
       mockPrismaService.workItem.findFirst.mockResolvedValue(assignedWorkItem);
-      mockPrismaService.timeLog.create.mockResolvedValue({ id: 'log-1' });
+      txTimeLog.create.mockResolvedValue({ id: 'log-1' });
 
       await service.create(workspaceId, projectId, workItemId, userId, {
         date: '2026-07-30',
         durationMinutes: 30,
+        notes: 'Wrote the migration',
       });
 
-      expect(mockPrismaService.timeLog.create).toHaveBeenCalledWith(
+      expect(txTimeLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             workspaceId,
@@ -77,11 +91,27 @@ describe('TimeLogsService', () => {
           }),
         }),
       );
+      expect(activityLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId,
+          projectId,
+          entityType: 'task',
+          entityId: workItemId,
+          action: 'time_logged',
+          userId,
+          metadata: {
+            durationMinutes: 30,
+            source: 'manual',
+            notes: 'Wrote the migration',
+          },
+        }),
+        expect.anything(),
+      );
     });
 
     it('derives durationMinutes from an explicit start/end pair', async () => {
       mockPrismaService.workItem.findFirst.mockResolvedValue(assignedWorkItem);
-      mockPrismaService.timeLog.create.mockResolvedValue({ id: 'log-1' });
+      txTimeLog.create.mockResolvedValue({ id: 'log-1' });
 
       await service.create(workspaceId, projectId, workItemId, userId, {
         date: '2026-07-30',
@@ -89,7 +119,7 @@ describe('TimeLogsService', () => {
         endTime: '2026-07-30T09:30:00.000Z',
       });
 
-      expect(mockPrismaService.timeLog.create).toHaveBeenCalledWith(
+      expect(txTimeLog.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({ durationMinutes: 30 }),
         }),
@@ -138,7 +168,7 @@ describe('TimeLogsService', () => {
           durationMinutes: 30,
         }),
       ).rejects.toThrow(ForbiddenException);
-      expect(mockPrismaService.timeLog.create).not.toHaveBeenCalled();
+      expect(mockPrismaService.$transaction).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when the work item does not exist in the project', async () => {
@@ -192,21 +222,45 @@ describe('TimeLogsService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('stops the running timer and computes durationMinutes', async () => {
+    it('stops the running timer, computes durationMinutes, and logs activity', async () => {
       const startTime = new Date(Date.now() - 5 * 60_000);
       mockPrismaService.workItem.findFirst.mockResolvedValue(assignedWorkItem);
       mockPrismaService.timeLog.findFirst.mockResolvedValue({
         id: 'log-1',
         startTime,
+        notes: null,
       });
-      mockPrismaService.timeLog.update.mockResolvedValue({ id: 'log-1' });
+      txTimeLog.update.mockResolvedValue({ id: 'log-1' });
 
-      await service.stopTimer(workspaceId, projectId, workItemId, userId);
+      await service.stopTimer(
+        workspaceId,
+        projectId,
+        workItemId,
+        userId,
+        'Wrapped up the migration',
+      );
 
-      const call = mockPrismaService.timeLog.update.mock.calls[0][0];
+      const call = txTimeLog.update.mock.calls[0][0];
       expect(call.where).toEqual({ id: 'log-1' });
       expect(call.data.durationMinutes).toBeGreaterThanOrEqual(4);
       expect(call.data.endTime).toBeInstanceOf(Date);
+      expect(call.data.notes).toBe('Wrapped up the migration');
+
+      expect(activityLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          workspaceId,
+          projectId,
+          entityType: 'task',
+          entityId: workItemId,
+          action: 'time_logged',
+          userId,
+          metadata: expect.objectContaining({
+            source: 'timer',
+            notes: 'Wrapped up the migration',
+          }),
+        }),
+        expect.anything(),
+      );
     });
 
     it('throws NotFoundException when no timer is running', async () => {

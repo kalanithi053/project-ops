@@ -190,6 +190,14 @@ export class ActivityLogService {
         return `${actorName} updated a comment`;
       case 'comment_deleted':
         return `${actorName} deleted a comment`;
+      case 'time_logged': {
+        const duration = this.formatMinutes((meta.durationMinutes as number) ?? 0);
+        const note =
+          typeof meta.notes === 'string' && meta.notes
+            ? ` — "${meta.notes}"`
+            : '';
+        return `${actorName} logged ${duration}${note}`;
+      }
       case 'status_changed': {
         const from = lookups.statusName.get(meta.from as string) ?? 'None';
         const to = lookups.statusName.get(meta.to as string) ?? 'None';
@@ -253,6 +261,15 @@ export class ActivityLogService {
       default:
         return `updated ${field}`;
     }
+  }
+
+  /** Minutes as "1h 30m" (or just "2h" / "45m" when one part is zero) — mirrors formatDurationMinutes in the frontend's lib/format.ts. */
+  private formatMinutes(minutes: number): string {
+    const hours = Math.floor(minutes / 60);
+    const mins = minutes % 60;
+    if (hours && mins) return `${hours}h ${mins}m`;
+    if (hours) return `${hours}h`;
+    return `${mins}m`;
   }
 
   /** Short noun label for a field, used when several changed in one update. */

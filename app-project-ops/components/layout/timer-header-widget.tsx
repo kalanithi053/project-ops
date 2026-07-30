@@ -107,6 +107,16 @@ export function TimerHeaderWidget() {
               Add a note about what you worked on, or leave it blank.
             </DialogDescription>
           </DialogHeader>
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm">
+            {running.workItem.prefix && (
+              <span className="shrink-0 rounded bg-background px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
+                {running.workItem.prefix}
+              </span>
+            )}
+            <span className="truncate font-medium text-foreground">
+              {running.workItem.name}
+            </span>
+          </div>
           <Textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}

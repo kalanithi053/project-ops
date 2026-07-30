@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma, TimeLogBillingType, TimeLogSource } from '@prisma/client';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import {
   resolveTimeLogPreferences,
@@ -14,6 +15,14 @@ import {
 import { CreateTimeLogDto } from './dto/create-time-log.dto';
 import { UpdateTimeLogDto } from './dto/update-time-log.dto';
 import { ListTimeLogsDto } from './dto/list-time-logs.dto';
+
+/** Fallback activity log entityType when the work item has no WorkType set — mirrors work-items.service.ts. */
+const DEFAULT_ENTITY_TYPE = 'task';
+
+/** Truncates freeform notes before they're stored in an activity log's JSON metadata. */
+function notePreview(notes: string, maxLength = 200): string {
+  return notes.trim().slice(0, maxLength);
+}
 
 /** Where-clause excluding the currently in-progress timer row (0 minutes, no end time yet). */
 const EXCLUDE_RUNNING_TIMER: Prisma.TimeLogWhereInput = {
@@ -46,7 +55,10 @@ function toCsv(rows: string[][]): string {
 
 @Injectable()
 export class TimeLogsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly activityLog: ActivityLogService,
+  ) {}
 
   /**
    * The caller's own running timer, if any, regardless of which work item or
@@ -114,22 +126,47 @@ export class TimeLogsService {
     this.assertLogDateAllowed(preferences, dto.date);
 
     const { startTime, endTime, durationMinutes } = this.resolvePeriod(dto);
+    const entityType = await this.resolveEntityType(
+      workspaceId,
+      workItem.workItemTypeId,
+    );
 
-    return this.prisma.timeLog.create({
-      data: {
-        workspaceId,
-        projectId,
-        workItemId,
-        userId,
-        date: new Date(dto.date),
-        startTime,
-        endTime,
-        durationMinutes,
-        billingType: dto.billingType ?? TimeLogBillingType.billable,
-        notes: dto.notes ?? null,
-        source: 'manual',
-      },
-      include: TIME_LOG_INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      const created = await tx.timeLog.create({
+        data: {
+          workspaceId,
+          projectId,
+          workItemId,
+          userId,
+          date: new Date(dto.date),
+          startTime,
+          endTime,
+          durationMinutes,
+          billingType: dto.billingType ?? TimeLogBillingType.billable,
+          notes: dto.notes ?? null,
+          source: 'manual',
+        },
+        include: TIME_LOG_INCLUDE,
+      });
+
+      await this.activityLog.log(
+        {
+          workspaceId,
+          projectId,
+          entityType,
+          entityId: workItemId,
+          action: 'time_logged',
+          userId,
+          metadata: {
+            durationMinutes,
+            source: 'manual',
+            ...(dto.notes ? { notes: notePreview(dto.notes) } : {}),
+          },
+        },
+        tx,
+      );
+
+      return created;
     });
   }
 
@@ -182,7 +219,11 @@ export class TimeLogsService {
     userId: string,
     notes?: string,
   ) {
-    await this.assertWorkItem(workspaceId, projectId, workItemId);
+    const workItem = await this.assertWorkItem(
+      workspaceId,
+      projectId,
+      workItemId,
+    );
 
     const running = await this.prisma.timeLog.findFirst({
       where: { workItemId, userId, endTime: null, source: 'timer' },
@@ -196,11 +237,37 @@ export class TimeLogsService {
       1,
       Math.round((endTime.getTime() - running.startTime.getTime()) / 60000),
     );
+    const finalNotes = notes ?? running.notes;
+    const entityType = await this.resolveEntityType(
+      workspaceId,
+      workItem.workItemTypeId,
+    );
 
-    return this.prisma.timeLog.update({
-      where: { id: running.id },
-      data: { endTime, durationMinutes, notes: notes ?? running.notes },
-      include: TIME_LOG_INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.timeLog.update({
+        where: { id: running.id },
+        data: { endTime, durationMinutes, notes: finalNotes },
+        include: TIME_LOG_INCLUDE,
+      });
+
+      await this.activityLog.log(
+        {
+          workspaceId,
+          projectId,
+          entityType,
+          entityId: workItemId,
+          action: 'time_logged',
+          userId,
+          metadata: {
+            durationMinutes,
+            source: 'timer',
+            ...(finalNotes ? { notes: notePreview(finalNotes) } : {}),
+          },
+        },
+        tx,
+      );
+
+      return updated;
     });
   }
 
@@ -362,10 +429,23 @@ export class TimeLogsService {
   ) {
     const workItem = await this.prisma.workItem.findFirst({
       where: { id: workItemId, projectId, project: { workspaceId } },
-      select: { id: true, assigneeId: true },
+      select: { id: true, assigneeId: true, workItemTypeId: true },
     });
     if (!workItem) throw new NotFoundException('Work item not found');
     return workItem;
+  }
+
+  /** The work item's WorkType category ('task', 'incident', ...), for the activity log's entityType. */
+  private async resolveEntityType(
+    workspaceId: string,
+    workItemTypeId?: string | null,
+  ): Promise<string> {
+    if (!workItemTypeId) return DEFAULT_ENTITY_TYPE;
+    const workType = await this.prisma.workType.findFirst({
+      where: { id: workItemTypeId, workspaceId },
+      select: { category: true },
+    });
+    return workType?.category ?? DEFAULT_ENTITY_TYPE;
   }
 
   private async assertProject(workspaceId: string, projectId: string) {

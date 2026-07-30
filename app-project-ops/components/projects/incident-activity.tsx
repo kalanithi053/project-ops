@@ -7,6 +7,7 @@ import {
   MessageSquare,
   PencilLine,
   RefreshCw,
+  Timer,
 } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -32,6 +33,8 @@ function iconForAction(action: IncidentActivityEntry["action"]) {
       return MessageSquare;
     case "status_changed":
       return RefreshCw;
+    case "time_logged":
+      return Timer;
     default:
       return PencilLine;
   }

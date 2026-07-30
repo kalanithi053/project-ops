@@ -662,6 +662,7 @@ export interface TaskActivityEntry {
     | "status_changed"
     | "deleted"
     | "comment_added"
+    | "time_logged"
     | string;
   actor: string;
   createdAt: string;

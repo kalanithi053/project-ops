@@ -48,6 +48,25 @@ function toCsv(rows: string[][]): string {
 export class TimeLogsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * The caller's own running timer, if any, regardless of which work item or
+   * workspace it belongs to — powers the always-visible header widget so it
+   * doesn't need a specific project/work-item route to know a timer is live.
+   */
+  async getMyRunningTimer(userId: string) {
+    const running = await this.prisma.timeLog.findFirst({
+      where: { userId, endTime: null, source: TimeLogSource.timer },
+      include: {
+        workItem: { select: { id: true, name: true, prefix: true } },
+        project: { select: { workspace: { select: { slug: true } } } },
+      },
+    });
+    if (!running) return null;
+
+    const { project, ...timeLog } = running;
+    return { ...timeLog, workspaceSlug: project.workspace.slug };
+  }
+
   /** Entries for one work item, plus the caller's running timer (if any). */
   async listForWorkItem(
     workspaceId: string,

@@ -734,6 +734,16 @@ export interface WorkItemTimeLogs {
 }
 
 /**
+ * GET /time-logs/running — the caller's own running timer, regardless of
+ * which work item or workspace started it. Powers the header widget, which
+ * has no project/work-item route to scope a lookup to.
+ */
+export interface RunningTimerInfo extends TimeLog {
+  workItem: { id: string; name: string; prefix?: string | null };
+  workspaceSlug: string;
+}
+
+/**
  * POST .../time-logs. Either `durationMinutes` or the `startTime`/`endTime`
  * pair is required — when both a period and a duration are given, the
  * server derives the duration from the period instead of trusting the

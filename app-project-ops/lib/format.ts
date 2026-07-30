@@ -81,6 +81,18 @@ export function formatDate(value?: string | null, fallback = "—"): string {
   return value;
 }
 
+/** Elapsed time since `startTime` as "12:34" (or "1:02:34" past an hour). */
+export function formatElapsedTime(startTime: string, now: number): string {
+  const totalSeconds = Math.max(
+    0,
+    Math.floor((now - new Date(startTime).getTime()) / 1000),
+  );
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
+  const seconds = String(totalSeconds % 60).padStart(2, "0");
+  return hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`;
+}
+
 /** Minutes as "1h 30m" (or just "2h" / "45m" when one part is zero). */
 export function formatDurationMinutes(minutes: number): string {
   const hours = Math.floor(minutes / 60);

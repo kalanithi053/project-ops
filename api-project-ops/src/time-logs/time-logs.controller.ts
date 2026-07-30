@@ -33,6 +33,15 @@ import { StopTimerDto } from './dto/stop-timer.dto';
 export class TimeLogsController {
   constructor(private readonly timeLogs: TimeLogsService) {}
 
+  @Get('time-logs/running')
+  @RequirePermission(PERMISSIONS.TIMELOG_READ)
+  @ApiOperation({
+    summary: "Get the caller's running timer, if any, across every work item",
+  })
+  getMyRunningTimer(@CurrentWorkspace('userId') userId: string) {
+    return this.timeLogs.getMyRunningTimer(userId);
+  }
+
   @Get('projects/:projectId/work-items/:workItemId/time-logs')
   @RequirePermission(PERMISSIONS.TIMELOG_READ)
   @ApiOperation({

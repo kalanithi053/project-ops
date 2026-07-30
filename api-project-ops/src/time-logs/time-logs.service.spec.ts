@@ -219,6 +219,34 @@ describe('TimeLogsService', () => {
     });
   });
 
+  describe('getMyRunningTimer', () => {
+    it('returns null when the caller has no running timer', async () => {
+      mockPrismaService.timeLog.findFirst.mockResolvedValue(null);
+
+      await expect(service.getMyRunningTimer(userId)).resolves.toBeNull();
+    });
+
+    it('flattens the work item + workspace slug onto the entry', async () => {
+      mockPrismaService.timeLog.findFirst.mockResolvedValue({
+        id: 'log-1',
+        userId,
+        workItemId,
+        workItem: { id: workItemId, name: 'Custom Properties', prefix: 'CP-3' },
+        project: { workspace: { slug: 'acme' } },
+      });
+
+      const result = await service.getMyRunningTimer(userId);
+
+      expect(result).toEqual({
+        id: 'log-1',
+        userId,
+        workItemId,
+        workItem: { id: workItemId, name: 'Custom Properties', prefix: 'CP-3' },
+        workspaceSlug: 'acme',
+      });
+    });
+  });
+
   describe('listForProject', () => {
     it('builds a date-range + user filter', async () => {
       mockPrismaService.project.findFirst.mockResolvedValue({ id: projectId });

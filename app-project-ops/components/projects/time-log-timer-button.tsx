@@ -18,18 +18,7 @@ import {
   useStopTimer,
   useWorkItemTimeLogs,
 } from "@/lib/api/hooks/use-time-logs";
-
-/** Elapsed time since `startTime` as "12:34" (or "1:02:34" past an hour). */
-function formatElapsed(startTime: string, now: number): string {
-  const totalSeconds = Math.max(
-    0,
-    Math.floor((now - new Date(startTime).getTime()) / 1000),
-  );
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, "0");
-  const seconds = String(totalSeconds % 60).padStart(2, "0");
-  return hours > 0 ? `${hours}:${minutes}:${seconds}` : `${minutes}:${seconds}`;
-}
+import { formatElapsedTime } from "@/lib/format";
 
 /**
  * Start/stop toggle for the work item's own timer. Only rendered for the
@@ -87,7 +76,7 @@ export function TimeLogTimerButton({
           ) : (
             <Square className="h-4 w-4" />
           )}
-          Stop · {formatElapsed(running.startTime, now)}
+          Stop · {formatElapsedTime(running.startTime, now)}
         </Button>
 
         <Dialog

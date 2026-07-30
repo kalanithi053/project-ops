@@ -6,6 +6,7 @@ import { Breadcrumbs } from "@/components/layout/breadcrumbs";
 import { TenantSelector } from "@/components/layout/tenant-selector";
 import { UserMenu } from "@/components/layout/user-menu";
 import { NotificationsMenu } from "@/components/layout/notifications-menu";
+import { TimerHeaderWidget } from "@/components/layout/timer-header-widget";
 
 interface AppHeaderProps {
   user: AuthUser;
@@ -58,6 +59,7 @@ export function AppHeader({
           <span>Search…</span>
         </Button>
         <TenantSelector />
+        <TimerHeaderWidget />
         <NotificationsMenu notifications={notifications} />
         <UserMenu user={user} />
       </div>

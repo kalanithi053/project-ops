@@ -7,6 +7,7 @@ import { useAuthStore } from "@/lib/store/auth-store";
 import { toast } from "@/lib/toast/toast-store";
 import type {
   CreateTimeLogDto,
+  RunningTimerInfo,
   StopTimerDto,
   TimeLog,
   TimeLogFilters,
@@ -26,6 +27,27 @@ export function workItemTimeLogsKey(
 /** Query key prefix for the project-level Time Logs tab — filters append a suffix. */
 export function projectTimeLogsKey(workspaceSlug: string, projectId: string) {
   return ["time-logs", "project", workspaceSlug, projectId] as const;
+}
+
+/** Query key prefix for the caller's global running timer (header widget). */
+export function myRunningTimerKey() {
+  return ["time-logs", "running"] as const;
+}
+
+/**
+ * GET /time-logs/running — the caller's own running timer, wherever it was
+ * started. Polls in the background so the header widget picks up a timer
+ * started from another tab/device even without a local mutation to invalidate it.
+ */
+export function useMyRunningTimer(workspaceSlug: string) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: myRunningTimerKey(),
+    queryFn: () =>
+      apiFetch<RunningTimerInfo | null>("/time-logs/running", { workspaceSlug }),
+    enabled: Boolean(token && workspaceSlug),
+    refetchInterval: 60_000,
+  });
 }
 
 function filtersToQueryString(filters: TimeLogFilters): string {
@@ -85,6 +107,7 @@ function invalidateTimeLogs(
   queryClient.invalidateQueries({
     queryKey: projectTimeLogsKey(workspaceSlug, projectId),
   });
+  queryClient.invalidateQueries({ queryKey: myRunningTimerKey() });
 }
 
 /** POST /projects/:projectId/work-items/:workItemId/time-logs — manual entry. */

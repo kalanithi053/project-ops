@@ -182,7 +182,7 @@ describe('WorkItemsService', () => {
         workspaceId,
         projectId,
         userId,
-        minimalDto as any,
+        minimalDto,
       );
 
       expect(mockPrismaService.workItem.create).toHaveBeenCalledWith(
@@ -224,12 +224,10 @@ describe('WorkItemsService', () => {
       const created = makeWorkItem({ workItemTypeId: 'wt-1', assignee: null });
       mockPrismaService.workItem.create.mockResolvedValue(created);
 
-      await service.create(
-        workspaceId,
-        projectId,
-        userId,
-        { ...minimalDto, workItemTypeId: 'wt-1' } as any,
-      );
+      await service.create(workspaceId, projectId, userId, {
+        ...minimalDto,
+        workItemTypeId: 'wt-1',
+      });
 
       expect(mockActivityLog.log).toHaveBeenCalledWith(
         expect.objectContaining({ entityType: 'bug' }),
@@ -253,16 +251,11 @@ describe('WorkItemsService', () => {
       });
       mockPrismaService.workItem.create.mockResolvedValue(created);
 
-      await service.create(
-        workspaceId,
-        projectId,
-        userId,
-        {
-          ...minimalDto,
-          assigneeId: 'assignee-1',
-          qaAssigneeId: 'qa-1',
-        } as any,
-      );
+      await service.create(workspaceId, projectId, userId, {
+        ...minimalDto,
+        assigneeId: 'assignee-1',
+        qaAssigneeId: 'qa-1',
+      });
 
       expect(mockMail.sendWorkItemNotificationEmail).toHaveBeenCalledTimes(3);
       const recipients = mockMail.sendWorkItemNotificationEmail.mock.calls.map(
@@ -315,7 +308,7 @@ describe('WorkItemsService', () => {
       const result = await service.create(workspaceId, projectId, userId, {
         name: 'Bug without a module',
         workItemTypeId: 'wt-bug',
-      } as any);
+      });
 
       expect(mockPrismaService.moduleInstance.findFirst).not.toHaveBeenCalled();
       expect(result).toEqual({ id: 'wi-bug', moduleInstanceId: null });
@@ -413,7 +406,7 @@ describe('WorkItemsService', () => {
         projectId,
         workItemId,
         userId,
-        { name: 'New Name' } as any,
+        { name: 'New Name' },
       );
 
       expect(mockActivityLog.log).toHaveBeenCalledWith(
@@ -440,7 +433,7 @@ describe('WorkItemsService', () => {
 
       await service.update(workspaceId, projectId, workItemId, userId, {
         name: 'Same Name',
-      } as any);
+      });
 
       expect(mockActivityLog.log).not.toHaveBeenCalled();
       expect(mockMail.sendWorkItemNotificationEmail).not.toHaveBeenCalled();
@@ -465,7 +458,7 @@ describe('WorkItemsService', () => {
 
       await service.update(workspaceId, projectId, workItemId, userId, {
         assigneeId: 'assignee-1',
-      } as any);
+      });
 
       expect(mockMail.sendWorkItemNotificationEmail).toHaveBeenCalledTimes(2);
       expect(mockMail.sendWorkItemNotificationEmail).toHaveBeenCalledWith(
@@ -477,9 +470,10 @@ describe('WorkItemsService', () => {
         expect.objectContaining({ action: 'updated' }),
       );
       // The assignee must not also receive a plain "updated" email.
-      const assigneeCalls = mockMail.sendWorkItemNotificationEmail.mock.calls.filter(
-        (call: unknown[]) => call[0] === 'assignee@test.com',
-      );
+      const assigneeCalls =
+        mockMail.sendWorkItemNotificationEmail.mock.calls.filter(
+          (call: unknown[]) => call[0] === 'assignee@test.com',
+        );
       expect(assigneeCalls).toHaveLength(1);
     });
 

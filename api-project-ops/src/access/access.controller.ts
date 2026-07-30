@@ -16,7 +16,7 @@ export class AccessController {
 
   @Get('workspace/permission')
   @ApiOperation({
-    summary: "Permissions allowed to the current user in the active workspace",
+    summary: 'Permissions allowed to the current user in the active workspace',
   })
   workspacePermission(@CurrentWorkspace() ws: WorkspaceContext) {
     return this.access.workspacePermissions(ws.workspaceId, ws.roleId);
@@ -24,7 +24,7 @@ export class AccessController {
 
   @Get('project/:projectId/permission')
   @ApiOperation({
-    summary: "Permissions allowed to the current user for a specific project",
+    summary: 'Permissions allowed to the current user for a specific project',
   })
   projectPermission(
     @CurrentWorkspace() ws: WorkspaceContext,

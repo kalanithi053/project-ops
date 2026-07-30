@@ -261,6 +261,7 @@ model ProjectType {
   id          String  @id @default(uuid())
   workspaceId String  @map("workspace_id")
   name        String
+  color       String?
   description String?
   // When false, creating a project of this type skips the plan quota check,
   // module attachment and seed-task creation (a bare project).

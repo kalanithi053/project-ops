@@ -111,7 +111,9 @@ export class ProjectsService {
       return tx.project.findUnique({
         where: { id: project.id },
         include: {
-          projectType: { select: { id: true, name: true, isPlanAdd: true } },
+          projectType: {
+            select: { id: true, name: true, isPlanAdd: true, color: true },
+          },
           moduleInstances: { include: { module: true } },
           members: true,
         },
@@ -136,7 +138,9 @@ export class ProjectsService {
     },
   ) {
     const { project, workspaceId, planId, userId, startDate, endDate } = ctx;
-
+    const defaultPriority = await tx.priority.findFirst({
+      where: { workspaceId, isDefault: true },
+    });
     // Default workspace ticket status for seed tasks.
     const defaultStatus =
       (await tx.ticketStatus.findFirst({
@@ -177,6 +181,7 @@ export class ProjectsService {
             statusId: defaultStatus?.id ?? null,
             createdBy: userId,
             assigneeId: userId,
+            priorityId: defaultPriority?.id,
           },
         });
 
@@ -204,7 +209,9 @@ export class ProjectsService {
       where: { workspaceId, deletedAt: null },
       orderBy: { createdAt: 'desc' },
       include: {
-        projectType: { select: { id: true, name: true, isPlanAdd: true } },
+        projectType: {
+          select: { id: true, name: true, isPlanAdd: true, color: true },
+        },
         _count: { select: { members: true } },
       },
     });
@@ -214,7 +221,9 @@ export class ProjectsService {
     const project = await this.prisma.project.findFirst({
       where: { id: projectId, workspaceId, deletedAt: null },
       include: {
-        projectType: { select: { id: true, name: true, isPlanAdd: true } },
+        projectType: {
+          select: { id: true, name: true, isPlanAdd: true, color: true },
+        },
         moduleInstances: { include: { module: true } },
         members: {
           include: { user: { select: { id: true, email: true } } },

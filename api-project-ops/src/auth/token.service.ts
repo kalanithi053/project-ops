@@ -1,6 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import type { StringValue } from 'ms';
 import {
   AccessJwtPayload,
   RefreshJwtPayload,
@@ -50,11 +51,11 @@ export class TokenService {
   }
 
   /**
-   * ms-style duration ('15m', '7d'). Returned as `any` because
-   * @types/jsonwebtoken types expiresIn as a `StringValue` template literal,
-   * which a runtime-configured string can't satisfy.
+   * ms-style duration ('15m', '7d'), cast to `StringValue` because
+   * @types/jsonwebtoken types expiresIn as that template literal, which a
+   * runtime-configured string can't satisfy on its own.
    */
-  private expiry(key: string, fallback: string): any {
-    return this.config.get<string>(key, fallback);
+  private expiry(key: string, fallback: string): StringValue {
+    return this.config.get<string>(key, fallback) as StringValue;
   }
 }

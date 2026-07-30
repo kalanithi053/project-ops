@@ -67,7 +67,9 @@ describe('ActivityLogService', () => {
     it('defaults projectId to null when omitted', async () => {
       prisma.activityLog.create.mockResolvedValue({});
       await service.log(params);
-      expect(prisma.activityLog.create.mock.calls[0][0].data.projectId).toBeNull();
+      expect(
+        prisma.activityLog.create.mock.calls[0][0].data.projectId,
+      ).toBeNull();
     });
 
     it('includes projectId when provided', async () => {
@@ -116,7 +118,11 @@ describe('ActivityLogService', () => {
       await service.getTimeline('ws-1', 'entity-1', 'task');
       expect(prisma.activityLog.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { workspaceId: 'ws-1', entityId: 'entity-1', entityType: 'task' },
+          where: {
+            workspaceId: 'ws-1',
+            entityId: 'entity-1',
+            entityType: 'task',
+          },
         }),
       );
     });
@@ -199,7 +205,10 @@ describe('ActivityLogService', () => {
       const [entry] = await service.getTimeline('ws-1', 'task-1', 'task');
 
       expect(prisma.ticketStatus.findMany).toHaveBeenCalledWith({
-        where: { workspaceId: 'ws-1', id: { in: ['status-todo', 'status-done'] } },
+        where: {
+          workspaceId: 'ws-1',
+          id: { in: ['status-todo', 'status-done'] },
+        },
         select: { id: true, name: true },
       });
       expect(entry.description).toBe('Jane Doe changed status to Done');
@@ -273,7 +282,12 @@ describe('ActivityLogService', () => {
       prisma.ticketStatus.findMany.mockResolvedValue([]);
       prisma.priority.findMany.mockResolvedValue([]);
       prisma.user.findMany.mockResolvedValue([
-        { id: 'user-2', email: 'noname@acme.com', firstName: null, lastName: null },
+        {
+          id: 'user-2',
+          email: 'noname@acme.com',
+          firstName: null,
+          lastName: null,
+        },
       ]);
 
       const [entry] = await service.getTimeline('ws-1', 'task-1', 'task');

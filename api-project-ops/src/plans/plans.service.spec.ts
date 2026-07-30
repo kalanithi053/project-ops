@@ -69,7 +69,7 @@ describe('PlansService', () => {
       mockPrismaService.module.createMany.mockResolvedValue({ count: 9 });
 
       const dto = { projectTypeId, name: 'Starter' };
-      const result = await service.createPlan(workspaceId, dto as any);
+      const result = await service.createPlan(workspaceId, dto);
 
       expect(prisma.projectType.findFirst).toHaveBeenCalledWith({
         where: { id: projectTypeId, workspaceId },
@@ -110,7 +110,7 @@ describe('PlansService', () => {
       await service.createPlan(workspaceId, {
         projectTypeId,
         name: 'Starter',
-      } as any);
+      });
 
       expect(prisma.plan.create).toHaveBeenCalledWith({
         data: {
@@ -278,9 +278,9 @@ describe('PlansService', () => {
     it('throws NotFoundException when the plan is not in the workspace', async () => {
       mockPrismaService.plan.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.activatePlan(workspaceId, planId),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.activatePlan(workspaceId, planId)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.plan.update).not.toHaveBeenCalled();
     });
   });
@@ -299,7 +299,7 @@ describe('PlansService', () => {
       });
 
       const dto = { name: 'Pro', isActive: true, features: { a: 1 } };
-      const result = await service.updateActivePlan(workspaceId, dto as any);
+      const result = await service.updateActivePlan(workspaceId, dto);
 
       expect(prisma.plan.update).toHaveBeenCalledWith({
         where: { id: planId },

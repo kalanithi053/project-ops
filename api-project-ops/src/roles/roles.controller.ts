@@ -55,7 +55,9 @@ export class RolesController {
 
   @Delete(':id')
   @RequirePermission(PERMISSIONS.ROLE_MANAGE)
-  @ApiOperation({ summary: 'Delete a custom role (system roles are protected)' })
+  @ApiOperation({
+    summary: 'Delete a custom role (system roles are protected)',
+  })
   remove(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('id') id: string,

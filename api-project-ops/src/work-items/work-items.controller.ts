@@ -102,7 +102,9 @@ export class WorkItemsController {
 
   @Post(':workItemId/notify')
   @RequirePermission(PERMISSIONS.WORKITEM_READ)
-  @ApiOperation({ summary: "Email the assignee a reminder about this work item" })
+  @ApiOperation({
+    summary: 'Email the assignee a reminder about this work item',
+  })
   notifyAssignee(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,

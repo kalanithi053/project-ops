@@ -129,9 +129,9 @@ describe('ModuleInstancesService', () => {
     it('throws NotFoundException when the project does not exist in the workspace', async () => {
       prisma.project.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.attach(workspaceId, projectId, dto),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.attach(workspaceId, projectId, dto)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.moduleInstance.create).not.toHaveBeenCalled();
     });
 
@@ -139,9 +139,9 @@ describe('ModuleInstancesService', () => {
       prisma.project.findFirst.mockResolvedValue(project);
       prisma.module.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.attach(workspaceId, projectId, dto),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.attach(workspaceId, projectId, dto)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.moduleInstance.create).not.toHaveBeenCalled();
     });
 
@@ -154,9 +154,9 @@ describe('ModuleInstancesService', () => {
         moduleId: dto.moduleId,
       });
 
-      await expect(
-        service.attach(workspaceId, projectId, dto),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.attach(workspaceId, projectId, dto)).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.moduleInstance.create).not.toHaveBeenCalled();
     });
   });
@@ -164,7 +164,12 @@ describe('ModuleInstancesService', () => {
   describe('update', () => {
     const instanceId = 'mi-1';
     const dto: UpdateModuleInstanceDto = { taskLimit: 20 };
-    const instance = { id: instanceId, projectId, moduleId: 'mod-1', taskLimit: 10 };
+    const instance = {
+      id: instanceId,
+      projectId,
+      moduleId: 'mod-1',
+      taskLimit: 10,
+    };
 
     it('updates the task limit on the happy path', async () => {
       prisma.project.findFirst.mockResolvedValue(project);
@@ -208,7 +213,12 @@ describe('ModuleInstancesService', () => {
 
   describe('remove', () => {
     const instanceId = 'mi-1';
-    const instance = { id: instanceId, projectId, moduleId: 'mod-1', taskLimit: 10 };
+    const instance = {
+      id: instanceId,
+      projectId,
+      moduleId: 'mod-1',
+      taskLimit: 10,
+    };
 
     it('deletes the module instance on the happy path', async () => {
       prisma.project.findFirst.mockResolvedValue(project);

@@ -332,9 +332,9 @@ describe('CommentsService', () => {
     it('throws NotFoundException when the comment is missing', async () => {
       prisma.comment.findFirst.mockResolvedValue(null);
 
-      await expect(service.remove('ws-1', 'missing', AUTHOR.id)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.remove('ws-1', 'missing', AUTHOR.id),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws ForbiddenException when called by a non-author', async () => {
@@ -370,7 +370,11 @@ describe('CommentsService', () => {
 
       expect(prisma.workItem.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'wi-1', projectId: 'proj-1', project: { workspaceId: 'ws-1' } },
+          where: {
+            id: 'wi-1',
+            projectId: 'proj-1',
+            project: { workspaceId: 'ws-1' },
+          },
         }),
       );
       expect(prisma.comment.findMany).toHaveBeenCalledWith(
@@ -518,9 +522,16 @@ describe('CommentsService', () => {
       prisma.workItem.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.updateForWorkItem('ws-1', 'proj-1', 'missing', 'c1', AUTHOR.id, {
-          body: 'x',
-        }),
+        service.updateForWorkItem(
+          'ws-1',
+          'proj-1',
+          'missing',
+          'c1',
+          AUTHOR.id,
+          {
+            body: 'x',
+          },
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -529,9 +540,16 @@ describe('CommentsService', () => {
       prisma.comment.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.updateForWorkItem('ws-1', 'proj-1', 'wi-1', 'missing', AUTHOR.id, {
-          body: 'x',
-        }),
+        service.updateForWorkItem(
+          'ws-1',
+          'proj-1',
+          'wi-1',
+          'missing',
+          AUTHOR.id,
+          {
+            body: 'x',
+          },
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 
@@ -599,7 +617,13 @@ describe('CommentsService', () => {
       prisma.comment.findFirst.mockResolvedValue(null);
 
       await expect(
-        service.removeForWorkItem('ws-1', 'proj-1', 'wi-1', 'missing', AUTHOR.id),
+        service.removeForWorkItem(
+          'ws-1',
+          'proj-1',
+          'wi-1',
+          'missing',
+          AUTHOR.id,
+        ),
       ).rejects.toThrow(NotFoundException);
     });
 

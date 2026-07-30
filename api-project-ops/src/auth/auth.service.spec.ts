@@ -12,7 +12,10 @@ describe('AuthService', () => {
     user: { findUnique: jest.Mock; update: jest.Mock; create: jest.Mock };
   };
   let otpService: { issue: jest.Mock; verify: jest.Mock };
-  let tokenService: { signAuthTokens: jest.Mock; verifyRefreshToken: jest.Mock };
+  let tokenService: {
+    signAuthTokens: jest.Mock;
+    verifyRefreshToken: jest.Mock;
+  };
 
   beforeEach(async () => {
     prisma = {
@@ -166,9 +169,9 @@ describe('AuthService', () => {
     it('throws UnauthorizedException when the user does not exist', async () => {
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.verifyOtp('jane@acme.com', '123456')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.verifyOtp('jane@acme.com', '123456'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException when the user is deactivated', async () => {
@@ -179,9 +182,9 @@ describe('AuthService', () => {
         staticOtp: '123456',
       });
 
-      await expect(service.verifyOtp('jane@acme.com', '123456')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.verifyOtp('jane@acme.com', '123456'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('bypasses otp.verify and issues tokens when the code matches the static otp', async () => {

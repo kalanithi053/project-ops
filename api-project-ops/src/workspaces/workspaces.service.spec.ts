@@ -13,7 +13,11 @@ describe('WorkspacesService', () => {
   let service: WorkspacesService;
   let prisma: {
     workspace: { findFirst: jest.Mock };
-    workspaceMember: { findFirst: jest.Mock; findMany: jest.Mock; create: jest.Mock };
+    workspaceMember: {
+      findFirst: jest.Mock;
+      findMany: jest.Mock;
+      create: jest.Mock;
+    };
     $transaction: jest.Mock;
   };
 
@@ -217,7 +221,11 @@ describe('WorkspacesService', () => {
       const result = await service.findOneForUser('user-1', 'ws-1');
 
       expect(prisma.workspaceMember.findFirst).toHaveBeenCalledWith({
-        where: { userId: 'user-1', workspaceId: 'ws-1', status: { not: 'removed' } },
+        where: {
+          userId: 'user-1',
+          workspaceId: 'ws-1',
+          status: { not: 'removed' },
+        },
         include: { workspace: true, role: true },
       });
       expect(result).toEqual({

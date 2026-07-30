@@ -80,7 +80,9 @@ describe('RolesService', () => {
       expect(prisma.userRole.findMany).toHaveBeenCalledWith({
         where: { workspaceId },
         include: {
-          rolePermissions: { include: { permission: { select: { code: true } } } },
+          rolePermissions: {
+            include: { permission: { select: { code: true } } },
+          },
         },
         orderBy: { name: 'asc' },
       });
@@ -121,7 +123,7 @@ describe('RolesService', () => {
       });
 
       const dto = { name: 'Project Lead', permissionCodes: ['project.create'] };
-      const result = await service.create(workspaceId, dto as any);
+      const result = await service.create(workspaceId, dto);
 
       expect(prisma.userRole.create).toHaveBeenCalledWith({
         data: { workspaceId, name: 'Project Lead', isDefault: false },
@@ -150,7 +152,7 @@ describe('RolesService', () => {
       await service.create(workspaceId, {
         name: 'Member',
         isDefault: true,
-      } as any);
+      });
 
       expect(prisma.userRole.updateMany).toHaveBeenCalledWith({
         where: { workspaceId, isDefault: true },
@@ -167,7 +169,7 @@ describe('RolesService', () => {
         isDefault: false,
       });
 
-      await service.create(workspaceId, { name: 'Viewer' } as any);
+      await service.create(workspaceId, { name: 'Viewer' });
 
       expect(prisma.userPermission.findMany).not.toHaveBeenCalled();
       expect(prisma.rolePermission.createMany).not.toHaveBeenCalled();
@@ -220,7 +222,7 @@ describe('RolesService', () => {
       const result = await service.update(workspaceId, roleId, {
         name: 'New Name',
         permissionCodes: ['task.create'],
-      } as any);
+      });
 
       expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({
         where: { roleId },
@@ -246,7 +248,7 @@ describe('RolesService', () => {
 
       await service.update(workspaceId, roleId, {
         permissionCodes: [],
-      } as any);
+      });
 
       expect(prisma.rolePermission.deleteMany).toHaveBeenCalledWith({
         where: { roleId },
@@ -263,7 +265,7 @@ describe('RolesService', () => {
       });
       mockPrismaService.userRole.update.mockResolvedValue({ id: roleId });
 
-      await service.update(workspaceId, roleId, { name: 'Same Name' } as any);
+      await service.update(workspaceId, roleId, { name: 'Same Name' });
 
       expect(prisma.rolePermission.deleteMany).not.toHaveBeenCalled();
       expect(prisma.rolePermission.createMany).not.toHaveBeenCalled();

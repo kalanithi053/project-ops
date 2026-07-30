@@ -33,6 +33,7 @@ export class ProjectTypesService {
       data: {
         workspaceId,
         name: dto.name,
+        color: dto.color,
         description: dto.description,
         isPlanAdd: dto.isPlanAdd ?? true,
       },
@@ -65,6 +66,7 @@ export class ProjectTypesService {
       where: { id },
       data: {
         name: dto.name ?? undefined,
+        color: dto.color ?? undefined,
         description: dto.description ?? undefined,
         isPlanAdd: dto.isPlanAdd ?? undefined,
       },
@@ -98,7 +100,9 @@ export class ProjectTypesService {
       where: { workspaceId, name },
     });
     if (existing) {
-      throw new ConflictException(`A project type named "${name}" already exists.`);
+      throw new ConflictException(
+        `A project type named "${name}" already exists.`,
+      );
     }
   }
 }

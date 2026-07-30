@@ -85,7 +85,10 @@ export class PrioritiesService {
     }
   }
 
-  private async clearDefault(tx: Prisma.TransactionClient, workspaceId: string) {
+  private async clearDefault(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ) {
     await tx.priority.updateMany({
       where: { workspaceId, isDefault: true },
       data: { isDefault: false },

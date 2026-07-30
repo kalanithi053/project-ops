@@ -37,7 +37,9 @@ export class ProjectMembersController {
 
   @Post()
   @RequirePermission(PERMISSIONS.MEMBER_INVITE)
-  @ApiOperation({ summary: 'Invite a member (auto-invites to workspace if needed)' })
+  @ApiOperation({
+    summary: 'Invite a member (auto-invites to workspace if needed)',
+  })
   invite(
     @CurrentWorkspace() ws: { workspaceId: string; userId: string },
     @Param('projectId') projectId: string,

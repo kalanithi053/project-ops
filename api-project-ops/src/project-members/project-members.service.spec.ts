@@ -88,7 +88,12 @@ describe('ProjectMembersService', () => {
           userId: 'user-1',
           roleId: 'role-1',
           status: 'active',
-          user: { id: 'user-1', email: 'a@b.com', firstName: 'A', lastName: 'B' },
+          user: {
+            id: 'user-1',
+            email: 'a@b.com',
+            firstName: 'A',
+            lastName: 'B',
+          },
           role: { id: 'role-1', name: 'Owner' },
         },
       ];
@@ -129,7 +134,11 @@ describe('ProjectMembersService', () => {
       prisma.project.findFirst.mockResolvedValue(project);
       prisma.userRole.findFirst
         .mockResolvedValueOnce(role) // assertRole
-        .mockResolvedValueOnce({ id: 'default-role', workspaceId, isDefault: true }); // ensureWorkspaceMembership default role
+        .mockResolvedValueOnce({
+          id: 'default-role',
+          workspaceId,
+          isDefault: true,
+        }); // ensureWorkspaceMembership default role
       prisma.user.findUnique.mockResolvedValue(null);
       const newUser = { id: 'user-new', email: dto.email, isVerified: false };
       prisma.user.create.mockResolvedValue(newUser);
@@ -301,7 +310,10 @@ describe('ProjectMembersService', () => {
         .mockResolvedValueOnce(role) // assertRole
         .mockResolvedValueOnce(null); // no default role
       prisma.user.findUnique.mockResolvedValue(null);
-      prisma.user.create.mockResolvedValue({ id: 'user-new', email: dto.email });
+      prisma.user.create.mockResolvedValue({
+        id: 'user-new',
+        email: dto.email,
+      });
       prisma.workspaceMember.findUnique.mockResolvedValue(null);
 
       await expect(
@@ -322,7 +334,10 @@ describe('ProjectMembersService', () => {
         id: 'role-2',
         workspaceId,
       });
-      const dto: UpdateProjectMemberDto = { roleId: 'role-2', status: 'active' };
+      const dto: UpdateProjectMemberDto = {
+        roleId: 'role-2',
+        status: 'active',
+      };
       const updated = { ...member, roleId: dto.roleId, status: dto.status };
       prisma.projectMember.update.mockResolvedValue(updated);
 

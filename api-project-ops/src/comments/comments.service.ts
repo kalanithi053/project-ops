@@ -238,7 +238,10 @@ export class CommentsService {
           entityId: workItemId,
           action: 'comment_added',
           userId: authorId,
-          metadata: { commentId: created.id, preview: plainTextPreview(dto.body) },
+          metadata: {
+            commentId: created.id,
+            preview: plainTextPreview(dto.body),
+          },
         },
         tx,
       );

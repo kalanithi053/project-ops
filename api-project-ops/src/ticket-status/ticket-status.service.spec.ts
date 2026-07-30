@@ -74,7 +74,7 @@ describe('TicketStatusService', () => {
       const result = await service.create(workspaceId, {
         name: 'In Review',
         color: '#f59e0b',
-        category: 'review' as any,
+        category: 'review',
       });
 
       expect(mockPrismaService.ticketStatus.findFirst).toHaveBeenCalledWith({
@@ -106,7 +106,7 @@ describe('TicketStatusService', () => {
 
       await service.create(workspaceId, {
         name: 'Done',
-        category: 'done' as any,
+        category: 'done',
         isDefault: true,
       });
 
@@ -128,7 +128,7 @@ describe('TicketStatusService', () => {
 
       await service.create(workspaceId, {
         name: 'Removed',
-        category: 'removed' as any,
+        category: 'removed',
         canDelete: true,
       });
 

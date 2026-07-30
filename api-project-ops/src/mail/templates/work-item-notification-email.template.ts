@@ -21,8 +21,14 @@ export function workItemNotificationEmailTemplate(params: {
   /** Who reassigned it — only used for the 'assigned' action. */
   actorName?: string;
 }): string {
-  const { action, entityType, workItemName, projectName, actionUrl, actorName } =
-    params;
+  const {
+    action,
+    entityType,
+    workItemName,
+    projectName,
+    actionUrl,
+    actorName,
+  } = params;
   const label = formatLabel(entityType);
   const intro =
     action === 'reminder'

@@ -40,7 +40,8 @@ async function bootstrap() {
       name: 'x-workspace-slug',
       in: 'header',
       required: false,
-      description: 'Active workspace slug (required on workspace-scoped routes)',
+      description:
+        'Active workspace slug (required on workspace-scoped routes)',
       schema: { type: 'string' },
     })
     .build();
@@ -51,4 +52,4 @@ async function bootstrap() {
   app.useGlobalInterceptors(new ResponseInterceptor());
   await app.listen(port);
 }
-bootstrap();
+void bootstrap();

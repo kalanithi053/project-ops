@@ -47,7 +47,10 @@ describe('ReportsService', () => {
     });
 
     it('builds byType, statusBreakdown, progress, byPriority, user and modules from work items', async () => {
-      prisma.project.findFirst.mockResolvedValue({ id: projectId, workspaceId });
+      prisma.project.findFirst.mockResolvedValue({
+        id: projectId,
+        workspaceId,
+      });
 
       prisma.moduleInstance.findMany.mockResolvedValue([
         {
@@ -181,7 +184,10 @@ describe('ReportsService', () => {
     });
 
     it('handles an empty project with no work items (progress 0%, stage Not Started)', async () => {
-      prisma.project.findFirst.mockResolvedValue({ id: projectId, workspaceId });
+      prisma.project.findFirst.mockResolvedValue({
+        id: projectId,
+        workspaceId,
+      });
       prisma.moduleInstance.findMany.mockResolvedValue([]);
       prisma.workItem.findMany.mockResolvedValue([]);
       prisma.projectMember.findMany.mockResolvedValue([]);
@@ -270,7 +276,10 @@ describe('ReportsService', () => {
     const projectId = 'proj-1';
 
     beforeEach(() => {
-      prisma.project.findFirst.mockResolvedValue({ id: projectId, workspaceId });
+      prisma.project.findFirst.mockResolvedValue({
+        id: projectId,
+        workspaceId,
+      });
       prisma.moduleInstance.findMany.mockResolvedValue([]);
       prisma.workItem.findMany.mockResolvedValue([]);
       prisma.ticketStatus.findMany.mockResolvedValue([]);

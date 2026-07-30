@@ -98,7 +98,10 @@ export class TicketStatusService {
     }
   }
 
-  private async clearDefault(tx: Prisma.TransactionClient, workspaceId: string) {
+  private async clearDefault(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ) {
     await tx.ticketStatus.updateMany({
       where: { workspaceId, isDefault: true },
       data: { isDefault: false },

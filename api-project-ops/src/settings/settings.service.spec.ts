@@ -50,7 +50,11 @@ describe('SettingsService', () => {
   const ticketStatuses = [{ id: 'ts-1', name: 'New', order: 0 }];
   const priorities = [{ id: 'pr-1', name: 'Medium', order: 0 }];
   const projectTypes = [
-    { id: 'pt-1', name: 'HubSpot', plans: [{ id: 'plan-2', name: 'Pro', isActive: true }] },
+    {
+      id: 'pt-1',
+      name: 'HubSpot',
+      plans: [{ id: 'plan-2', name: 'Pro', isActive: true }],
+    },
   ];
   const roles = [
     {

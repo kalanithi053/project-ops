@@ -85,7 +85,7 @@ describe('ProjectTypesService', () => {
       mockPlansService.createPlan.mockResolvedValue({ id: 'plan-x' });
 
       const dto = { name: 'HubSpot', description: 'desc' };
-      const result = await service.create(workspaceId, dto as any);
+      const result = await service.create(workspaceId, dto);
 
       expect(prisma.projectType.create).toHaveBeenCalledWith({
         data: {
@@ -117,7 +117,7 @@ describe('ProjectTypesService', () => {
       await service.create(workspaceId, {
         name: 'Development',
         isPlanAdd: false,
-      } as any);
+      });
 
       expect(plans.createPlan).not.toHaveBeenCalled();
     });
@@ -132,7 +132,7 @@ describe('ProjectTypesService', () => {
       });
       mockPlansService.createPlan.mockResolvedValue({ id: 'plan-x' });
 
-      await service.create(workspaceId, { name: 'Standard' } as any);
+      await service.create(workspaceId, { name: 'Standard' });
 
       expect(prisma.projectType.create).toHaveBeenCalledWith({
         data: {
@@ -173,7 +173,7 @@ describe('ProjectTypesService', () => {
 
       const result = await service.update(workspaceId, projectTypeId, {
         name: 'New Name',
-      } as any);
+      });
 
       expect(prisma.projectType.update).toHaveBeenCalledWith({
         where: { id: projectTypeId },
@@ -199,7 +199,7 @@ describe('ProjectTypesService', () => {
 
       await service.update(workspaceId, projectTypeId, {
         name: 'Same Name',
-      } as any);
+      });
 
       expect(prisma.projectType.findFirst).toHaveBeenCalledTimes(1);
     });
@@ -256,9 +256,9 @@ describe('ProjectTypesService', () => {
     it('throws NotFoundException when the project type does not belong to the workspace', async () => {
       mockPrismaService.projectType.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.remove(workspaceId, projectTypeId),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.remove(workspaceId, projectTypeId)).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.projectType.delete).not.toHaveBeenCalled();
     });
 
@@ -269,9 +269,9 @@ describe('ProjectTypesService', () => {
       });
       mockPrismaService.project.count.mockResolvedValue(2);
 
-      await expect(
-        service.remove(workspaceId, projectTypeId),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.remove(workspaceId, projectTypeId)).rejects.toThrow(
+        ConflictException,
+      );
       expect(prisma.projectType.delete).not.toHaveBeenCalled();
     });
   });

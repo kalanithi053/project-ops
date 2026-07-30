@@ -5,10 +5,10 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 import { PERMISSIONS_KEY } from '../decorators/require-permission.decorator';
 import { PermissionCode } from '../constants/permissions';
-import { WorkspaceContext } from '../decorators/current-workspace.decorator';
 
 /**
  * Enforces @RequirePermission(...) codes against the active role's permission
@@ -32,8 +32,8 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest();
-    const workspace: WorkspaceContext = request.workspace;
+    const request = context.switchToHttp().getRequest<Request>();
+    const workspace = request.workspace;
 
     if (!workspace?.roleId) {
       throw new ForbiddenException('Missing workspace role context.');
@@ -52,11 +52,11 @@ export class PermissionsGuard implements CanActivate {
   }
 
   private async resolvePermissionCodes(
-    request: any,
+    request: Request,
     roleId: string,
   ): Promise<Set<string>> {
     if (request.__permissionCodes) {
-      return request.__permissionCodes as Set<string>;
+      return request.__permissionCodes;
     }
 
     const rows = await this.prisma.rolePermission.findMany({

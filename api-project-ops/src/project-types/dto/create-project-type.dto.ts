@@ -14,6 +14,12 @@ export class CreateProjectTypeDto {
   @MaxLength(60)
   name: string;
 
+  @ApiProperty({ required: false, example: '#f59e0b' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  color?: string;
+
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()

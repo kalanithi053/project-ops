@@ -34,7 +34,11 @@ export class CreateModuleDto {
   @Min(0)
   defaultTaskLimit?: number;
 
-  @ApiProperty({ required: false, default: false, description: 'Auto-attach to every new project' })
+  @ApiProperty({
+    required: false,
+    default: false,
+    description: 'Auto-attach to every new project',
+  })
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;

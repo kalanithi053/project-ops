@@ -17,6 +17,7 @@ describe('ProjectsService', () => {
       update: jest.Mock;
     };
     plan: { findMany: jest.Mock };
+    priority: { findFirst: jest.Mock };
     userRole: { findFirst: jest.Mock };
     projectMember: { create: jest.Mock };
     ticketStatus: { findFirst: jest.Mock };
@@ -48,6 +49,7 @@ describe('ProjectsService', () => {
         update: jest.fn(),
       },
       plan: { findMany: jest.fn() },
+      priority: { findFirst: jest.fn() },
       userRole: { findFirst: jest.fn() },
       projectMember: { create: jest.fn() },
       ticketStatus: { findFirst: jest.fn() },
@@ -63,7 +65,10 @@ describe('ProjectsService', () => {
     prisma.$transaction.mockImplementation((cb: any) => cb(prisma));
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ProjectsService, { provide: PrismaService, useValue: prisma }],
+      providers: [
+        ProjectsService,
+        { provide: PrismaService, useValue: prisma },
+      ],
     }).compile();
 
     service = module.get<ProjectsService>(ProjectsService);
@@ -82,7 +87,9 @@ describe('ProjectsService', () => {
     ...overrides,
   });
 
-  const baseDto = (overrides: Partial<CreateProjectDto> = {}): CreateProjectDto => ({
+  const baseDto = (
+    overrides: Partial<CreateProjectDto> = {},
+  ): CreateProjectDto => ({
     name: 'Website Revamp',
     startDate: futureStart,
     endDate: futureEnd,
@@ -150,6 +157,10 @@ describe('ProjectsService', () => {
         name: 'Owner',
       });
       prisma.projectMember.create.mockResolvedValue({});
+      prisma.priority.findFirst.mockResolvedValue({
+        id: 'priority-default',
+        isDefault: true,
+      });
       prisma.ticketStatus.findFirst.mockResolvedValue({
         id: 'status-default',
         isDefault: true,
@@ -164,7 +175,11 @@ describe('ProjectsService', () => {
         id: 'wtype-1',
         category: 'task',
       });
-      const moduleInstance = { id: 'mi-1', projectId: created.id, moduleId: defaultModule.id };
+      const moduleInstance = {
+        id: 'mi-1',
+        projectId: created.id,
+        moduleId: defaultModule.id,
+      };
       prisma.moduleInstance.create.mockResolvedValue(moduleInstance);
       prisma.workItem.create.mockImplementation(({ data }: any) =>
         Promise.resolve({ id: `wi-${data.prefix}`, ...data }),
@@ -199,6 +214,7 @@ describe('ProjectsService', () => {
           statusId: 'status-default',
           createdBy: userId,
           assigneeId: userId,
+          priorityId: 'priority-default',
         },
       });
       expect(prisma.activityLog.create).toHaveBeenCalledWith({
@@ -282,7 +298,9 @@ describe('ProjectsService', () => {
     });
 
     it('throws BadRequestException when isPlanAdd is true and no plans are selected', async () => {
-      prisma.projectType.findFirst.mockResolvedValue(projectType({ isPlanAdd: true }));
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: true }),
+      );
       prisma.project.findMany.mockResolvedValue([]);
       prisma.plan.findMany.mockResolvedValue([]);
 
@@ -293,7 +311,9 @@ describe('ProjectsService', () => {
     });
 
     it('throws BadRequestException when startDate is before today', async () => {
-      prisma.projectType.findFirst.mockResolvedValue(projectType({ isPlanAdd: false }));
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
       prisma.project.findMany.mockResolvedValue([]);
       prisma.plan.findMany.mockResolvedValue([]);
 
@@ -308,7 +328,9 @@ describe('ProjectsService', () => {
     });
 
     it('throws BadRequestException when endDate is before today', async () => {
-      prisma.projectType.findFirst.mockResolvedValue(projectType({ isPlanAdd: false }));
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
       prisma.project.findMany.mockResolvedValue([]);
       prisma.plan.findMany.mockResolvedValue([]);
 
@@ -396,8 +418,8 @@ describe('ProjectsService', () => {
         data: {
           name: dto.name,
           description: dto.description,
-          startDate: new Date(dto.startDate as string),
-          endDate: new Date(dto.endDate as string),
+          startDate: new Date(dto.startDate),
+          endDate: new Date(dto.endDate),
         },
       });
     });
@@ -422,9 +444,9 @@ describe('ProjectsService', () => {
     it('throws NotFoundException when the project does not exist', async () => {
       prisma.project.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.update(workspaceId, projectId, {}),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.update(workspaceId, projectId, {})).rejects.toThrow(
+        NotFoundException,
+      );
       expect(prisma.project.update).not.toHaveBeenCalled();
     });
   });

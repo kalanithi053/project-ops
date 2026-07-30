@@ -10,7 +10,9 @@ import {
 } from 'class-validator';
 
 export class CreateCommentDto {
-  @ApiProperty({ example: 'The stage order looks wrong — @john can you check?' })
+  @ApiProperty({
+    example: 'The stage order looks wrong — @john can you check?',
+  })
   @IsString()
   @MinLength(1)
   @MaxLength(4000)

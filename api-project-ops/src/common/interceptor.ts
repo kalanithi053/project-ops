@@ -4,6 +4,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { Observable } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { ApiResponse } from 'src/types/apiResponse.interface';
@@ -18,16 +19,22 @@ export class ResponseInterceptor<T> implements NestInterceptor<
     next: CallHandler,
   ): Observable<ApiResponse<T>> {
     const ctx = context.switchToHttp();
-    const response = ctx?.getResponse();
+    const response = ctx.getResponse<Response>();
     return next.handle().pipe(
-      map((data: any) => {
-        const message = data?.message || 'Request processed successfully';
-        delete data?.message;
+      map((data: T) => {
+        const payload =
+          data && typeof data === 'object'
+            ? (data as Record<string, unknown>)
+            : undefined;
+        const message =
+          (payload?.message as string | undefined) ||
+          'Request processed successfully';
+        if (payload) delete payload.message;
         return {
           success: true,
           statusCode: response.statusCode,
           message,
-          data: data,
+          data,
         };
       }),
     );

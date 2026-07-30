@@ -7,17 +7,24 @@ import {
 } from '@nestjs/common';
 import { Request, Response } from 'express';
 
+interface HttpExceptionResponseBody {
+  message?: string;
+  errors?: unknown[];
+}
+
 @Catch(HttpException)
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
   constructor() {}
-  async catch(exception: HttpException, host: ArgumentsHost) {
+  catch(exception: HttpException, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
     const request = ctx.getRequest<Request>();
 
     const status = exception.getStatus();
-    const body = exception.getResponse() as any;
+    const raw = exception.getResponse();
+    const body: HttpExceptionResponseBody =
+      typeof raw === 'string' ? { message: raw } : raw;
     const message = body?.message || 'An error occurred';
 
     this.logger.error(

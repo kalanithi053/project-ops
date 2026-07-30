@@ -62,11 +62,13 @@ describe('TokenService', () => {
     });
 
     it('uses configured expiry overrides when present', () => {
-      configService.get.mockImplementation((key: string, fallback?: unknown) => {
-        if (key === 'JWT_ACCESS_EXPIRATION') return '30m';
-        if (key === 'JWT_REFRESH_EXPIRATION') return '14d';
-        return fallback;
-      });
+      configService.get.mockImplementation(
+        (key: string, fallback?: unknown) => {
+          if (key === 'JWT_ACCESS_EXPIRATION') return '30m';
+          if (key === 'JWT_REFRESH_EXPIRATION') return '14d';
+          return fallback;
+        },
+      );
       jwtService.sign.mockReturnValueOnce('a').mockReturnValueOnce('r');
 
       service.signAuthTokens('user-2');
@@ -98,9 +100,9 @@ describe('TokenService', () => {
     it('throws UnauthorizedException when the token type is not refresh', () => {
       jwtService.verify.mockReturnValue({ sub: 'user-1', type: 'access' });
 
-      expect(() => service.verifyRefreshToken('access-token-used-as-refresh')).toThrow(
-        UnauthorizedException,
-      );
+      expect(() =>
+        service.verifyRefreshToken('access-token-used-as-refresh'),
+      ).toThrow(UnauthorizedException);
     });
 
     it('throws UnauthorizedException when jwt.verify throws (invalid/expired token)', () => {

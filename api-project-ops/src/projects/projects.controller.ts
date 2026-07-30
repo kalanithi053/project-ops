@@ -27,7 +27,9 @@ export class ProjectsController {
 
   @Post()
   @RequirePermission(PERMISSIONS.PROJECT_CREATE)
-  @ApiOperation({ summary: 'Create a project (auto-attaches default modules + seed tasks)' })
+  @ApiOperation({
+    summary: 'Create a project (auto-attaches default modules + seed tasks)',
+  })
   create(
     @CurrentWorkspace() ws: { workspaceId: string; userId: string },
     @Body() dto: CreateProjectDto,

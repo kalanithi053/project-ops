@@ -32,7 +32,9 @@ export class ModulesController {
   constructor(private readonly modules: ModulesService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List workspace modules (optionally filtered by plan)' })
+  @ApiOperation({
+    summary: 'List workspace modules (optionally filtered by plan)',
+  })
   @ApiQuery({ name: 'planId', required: false })
   list(
     @CurrentWorkspace('workspaceId') workspaceId: string,

@@ -69,7 +69,7 @@ export class WorkItemsService {
   ) {
     const project = await this.assertProject(workspaceId, projectId);
 
-    let workType: any = {};
+    let workType: Awaited<ReturnType<typeof this.assertWorkType>> | undefined;
     if (dto.workItemTypeId) {
       workType = await this.assertWorkType(workspaceId, dto.workItemTypeId);
     }
@@ -87,7 +87,13 @@ export class WorkItemsService {
     if (dto.qaAssigneeId) {
       await this.assertAssignee(workspaceId, dto.qaAssigneeId);
     }
-
+    const defaultPriority =
+      dto.priorityId ??
+      (
+        await this.prisma.priority.findFirst({
+          where: { workspaceId: dto.workItemTypeId, isDefault: true },
+        })
+      )?.id;
     const entityType = await this.resolveEntityType(
       workspaceId,
       dto.workItemTypeId,
@@ -105,8 +111,8 @@ export class WorkItemsService {
           startDate: dto.startDate ? new Date(dto.startDate) : null,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
           statusId: dto.statusId ?? null,
-          priorityId: dto.priorityId ?? null,
-          assigneeId: dto.assigneeId ?? null,
+          priorityId: defaultPriority ?? null,
+          assigneeId: dto.assigneeId ?? userId ?? null,
           qaAssigneeId: dto.qaAssigneeId ?? null,
           createdBy: userId,
           estimateHours: dto.estimateHours ?? null,
@@ -462,7 +468,7 @@ export class WorkItemsService {
         ? ((workItem[field] as Date | null)?.toISOString() ?? null)
         : workItem[field];
       const after = isDateField
-        ? new Date(patchValue as string).toISOString()
+        ? new Date(patchValue).toISOString()
         : patchValue;
 
       if (before !== after) {

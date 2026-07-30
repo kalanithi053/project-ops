@@ -20,7 +20,11 @@ export class CreatePlanDto {
   @MaxLength(50)
   name: string;
 
-  @ApiProperty({ required: false, type: Object, description: 'Feature-flag map' })
+  @ApiProperty({
+    required: false,
+    type: Object,
+    description: 'Feature-flag map',
+  })
   @IsOptional()
   @IsObject()
   features?: Record<string, unknown>;

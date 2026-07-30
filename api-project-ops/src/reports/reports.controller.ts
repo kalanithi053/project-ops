@@ -37,10 +37,10 @@ export class WorkspaceReportsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.PROJECT_READ)
-  @ApiOperation({ summary: 'Workspace-wide work item type and status breakdown' })
-  getWorkspaceReport(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
-  ) {
+  @ApiOperation({
+    summary: 'Workspace-wide work item type and status breakdown',
+  })
+  getWorkspaceReport(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.reports.getWorkspaceReport(workspaceId);
   }
 }

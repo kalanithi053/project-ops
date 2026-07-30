@@ -18,7 +18,9 @@ export class RolesService {
     const roles = await this.prisma.userRole.findMany({
       where: { workspaceId },
       include: {
-        rolePermissions: { include: { permission: { select: { code: true } } } },
+        rolePermissions: {
+          include: { permission: { select: { code: true } } },
+        },
       },
       orderBy: { name: 'asc' },
     });
@@ -103,7 +105,9 @@ export class RolesService {
       throw new ForbiddenException('System roles cannot be deleted.');
     }
 
-    const inUse = await this.prisma.workspaceMember.count({ where: { roleId } });
+    const inUse = await this.prisma.workspaceMember.count({
+      where: { roleId },
+    });
     const inUseProjects = await this.prisma.projectMember.count({
       where: { roleId },
     });
@@ -136,7 +140,10 @@ export class RolesService {
     }
   }
 
-  private async clearDefault(tx: Prisma.TransactionClient, workspaceId: string) {
+  private async clearDefault(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+  ) {
     await tx.userRole.updateMany({
       where: { workspaceId, isDefault: true },
       data: { isDefault: false },

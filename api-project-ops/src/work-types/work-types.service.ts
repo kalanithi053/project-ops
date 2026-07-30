@@ -70,7 +70,9 @@ export class WorkTypesService {
       where: { workspaceId, name },
     });
     if (existing) {
-      throw new ConflictException(`A work type named "${name}" already exists.`);
+      throw new ConflictException(
+        `A work type named "${name}" already exists.`,
+      );
     }
   }
 }

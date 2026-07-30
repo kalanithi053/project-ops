@@ -86,7 +86,7 @@ describe('WorkTypesService', () => {
       const result = await service.create(workspaceId, {
         name: 'Bug',
         color: '#e4f468ff',
-        category: 'bug' as any,
+        category: 'bug',
       });
 
       expect(mockPrismaService.workType.findFirst).toHaveBeenCalledWith({
@@ -116,7 +116,7 @@ describe('WorkTypesService', () => {
 
       await service.create(workspaceId, {
         name: 'Incident',
-        category: 'incident' as any,
+        category: 'incident',
         isActive: false,
       });
 

@@ -7,8 +7,8 @@ import {
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
+import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
-import { AuthenticatedUser } from '../types/jwt-payload';
 
 export const WORKSPACE_SLUG_HEADER = 'x-workspace-slug';
 
@@ -27,8 +27,8 @@ export class WorkspaceScopeGuard implements CanActivate {
   constructor(private readonly prisma: PrismaService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest();
-    const user: AuthenticatedUser = request.user;
+    const request = context.switchToHttp().getRequest<Request>();
+    const user = request.user;
 
     if (!user || user.type !== 'access') {
       throw new UnauthorizedException('Authentication required.');

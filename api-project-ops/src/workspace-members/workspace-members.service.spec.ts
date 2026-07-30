@@ -61,7 +61,12 @@ describe('WorkspaceMembersService', () => {
       const members = [
         {
           id: 'member-1',
-          user: { id: 'user-1', email: 'jane@acme.com', firstName: 'Jane', lastName: 'Doe' },
+          user: {
+            id: 'user-1',
+            email: 'jane@acme.com',
+            firstName: 'Jane',
+            lastName: 'Doe',
+          },
           role: { id: 'role-1', name: 'Owner' },
         },
       ];
@@ -72,7 +77,9 @@ describe('WorkspaceMembersService', () => {
       expect(prisma.workspaceMember.findMany).toHaveBeenCalledWith({
         where: { workspaceId: 'ws-1' },
         include: {
-          user: { select: { id: true, email: true, firstName: true, lastName: true } },
+          user: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
           role: { select: { id: true, name: true } },
         },
         orderBy: { joinedAt: 'asc' },
@@ -106,7 +113,10 @@ describe('WorkspaceMembersService', () => {
 
     it('throws ConflictException when the user is already an active member', async () => {
       prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
-      prisma.user.upsert.mockResolvedValue({ id: 'user-1', email: 'john@acme.com' });
+      prisma.user.upsert.mockResolvedValue({
+        id: 'user-1',
+        email: 'john@acme.com',
+      });
       prisma.workspaceMember.findUnique.mockResolvedValue({
         id: 'member-1',
         status: 'active',
@@ -119,9 +129,17 @@ describe('WorkspaceMembersService', () => {
 
     it('creates a new membership for a brand-new (or never-a-member) user', async () => {
       prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
-      prisma.user.upsert.mockResolvedValue({ id: 'user-1', email: 'john@acme.com' });
+      prisma.user.upsert.mockResolvedValue({
+        id: 'user-1',
+        email: 'john@acme.com',
+      });
       prisma.workspaceMember.findUnique.mockResolvedValue(null);
-      const created = { id: 'member-1', workspaceId: 'ws-1', userId: 'user-1', status: 'active' };
+      const created = {
+        id: 'member-1',
+        workspaceId: 'ws-1',
+        userId: 'user-1',
+        status: 'active',
+      };
       prisma.workspaceMember.create.mockResolvedValue(created);
 
       const result = await service.invite('ws-1', dto);
@@ -148,12 +166,19 @@ describe('WorkspaceMembersService', () => {
 
     it('re-activates a previously removed membership instead of creating a new one', async () => {
       prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
-      prisma.user.upsert.mockResolvedValue({ id: 'user-1', email: 'john@acme.com' });
+      prisma.user.upsert.mockResolvedValue({
+        id: 'user-1',
+        email: 'john@acme.com',
+      });
       prisma.workspaceMember.findUnique.mockResolvedValue({
         id: 'member-old',
         status: 'removed',
       });
-      const updated = { id: 'member-old', status: 'active', roleId: 'role-default' };
+      const updated = {
+        id: 'member-old',
+        status: 'active',
+        roleId: 'role-default',
+      };
       prisma.workspaceMember.update.mockResolvedValue(updated);
 
       const result = await service.invite('ws-1', dto);
@@ -168,17 +193,25 @@ describe('WorkspaceMembersService', () => {
 
     it('resolves an explicit roleId when it belongs to the workspace', async () => {
       prisma.userRole.findFirst.mockResolvedValue({ id: 'role-explicit' });
-      prisma.user.upsert.mockResolvedValue({ id: 'user-1', email: 'john@acme.com' });
+      prisma.user.upsert.mockResolvedValue({
+        id: 'user-1',
+        email: 'john@acme.com',
+      });
       prisma.workspaceMember.findUnique.mockResolvedValue(null);
       prisma.workspaceMember.create.mockResolvedValue({ id: 'member-1' });
 
-      await service.invite('ws-1', { email: 'john@acme.com', roleId: 'role-explicit' });
+      await service.invite('ws-1', {
+        email: 'john@acme.com',
+        roleId: 'role-explicit',
+      });
 
       expect(prisma.userRole.findFirst).toHaveBeenCalledWith({
         where: { id: 'role-explicit', workspaceId: 'ws-1' },
       });
       expect(prisma.workspaceMember.create).toHaveBeenCalledWith(
-        expect.objectContaining({ data: expect.objectContaining({ roleId: 'role-explicit' }) }),
+        expect.objectContaining({
+          data: expect.objectContaining({ roleId: 'role-explicit' }),
+        }),
       );
     });
   });
@@ -189,9 +222,9 @@ describe('WorkspaceMembersService', () => {
     it('throws NotFoundException when the member does not exist in the workspace', async () => {
       prisma.workspaceMember.findFirst.mockResolvedValue(null);
 
-      await expect(service.update('ws-1', 'member-missing', dto)).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update('ws-1', 'member-missing', dto),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws BadRequestException when the new roleId does not belong to the workspace', async () => {
@@ -244,11 +277,15 @@ describe('WorkspaceMembersService', () => {
         id: 'member-1',
         userId: 'user-1',
       });
-      prisma.workspace.findUnique.mockResolvedValue({ ownerId: 'someone-else' });
+      prisma.workspace.findUnique.mockResolvedValue({
+        ownerId: 'someone-else',
+      });
       const updated = { id: 'member-1', status: 'removed' };
       prisma.workspaceMember.update.mockResolvedValue(updated);
 
-      const result = await service.update('ws-1', 'member-1', { status: 'removed' });
+      const result = await service.update('ws-1', 'member-1', {
+        status: 'removed',
+      });
 
       expect(result).toEqual(updated);
     });
@@ -280,7 +317,9 @@ describe('WorkspaceMembersService', () => {
         id: 'member-1',
         userId: 'user-1',
       });
-      prisma.workspace.findUnique.mockResolvedValue({ ownerId: 'someone-else' });
+      prisma.workspace.findUnique.mockResolvedValue({
+        ownerId: 'someone-else',
+      });
       prisma.workspaceMember.update.mockResolvedValue({});
 
       const result = await service.remove('ws-1', 'member-1');

@@ -182,8 +182,17 @@ export interface CreateProjectDto {
 }
 
 export interface InviteMemberDto {
-  username: string;
+  email: string;
   roleId?: string;
+}
+
+/**
+ * Adds a user to the workspace and, optionally, as a member of one or more
+ * projects — each with its own role, since project access doesn't have to
+ * mirror the workspace-wide one.
+ */
+export interface AddWorkspaceMemberDto extends InviteMemberDto {
+  projectMemberships?: { projectId: string; roleId: string }[];
 }
 
 /**

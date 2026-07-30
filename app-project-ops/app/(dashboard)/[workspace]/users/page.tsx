@@ -1,12 +1,13 @@
 "use client";
 
-import { Loader2, Users } from "lucide-react";
+import { Loader2, UserPlus, Users } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { DataTable } from "@/components/shared/data-table";
 import { FormPanel } from "@/components/shared/form-panel";
+import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { PageHeader } from "@/components/shared/page-header";
 import { QueryState } from "@/components/shared/query-state";
 import {
@@ -19,16 +20,16 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  useInviteMember,
-  useWorkspaceMembers,
-} from "@/lib/api/hooks/use-members";
+import { useAddWorkspaceMember, useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type { MemberUser, WorkspaceMember } from "@/lib/api/types";
 import { getFullname } from "@/lib/utils";
 import type { ColumnDef } from "@/types/module";
+
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Member name/email live under a nested `user` object (fallback to flat). */
 function memberUser(m: WorkspaceMember): MemberUser {
@@ -113,20 +114,12 @@ export default function UsersPage() {
     <PageContainer className="flex flex-col gap-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <PageHeader title="Users" description="" />
-        {/* {canInvite && (
-          <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button className="w-full sm:w-auto">
-                <UserPlus className="h-4 w-4" />
-                Add User
-              </Button>
-            </DialogTrigger>
-            <AddUserDialog
-              workspaceSlug={workspace}
-              onDone={() => setOpen(false)}
-            />
-          </Dialog>
-        )} */}
+        {canInvite && (
+          <Button className="w-full sm:w-auto" onClick={() => setOpen(true)}>
+            <UserPlus className="h-4 w-4" />
+            Add User
+          </Button>
+        )}
       </div>
 
       <StatsGrid stats={stats} />
@@ -166,26 +159,65 @@ function AddUserPanel({
   workspaceSlug: string;
   onDone: () => void;
 }) {
-  const invite = useInviteMember(workspaceSlug);
+  const addMember = useAddWorkspaceMember(workspaceSlug);
   const { data: settings } = useWorkspaceSettings(workspaceSlug);
+  const { data: projects } = useProjects(workspaceSlug);
   const roles = settings?.roles;
-  const [username, setUsername] = React.useState("");
+  const [email, setEmail] = React.useState("");
   const [roleId, setRoleId] = React.useState<string>();
+  const [projectIds, setProjectIds] = React.useState<string[]>([]);
+  // Each selected project gets its own role — project access doesn't have to
+  // mirror the workspace-wide one.
+  const [projectRoleIds, setProjectRoleIds] = React.useState<
+    Record<string, string | undefined>
+  >({});
   const [error, setError] = React.useState<string | null>(null);
 
   const roleOptions: SelectOption[] = (roles ?? []).map((role) => ({
     label: role.name,
     value: String(role.id),
   }));
+  const projectOptions: SelectOption[] = (projects ?? []).map((project) => ({
+    label: project.name,
+    value: project.id,
+  }));
+  const defaultRoleId =
+    roleId ?? (roles ?? []).find((role) => role.isDefault)?.id ?? roles?.[0]?.id;
+
+  function handleProjectIdsChange(nextIds: string[]) {
+    setProjectIds(nextIds);
+    // Newly checked projects start on the workspace role (still editable per
+    // project below); dropping a project also drops its role choice.
+    setProjectRoleIds((current) => {
+      const next: Record<string, string | undefined> = {};
+      for (const id of nextIds) next[id] = current[id] ?? defaultRoleId;
+      return next;
+    });
+  }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
-    if (!username.trim()) return setError("Enter the user's username.");
 
-    // API errors surface via the global error toast; success closes the dialog.
-    invite.mutate(
-      { username: username.trim(), roleId: roleId || undefined },
+    const trimmed = email.trim();
+    if (!trimmed) return setError("Enter the user's email.");
+    if (!EMAIL_PATTERN.test(trimmed)) return setError("Enter a valid email.");
+
+    const projectMemberships: { projectId: string; roleId: string }[] = [];
+    for (const projectId of projectIds) {
+      const projectRoleId = projectRoleIds[projectId] ?? defaultRoleId;
+      if (!projectRoleId) {
+        const project = projects?.find((p) => p.id === projectId);
+        return setError(
+          `Choose a role for ${project?.name ?? "the selected project"}.`,
+        );
+      }
+      projectMemberships.push({ projectId, roleId: projectRoleId });
+    }
+
+    // API errors surface via the global error toast; success closes the panel.
+    addMember.mutate(
+      { email: trimmed, roleId, projectMemberships },
       { onSuccess: () => onDone() },
     );
   }
@@ -193,22 +225,22 @@ function AddUserPanel({
   return (
     <FormPanel
       title="Add user"
-      description="Add a user by username and assign the role that controls their permissions."
+      description="Add a user by email, assign their role, and optionally give them access to specific projects."
       onClose={onDone}
       onSubmit={handleSubmit}
-      busy={invite.isPending}
+      busy={addMember.isPending}
       footer={
         <>
           <Button
             type="button"
             variant="ghost"
             onClick={onDone}
-            disabled={invite.isPending}
+            disabled={addMember.isPending}
           >
             Cancel
           </Button>
-          <Button type="submit" disabled={invite.isPending}>
-            {invite.isPending ? (
+          <Button type="submit" disabled={addMember.isPending}>
+            {addMember.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Adding…
@@ -221,12 +253,13 @@ function AddUserPanel({
       }
     >
       <div className="flex flex-col gap-2">
-        <Label htmlFor="invite-username">Username</Label>
+        <Label htmlFor="invite-email">Email</Label>
         <Input
-          id="invite-username"
-          placeholder="jordan.rivera"
-          value={username}
-          onChange={(event) => setUsername(event.target.value)}
+          id="invite-email"
+          type="email"
+          placeholder="jordan.rivera@company.com"
+          value={email}
+          onChange={(event) => setEmail(event.target.value)}
           autoFocus
         />
       </div>
@@ -245,6 +278,53 @@ function AddUserPanel({
           The role determines what this user can do in the workspace.
         </p>
       </div>
+
+      <div className="flex flex-col gap-2">
+        <Label htmlFor="invite-projects">Projects</Label>
+        <MultiSelectField
+          id="invite-projects"
+          aria-label="Projects"
+          options={projectOptions}
+          values={projectIds}
+          onValuesChange={handleProjectIdsChange}
+          placeholder="No projects selected"
+        />
+        <p className="text-xs text-muted-foreground">
+          Also add this user as a member of the selected projects. Projects
+          they already belong to are left as-is.
+        </p>
+      </div>
+
+      {projectIds.length > 0 && (
+        <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+          {projectIds.map((projectId) => {
+            const project = projects?.find((p) => p.id === projectId);
+            return (
+              <div
+                key={projectId}
+                className="flex items-center justify-between gap-3"
+              >
+                <span className="min-w-0 flex-1 truncate text-sm">
+                  {project?.name ?? projectId}
+                </span>
+                <SelectField
+                  aria-label={`Role in ${project?.name ?? "project"}`}
+                  className="w-40 shrink-0"
+                  options={roleOptions}
+                  value={projectRoleIds[projectId]}
+                  onValueChange={(value) =>
+                    setProjectRoleIds((current) => ({
+                      ...current,
+                      [projectId]: value,
+                    }))
+                  }
+                  placeholder="Select a role"
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {error ? (
         <p role="alert" className="text-sm text-destructive">

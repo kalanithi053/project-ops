@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Post,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
@@ -14,6 +15,7 @@ import { CurrentWorkspace } from '../common/decorators/current-workspace.decorat
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
+import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 import { UpdateMyThemeDto } from './dto/update-my-theme.dto';
 import { WorkspaceMembersService } from './workspace-members.service';
@@ -29,6 +31,19 @@ export class WorkspaceMembersController {
   @ApiOperation({ summary: 'List workspace members' })
   list(@CurrentWorkspace('workspaceId') workspaceId: string) {
     return this.members.list(workspaceId);
+  }
+
+  @Post()
+  @UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+  @RequirePermission(PERMISSIONS.MEMBER_INVITE)
+  @ApiOperation({
+    summary: 'Invite a user to the workspace by email (self-registers unknown emails)',
+  })
+  invite(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Body() dto: InviteWorkspaceMemberDto,
+  ) {
+    return this.members.invite(workspaceId, dto);
   }
 
   @Get('me')

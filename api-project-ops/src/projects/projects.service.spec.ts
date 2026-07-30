@@ -356,7 +356,9 @@ describe('ProjectsService', () => {
         where: { workspaceId, deletedAt: null },
         orderBy: { createdAt: 'desc' },
         include: {
-          projectType: { select: { id: true, name: true, isPlanAdd: true } },
+          projectType: {
+            select: { id: true, name: true, isPlanAdd: true, color: true },
+          },
           _count: { select: { members: true } },
         },
       });
@@ -377,7 +379,9 @@ describe('ProjectsService', () => {
       expect(prisma.project.findFirst).toHaveBeenCalledWith({
         where: { id: projectId, workspaceId, deletedAt: null },
         include: {
-          projectType: { select: { id: true, name: true, isPlanAdd: true } },
+          projectType: {
+            select: { id: true, name: true, isPlanAdd: true, color: true },
+          },
           moduleInstances: { include: { module: true } },
           members: {
             include: { user: { select: { id: true, email: true } } },

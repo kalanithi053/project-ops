@@ -81,6 +81,7 @@ export async function provisionWorkspaceDefaults(
       name: t.name,
       description: t.description,
       isPlanAdd: t.isPlanAdd,
+      color: t.color,
     })),
     skipDuplicates: true,
   });

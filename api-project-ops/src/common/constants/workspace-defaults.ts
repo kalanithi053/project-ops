@@ -182,17 +182,20 @@ export const DEFAULT_PROJECT_TYPES: Array<{
   name: string;
   description: string;
   isPlanAdd: boolean;
+  color: string;
 }> = [
   {
     name: 'HubSpot',
     description:
       'Full setup — provisions the active plan modules and seed tasks',
     isPlanAdd: true,
+    color: '#e4f468ff',
   },
   {
     name: 'Development',
     description: 'Empty project — no modules or seed tasks',
     isPlanAdd: false,
+    color: '#fd0909',
   },
 ];
 

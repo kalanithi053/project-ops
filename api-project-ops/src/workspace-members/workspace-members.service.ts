@@ -2,16 +2,23 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ThemeMode } from '@prisma/client';
+import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 
 @Injectable()
 export class WorkspaceMembersService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly logger = new Logger(WorkspaceMembersService.name);
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly mail: MailService,
+  ) {}
 
   list(workspaceId: string) {
     return this.prisma.workspaceMember.findMany({
@@ -33,7 +40,7 @@ export class WorkspaceMembersService {
 
   /** Directly invite a user to the workspace (self-registers unknown emails). */
   async invite(workspaceId: string, dto: InviteWorkspaceMemberDto) {
-    const roleId = await this.resolveRoleId(workspaceId, dto.roleId);
+    const role = await this.resolveRole(workspaceId, dto.roleId);
 
     const user = await this.prisma.user.upsert({
       where: { email: dto.email },
@@ -48,20 +55,41 @@ export class WorkspaceMembersService {
       throw new ConflictException('User is already a workspace member.');
     }
 
-    if (existing) {
-      return this.prisma.workspaceMember.update({
-        where: { id: existing.id },
-        data: { status: 'active', roleId },
-      });
-    }
+    const member = existing
+      ? await this.prisma.workspaceMember.update({
+          where: { id: existing.id },
+          data: { status: 'active', roleId: role.id },
+        })
+      : await this.prisma.workspaceMember.create({
+          data: {
+            workspaceId,
+            userId: user.id,
+            roleId: role.id,
+            status: 'active',
+          },
+          include: {
+            user: { select: { id: true, email: true } },
+            role: { select: { id: true, name: true } },
+          },
+        });
 
-    return this.prisma.workspaceMember.create({
-      data: { workspaceId, userId: user.id, roleId, status: 'active' },
-      include: {
-        user: { select: { id: true, email: true } },
-        role: { select: { id: true, name: true } },
-      },
+    const workspace = await this.prisma.workspace.findUniqueOrThrow({
+      where: { id: workspaceId },
+      select: { name: true },
     });
+
+    await this.mail
+      .sendWorkspaceInviteEmail(user.email, {
+        workspaceName: workspace.name,
+        roleName: role.name,
+      })
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send workspace invite email to=${user.email}: ${(err as Error).message}`,
+        ),
+      );
+
+    return member;
   }
 
   async update(
@@ -124,10 +152,9 @@ export class WorkspaceMembersService {
 
   // --- helpers ---
 
-  private async resolveRoleId(workspaceId: string, roleId?: string) {
+  private async resolveRole(workspaceId: string, roleId?: string) {
     if (roleId) {
-      await this.assertRole(workspaceId, roleId);
-      return roleId;
+      return this.assertRole(workspaceId, roleId);
     }
     const defaultRole = await this.prisma.userRole.findFirst({
       where: { workspaceId, isDefault: true },
@@ -135,7 +162,7 @@ export class WorkspaceMembersService {
     if (!defaultRole) {
       throw new BadRequestException('Workspace has no default role.');
     }
-    return defaultRole.id;
+    return defaultRole;
   }
 
   private async assertRole(workspaceId: string, roleId: string) {

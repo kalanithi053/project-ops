@@ -13,6 +13,7 @@ import { PERMISSIONS } from '../common/constants/permissions';
 import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { WorkspaceOwnerGuard } from '../common/guards/workspace-owner.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
@@ -39,6 +40,7 @@ export class PlansController {
   }
 
   @Post()
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PLAN_MANAGE)
   @ApiOperation({ summary: 'Create a new plan tier' })
   create(
@@ -55,6 +57,7 @@ export class PlansController {
   }
 
   @Post(':planId/activate')
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PLAN_MANAGE)
   @ApiOperation({ summary: 'Switch the active plan to the given tier' })
   activate(
@@ -65,6 +68,7 @@ export class PlansController {
   }
 
   @Patch('active')
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PLAN_MANAGE)
   @ApiOperation({ summary: 'Update the active plan limits / feature flags' })
   updateActive(

@@ -5,6 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
@@ -17,6 +18,7 @@ export class ProjectMembersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly mail: MailService,
+    private readonly activityLog: ActivityLogService,
   ) {}
 
   async list(workspaceId: string, projectId: string) {
@@ -64,18 +66,35 @@ export class ProjectMembersService {
       throw new ConflictException('User is already a member of this project.');
     }
 
-    const member = await this.prisma.projectMember.create({
-      data: {
-        projectId,
-        userId: user.id,
-        roleId: dto.roleId,
-        invitedBy,
-        status: 'active',
-      },
-      include: {
-        user: { select: { id: true, email: true } },
-        role: { select: { id: true, name: true } },
-      },
+    const member = await this.prisma.$transaction(async (tx) => {
+      const created = await tx.projectMember.create({
+        data: {
+          projectId,
+          userId: user.id,
+          roleId: dto.roleId,
+          invitedBy,
+          status: 'active',
+        },
+        include: {
+          user: { select: { id: true, email: true } },
+          role: { select: { id: true, name: true } },
+        },
+      });
+
+      await this.activityLog.log(
+        {
+          workspaceId,
+          projectId,
+          entityType: 'project_member',
+          entityId: created.id,
+          action: 'member_invited',
+          userId: invitedBy,
+          metadata: { email: user.email, roleName: role.name },
+        },
+        tx,
+      );
+
+      return created;
     });
 
     await this.mail

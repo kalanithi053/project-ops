@@ -6,6 +6,7 @@ export interface WorkspaceContext {
   roleId: string;
   membershipId: string;
   userId: string;
+  ownerId: string;
 }
 
 /**

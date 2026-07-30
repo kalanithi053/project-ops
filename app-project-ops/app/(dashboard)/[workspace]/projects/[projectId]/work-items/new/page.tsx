@@ -3,7 +3,7 @@
 import { useParams, useSearchParams } from "next/navigation";
 
 import { TaskEditor } from "@/components/projects/task-editor";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useProjectPermissions } from "@/lib/api/hooks/use-project-members";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { notifyTaskBoard } from "@/lib/tasks/tab-sync";
 
@@ -13,7 +13,7 @@ export default function NewTaskPage() {
     projectId: string;
   }>();
   const searchParams = useSearchParams();
-  const { can } = usePermissions(workspace);
+  const { can } = useProjectPermissions(workspace, projectId);
 
   function finish() {
     notifyTaskBoard(workspace, projectId);

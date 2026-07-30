@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { WorkspaceOwnerGuard } from '../common/guards/workspace-owner.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
 import { PERMISSIONS } from '../common/constants/permissions';
@@ -32,6 +33,7 @@ export class PrioritiesController {
   }
 
   @Post()
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PRIORITY_MANAGE)
   @ApiOperation({ summary: 'Create a priority' })
   create(
@@ -42,6 +44,7 @@ export class PrioritiesController {
   }
 
   @Patch(':id')
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PRIORITY_MANAGE)
   @ApiOperation({ summary: 'Update a priority' })
   update(
@@ -53,6 +56,7 @@ export class PrioritiesController {
   }
 
   @Delete(':id')
+  @UseGuards(WorkspaceOwnerGuard)
   @RequirePermission(PERMISSIONS.PRIORITY_MANAGE)
   @ApiOperation({ summary: 'Delete a priority' })
   remove(

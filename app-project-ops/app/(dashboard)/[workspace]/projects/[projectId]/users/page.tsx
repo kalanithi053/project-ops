@@ -27,10 +27,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import {
   useInviteProjectMember,
   useProjectMembers,
+  useProjectPermissions,
   useRemoveProjectMember,
   useUpdateProjectMember,
 } from "@/lib/api/hooks/use-project-members";
@@ -60,7 +60,7 @@ export default function ProjectUsersPage() {
   const { data: settings } = useWorkspaceSettings(workspace);
   const updateMember = useUpdateProjectMember(workspace, projectId);
   const removeMember = useRemoveProjectMember(workspace, projectId);
-  const { can } = usePermissions(workspace);
+  const { can } = useProjectPermissions(workspace, projectId);
 
   const canInvite = can(PERMISSIONS.MEMBER_INVITE);
   const canRemove = can(PERMISSIONS.MEMBER_REMOVE);

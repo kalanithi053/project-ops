@@ -43,7 +43,7 @@ export class WorkspaceScopeGuard implements CanActivate {
 
     const workspace = await this.prisma.workspace.findUnique({
       where: { slug },
-      select: { id: true },
+      select: { id: true, ownerId: true },
     });
     if (!workspace) {
       throw new NotFoundException(`Workspace "${slug}" not found.`);
@@ -67,6 +67,7 @@ export class WorkspaceScopeGuard implements CanActivate {
       roleId: membership.roleId,
       membershipId: membership.id,
       userId: user.sub,
+      ownerId: workspace.ownerId,
     };
 
     return true;

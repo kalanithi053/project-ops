@@ -44,34 +44,34 @@ export class ProjectsController {
     return this.projects.list(workspaceId);
   }
 
-  @Get(':id')
+  @Get(':projectId')
   @RequirePermission(PERMISSIONS.PROJECT_READ)
   @ApiOperation({ summary: 'Get a project with its modules and members' })
   findOne(
     @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Param('id') id: string,
+    @Param('projectId') projectId: string,
   ) {
-    return this.projects.findOne(workspaceId, id);
+    return this.projects.findOne(workspaceId, projectId);
   }
 
-  @Patch(':id')
+  @Patch(':projectId')
   @RequirePermission(PERMISSIONS.PROJECT_UPDATE)
   @ApiOperation({ summary: 'Update a project' })
   update(
     @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Param('id') id: string,
+    @Param('projectId') projectId: string,
     @Body() dto: UpdateProjectDto,
   ) {
-    return this.projects.update(workspaceId, id, dto);
+    return this.projects.update(workspaceId, projectId, dto);
   }
 
-  @Delete(':id')
+  @Delete(':projectId')
   @RequirePermission(PERMISSIONS.PROJECT_DELETE)
   @ApiOperation({ summary: 'Soft-delete a project' })
   remove(
     @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Param('id') id: string,
+    @Param('projectId') projectId: string,
   ) {
-    return this.projects.remove(workspaceId, id);
+    return this.projects.remove(workspaceId, projectId);
   }
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
+import type { PermissionCode } from "@/lib/api/permissions";
 import type {
   InviteProjectMemberDto,
   ProjectMember,
@@ -54,6 +56,52 @@ export function useMyProjectPermissions(
     enabled: Boolean(token && workspaceSlug && projectId),
     staleTime: 5 * 60_000,
   });
+}
+
+export interface ProjectPermissionsResult {
+  /** True once we've actually resolved the current user's project role. */
+  isResolved: boolean;
+  /** Whether the current user is a (non-removed) member of this project. */
+  isMember: boolean;
+  roleName?: string;
+  permissions: Set<string>;
+  /**
+   * Whether the current user holds a permission *within this project*. Fails
+   * OPEN while unresolved (returns true) so UI isn't hidden before we know
+   * the role — the backend still enforces every action against the caller's
+   * ProjectMember role, not their workspace role.
+   */
+  can: (permission: PermissionCode) => boolean;
+}
+
+/**
+ * Resolve the signed-in user's effective permissions for a specific project.
+ *
+ * Project access is separate from workspace access: a workspace-wide
+ * permission (e.g. an Admin's `member.invite`) does not carry over to a
+ * project the caller isn't a member of, and their project role may differ
+ * entirely from their workspace role. Use this — not `usePermissions` — to
+ * gate anything scoped to `projects/:projectId/...`.
+ */
+export function useProjectPermissions(
+  workspaceSlug: string,
+  projectId: string,
+): ProjectPermissionsResult {
+  const { data } = useMyProjectPermissions(workspaceSlug, projectId);
+
+  return useMemo(() => {
+    const permissions = new Set(data?.permissions ?? []);
+    const isResolved = Boolean(data);
+
+    return {
+      isResolved,
+      isMember: data?.isMember ?? false,
+      roleName: data?.role?.name,
+      permissions,
+      can: (permission: PermissionCode) =>
+        !isResolved || permissions.has(permission),
+    };
+  }, [data]);
 }
 
 function useMemberInvalidation(workspaceSlug: string, projectId: string) {

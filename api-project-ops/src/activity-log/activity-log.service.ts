@@ -198,6 +198,11 @@ export class ActivityLogService {
             : '';
         return `${actorName} logged ${duration}${note}`;
       }
+      case 'member_invited': {
+        const email = (meta.email as string) ?? 'a user';
+        const roleName = (meta.roleName as string) ?? 'a member';
+        return `${actorName} invited ${email} as ${roleName}`;
+      }
       case 'status_changed': {
         const from = lookups.statusName.get(meta.from as string) ?? 'None';
         const to = lookups.statusName.get(meta.to as string) ?? 'None';

@@ -6,7 +6,7 @@ import { IncidentEditor } from "@/components/projects/incident-editor";
 import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton } from "@/components/shared/skeletons";
 import { useIncident } from "@/lib/api/hooks/use-incidents";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useProjectPermissions } from "@/lib/api/hooks/use-project-members";
 import { PERMISSIONS } from "@/lib/api/permissions";
 
 export default function EditIncidentPage() {
@@ -16,7 +16,7 @@ export default function EditIncidentPage() {
     incidentId: string;
   }>();
   const incidentQuery = useIncident(workspace, projectId, incidentId);
-  const { can } = usePermissions(workspace);
+  const { can } = useProjectPermissions(workspace, projectId);
 
   return (
     <QueryState

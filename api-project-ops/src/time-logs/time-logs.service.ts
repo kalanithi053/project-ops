@@ -37,20 +37,55 @@ const CSV_COLUMNS = [
   'Date',
   'User',
   'Work item',
-  'Duration (min)',
+  'Duration (hours)',
   'Start',
   'End',
   'Billing',
   'Notes',
 ] as const;
 
-/** Minimal CSV writer — quotes/escapes only the handful of characters that matter. */
-function toCsv(rows: string[][]): string {
+/** Never surfaces a raw email — falls back to its local-part (e.g. "jane"). */
+function displayName(user: {
+  email: string;
+  firstName: string | null;
+  lastName: string | null;
+}): string {
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
+  return name || user.email.split('@')[0];
+}
+
+/** Minutes as decimal hours, e.g. 90 -> "1.50". */
+function minutesToHours(minutes: number): string {
+  return (minutes / 60).toFixed(2);
+}
+
+/** A UTC timestamp as "dd/mm/yyyy hh:mm a", e.g. "05/03/2026 02:30 pm". */
+function formatCsvDateTime(date: Date | null): string {
+  if (!date) return '';
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  const period = date.getUTCHours() >= 12 ? 'pm' : 'am';
+  const hour12 = String(date.getUTCHours() % 12 || 12).padStart(2, '0');
+  return `${day}/${month}/${year} ${hour12}:${minutes} ${period}`;
+}
+
+/**
+ * Minimal CSV writer — quotes/escapes only the handful of characters that
+ * matter. `summary` renders as label/value lines above a blank separator row,
+ * ahead of the CSV_COLUMNS header and data rows.
+ */
+function toCsv(rows: string[][], summary: Array<[string, string]>): string {
   const escape = (value: string) =>
     /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-  return [Array.from(CSV_COLUMNS), ...rows]
-    .map((row) => row.map(escape).join(','))
-    .join('\r\n');
+  const summaryLines = summary.map(([label, value]) =>
+    [label, value].map(escape).join(','),
+  );
+  const tableLines = [Array.from(CSV_COLUMNS), ...rows].map((row) =>
+    row.map(escape).join(','),
+  );
+  return [...summaryLines, '', ...tableLines].join('\r\n');
 }
 
 @Injectable()
@@ -293,20 +328,43 @@ export class TimeLogsService {
     projectId: string,
     filters: ListTimeLogsDto,
   ): Promise<string> {
+    const project = await this.prisma.project.findFirst({
+      where: { id: projectId, workspaceId, deletedAt: null },
+      select: { name: true, workspace: { select: { name: true } } },
+    });
+    if (!project) throw new NotFoundException('Project not found');
+
     const entries = await this.listForProject(workspaceId, projectId, filters);
+
+    const userNames = [
+      ...new Map(
+        entries.map((entry) => [entry.user.id, displayName(entry.user)]),
+      ).values(),
+    ];
+    const totalMinutes = entries.reduce(
+      (sum, entry) => sum + entry.durationMinutes,
+      0,
+    );
+
     const rows = entries.map((entry) => [
       entry.date.toISOString().slice(0, 10),
-      entry.user.email,
+      displayName(entry.user),
       entry.workItem.prefix
         ? `${entry.workItem.prefix} - ${entry.workItem.name}`
         : entry.workItem.name,
-      String(entry.durationMinutes),
-      entry.startTime?.toISOString() ?? '',
-      entry.endTime?.toISOString() ?? '',
+      minutesToHours(entry.durationMinutes),
+      formatCsvDateTime(entry.startTime),
+      formatCsvDateTime(entry.endTime),
       entry.billingType,
       entry.notes ?? '',
     ]);
-    return toCsv(rows);
+
+    return toCsv(rows, [
+      ['Workspace', project.workspace.name],
+      ['Project', project.name],
+      ['User', userNames.join(', ')],
+      ['Total hours logged', minutesToHours(totalMinutes)],
+    ]);
   }
 
   /** Edits an entry — only the entry's own logger may edit it. */

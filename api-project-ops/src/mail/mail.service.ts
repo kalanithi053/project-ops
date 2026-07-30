@@ -5,6 +5,7 @@ import { commentMentionEmailTemplate } from './templates/comment-mention-email.t
 import { otpEmailTemplate } from './templates/otp-email.template';
 import { projectInviteEmailTemplate } from './templates/project-invite-email.template';
 import { workItemNotificationEmailTemplate } from './templates/work-item-notification-email.template';
+import { workspaceInviteEmailTemplate } from './templates/workspace-invite-email.template';
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -73,6 +74,22 @@ export class MailService implements OnModuleInit {
       }),
     });
     this.logger.log(`Project invite email sent to=${to}`);
+  }
+
+  async sendWorkspaceInviteEmail(
+    to: string,
+    params: { workspaceName: string; roleName: string },
+  ): Promise<void> {
+    await this.transporter.sendMail({
+      from: this.from,
+      to,
+      subject: `You've been added to ${params.workspaceName}`,
+      html: workspaceInviteEmailTemplate({
+        ...params,
+        loginUrl: `${this.frontendUrl}/login`,
+      }),
+    });
+    this.logger.log(`Workspace invite email sent to=${to}`);
   }
 
   async sendWorkItemNotificationEmail(

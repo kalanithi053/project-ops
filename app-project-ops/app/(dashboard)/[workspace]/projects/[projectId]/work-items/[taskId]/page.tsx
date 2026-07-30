@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import { TaskEditor } from "@/components/projects/task-editor";
 import { QueryState } from "@/components/shared/query-state";
 import { CardsSkeleton } from "@/components/shared/skeletons";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useProjectPermissions } from "@/lib/api/hooks/use-project-members";
 import { useTask } from "@/lib/api/hooks/use-tasks";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { notifyTaskBoard } from "@/lib/tasks/tab-sync";
@@ -17,7 +17,7 @@ export default function EditTaskPage() {
     taskId: string;
   }>();
   const taskQuery = useTask(workspace, projectId, taskId);
-  const { can } = usePermissions(workspace);
+  const { can } = useProjectPermissions(workspace, projectId);
 
   function finish() {
     notifyTaskBoard(workspace, projectId);

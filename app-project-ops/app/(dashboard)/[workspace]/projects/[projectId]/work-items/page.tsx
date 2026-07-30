@@ -3,7 +3,7 @@
 import { useParams } from "next/navigation";
 
 import { TaskWorkItems } from "@/components/projects/task-work-items";
-import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { useProjectPermissions } from "@/lib/api/hooks/use-project-members";
 import { PERMISSIONS } from "@/lib/api/permissions";
 
 export default function ProjectWorkItemsPage() {
@@ -11,7 +11,7 @@ export default function ProjectWorkItemsPage() {
     workspace: string;
     projectId: string;
   }>();
-  const { can } = usePermissions(workspace);
+  const { can } = useProjectPermissions(workspace, projectId);
 
   return (
     <TaskWorkItems

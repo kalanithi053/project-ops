@@ -7,6 +7,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ThemeMode } from '@prisma/client';
 import { WorkspaceMembersService } from './workspace-members.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
 import { UpdateWorkspaceMemberDto } from './dto/update-workspace-member.dto';
 
@@ -24,9 +25,10 @@ describe('WorkspaceMembersService', () => {
     };
     user: { upsert: jest.Mock };
     userRole: { findFirst: jest.Mock };
-    workspace: { findUnique: jest.Mock };
+    workspace: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock };
     $transaction: jest.Mock;
   };
+  let mail: { sendWorkspaceInviteEmail: jest.Mock };
 
   beforeEach(async () => {
     prisma = {
@@ -41,14 +43,18 @@ describe('WorkspaceMembersService', () => {
       },
       user: { upsert: jest.fn() },
       userRole: { findFirst: jest.fn() },
-      workspace: { findUnique: jest.fn() },
+      workspace: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
       $transaction: jest.fn(),
+    };
+    mail = {
+      sendWorkspaceInviteEmail: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         WorkspaceMembersService,
         { provide: PrismaService, useValue: prisma },
+        { provide: MailService, useValue: mail },
       ],
     }).compile();
 
@@ -94,6 +100,12 @@ describe('WorkspaceMembersService', () => {
   describe('invite', () => {
     const dto: InviteWorkspaceMemberDto = { email: 'john@acme.com' };
 
+    beforeEach(() => {
+      prisma.workspace.findUniqueOrThrow.mockResolvedValue({
+        name: 'Acme Inc',
+      });
+    });
+
     it('throws BadRequestException when no roleId is given and the workspace has no default role', async () => {
       prisma.userRole.findFirst.mockResolvedValue(null);
 
@@ -115,7 +127,10 @@ describe('WorkspaceMembersService', () => {
     });
 
     it('throws ConflictException when the user is already an active member', async () => {
-      prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
+      prisma.userRole.findFirst.mockResolvedValue({
+        id: 'role-default',
+        name: 'Member',
+      });
       prisma.user.upsert.mockResolvedValue({
         id: 'user-1',
         email: 'john@acme.com',
@@ -131,7 +146,10 @@ describe('WorkspaceMembersService', () => {
     });
 
     it('creates a new membership for a brand-new (or never-a-member) user', async () => {
-      prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
+      prisma.userRole.findFirst.mockResolvedValue({
+        id: 'role-default',
+        name: 'Member',
+      });
       prisma.user.upsert.mockResolvedValue({
         id: 'user-1',
         email: 'john@acme.com',
@@ -165,10 +183,17 @@ describe('WorkspaceMembersService', () => {
         },
       });
       expect(result).toEqual(created);
+      expect(mail.sendWorkspaceInviteEmail).toHaveBeenCalledWith(
+        'john@acme.com',
+        { workspaceName: 'Acme Inc', roleName: 'Member' },
+      );
     });
 
     it('re-activates a previously removed membership instead of creating a new one', async () => {
-      prisma.userRole.findFirst.mockResolvedValue({ id: 'role-default' });
+      prisma.userRole.findFirst.mockResolvedValue({
+        id: 'role-default',
+        name: 'Member',
+      });
       prisma.user.upsert.mockResolvedValue({
         id: 'user-1',
         email: 'john@acme.com',

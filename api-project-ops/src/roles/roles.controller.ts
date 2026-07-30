@@ -11,6 +11,7 @@ import {
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { PermissionsGuard } from '../common/guards/permissions.guard';
+import { WorkspaceOwnerGuard } from '../common/guards/workspace-owner.guard';
 import { RequirePermission } from '../common/decorators/require-permission.decorator';
 import { CurrentWorkspace } from '../common/decorators/current-workspace.decorator';
 import { PERMISSIONS } from '../common/constants/permissions';
@@ -20,7 +21,7 @@ import { UpdateRoleDto } from './dto/update-role.dto';
 
 @ApiTags('roles')
 @ApiBearerAuth()
-@UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+@UseGuards(WorkspaceScopeGuard, PermissionsGuard, WorkspaceOwnerGuard)
 @Controller('roles')
 export class RolesController {
   constructor(private readonly roles: RolesService) {}

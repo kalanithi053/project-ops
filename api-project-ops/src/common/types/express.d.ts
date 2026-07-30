@@ -12,6 +12,7 @@ declare global {
     interface Request {
       workspace?: WorkspaceContext;
       __permissionCodes?: Set<string>;
+      __projectPermissionCodes?: { projectId: string; codes: Set<string> };
     }
   }
 }

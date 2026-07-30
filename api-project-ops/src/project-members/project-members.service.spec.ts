@@ -7,6 +7,7 @@ import {
 import { ProjectMembersService } from './project-members.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
+import { ActivityLogService } from '../activity-log/activity-log.service';
 import { InviteProjectMemberDto } from './dto/invite-project-member.dto';
 import { UpdateProjectMemberDto } from './dto/update-project-member.dto';
 
@@ -28,8 +29,10 @@ describe('ProjectMembersService', () => {
       update: jest.Mock;
       create: jest.Mock;
     };
+    $transaction: jest.Mock;
   };
   let mail: { sendProjectInviteEmail: jest.Mock };
+  let activityLog: { log: jest.Mock };
 
   const workspaceId = 'ws-1';
   const projectId = 'proj-1';
@@ -52,14 +55,21 @@ describe('ProjectMembersService', () => {
         update: jest.fn(),
         create: jest.fn(),
       },
+      $transaction: jest
+        .fn()
+        .mockImplementation((cb) =>
+          cb({ projectMember: prisma.projectMember }),
+        ),
     };
     mail = { sendProjectInviteEmail: jest.fn().mockResolvedValue(undefined) };
+    activityLog = { log: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProjectMembersService,
         { provide: PrismaService, useValue: prisma },
         { provide: MailService, useValue: mail },
+        { provide: ActivityLogService, useValue: activityLog },
       ],
     }).compile();
 
@@ -191,6 +201,18 @@ describe('ProjectMembersService', () => {
         projectName: project.name,
         roleName: role.name,
       });
+      expect(activityLog.log).toHaveBeenCalledWith(
+        {
+          workspaceId,
+          projectId,
+          entityType: 'project_member',
+          entityId: createdMember.id,
+          action: 'member_invited',
+          userId: invitedBy,
+          metadata: { email: newUser.email, roleName: role.name },
+        },
+        { projectMember: prisma.projectMember },
+      );
     });
 
     it('reuses an existing user and existing active workspace membership without re-creating it', async () => {

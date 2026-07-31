@@ -20,6 +20,7 @@ describe('WorkItemsService', () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      aggregate: jest.fn(),
     },
     project: {
       findFirst: jest.fn(),
@@ -116,7 +117,7 @@ describe('WorkItemsService', () => {
   });
 
   describe('list', () => {
-    it('returns work items for a project ordered by createdAt asc', async () => {
+    it('returns work items for a project ordered by position then createdAt asc', async () => {
       mockPrismaService.project.findFirst.mockResolvedValue(project);
       const items = [makeWorkItem()];
       mockPrismaService.workItem.findMany.mockResolvedValue(items);
@@ -126,7 +127,7 @@ describe('WorkItemsService', () => {
       expect(mockPrismaService.workItem.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { projectId },
-          orderBy: { createdAt: 'asc' },
+          orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
         }),
       );
       expect(result).toEqual(items);
@@ -308,6 +309,11 @@ describe('WorkItemsService', () => {
       mockPrismaService.moduleInstance.findFirst.mockResolvedValue({
         id: 'mod-1',
         projectId,
+      });
+      // No existing rows — the new item appends at the start of the flat
+      // ordering (see POSITION_GAP's own doc comment for why it's spaced).
+      mockPrismaService.workItem.aggregate.mockResolvedValue({
+        _max: { position: null },
       });
     });
 

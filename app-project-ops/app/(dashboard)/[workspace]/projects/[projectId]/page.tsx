@@ -8,7 +8,7 @@ import * as React from "react";
 import { ProjectActivity } from "@/components/projects/project-activity";
 import { EmptyState } from "@/components/shared/empty-state";
 import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
+import { ProjectOverviewSkeleton } from "@/components/shared/skeletons";
 import { StatsGrid } from "@/components/shared/stats-grid";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -118,7 +118,7 @@ export default function ProjectOverviewPage() {
         projectQuery.refetch();
         reportQuery.refetch();
       }}
-      skeleton={<CardsSkeleton count={2} />}
+      skeleton={<ProjectOverviewSkeleton />}
     >
       <div className="flex flex-col gap-6">
         <div data-tour="project-stats">

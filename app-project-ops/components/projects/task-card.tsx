@@ -216,7 +216,7 @@ export function SortableTaskCard({
       <button
         type="button"
         aria-label={`Reorder ${task.name}`}
-        className="absolute right-1 top-2 rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="absolute right-1 top-2 cursor-grab rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring active:cursor-grabbing disabled:cursor-default"
         {...attributes}
         disabled={disabled}
         // dnd-kit types its listener map as Record<string, Function>, so the

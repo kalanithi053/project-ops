@@ -217,6 +217,16 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
   { name: 'Enterprise', features: SHARED_PLAN_FEATURES, isActive: true },
 ];
 
+/**
+ * Spacing between `WorkItem.position` values wherever rows are appended —
+ * project seeding, single-item create, and the Kanban board's drag-and-drop
+ * reorder all share this constant so a freshly-provisioned project's starter
+ * tasks already have room between them, instead of every row defaulting to
+ * the same value and forcing a full-column rebalance the first time any of
+ * them is dragged.
+ */
+export const POSITION_GAP = 1000;
+
 export function generateRandomId(length = 6): string {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let id = '';

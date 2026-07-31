@@ -201,6 +201,16 @@ export async function apiFetch<T>(
     if (refreshed) res = await rawFetch(path, opts);
   }
 
+  // Still unauthorized after a refresh attempt (or there was nothing to
+  // refresh): the session is unrecoverable. Clear the stale cookies/store
+  // and hard-reload so the app re-boots into the signed-out state instead
+  // of continuing to run against dead tokens.
+  if (res.status === 401 && opts.auth !== false) {
+    useAuthStore.getState().clear();
+    if (typeof window !== "undefined") window.location.reload();
+    throw new ApiError("Session expired. Please sign in again.", 401);
+  }
+
   const json = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
 
   if (!res.ok || !json || json.success === false) {

@@ -19,18 +19,24 @@ import {
 import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { EmptyState } from "@/components/shared/empty-state";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import {
   CATEGORY_ICON,
   CreateWorkItemMenu,
 } from "@/components/projects/create-work-item-menu";
 import { TaskBoard } from "@/components/projects/task-board";
-import { QueryState } from "@/components/shared/query-state";
+import { EmptyState } from "@/components/shared/empty-state";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
+import { QueryState } from "@/components/shared/query-state";
 import { TableSkeleton } from "@/components/shared/skeletons";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Sheet,
@@ -43,12 +49,6 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import {
   Table,
   TableBody,
   TableCell,
@@ -56,8 +56,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import { useProjectModules } from "@/lib/api/hooks/use-projects";
 import {
   useNotifyTaskAssignee,
   useTasks,
@@ -66,8 +66,8 @@ import {
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
-import { formatDate } from "@/lib/format";
 import type { Task, WorkType, WorkTypeCategory } from "@/lib/api/types";
+import { formatDate } from "@/lib/format";
 
 type WorkItemsView = "list" | "kanban";
 
@@ -247,9 +247,8 @@ export function TaskWorkItems({
   // copied into state via an effect, so the very first tasks fetch already
   // carries the right assigneeIds instead of firing once without it and once
   // more a render later once an effect catches up.
-  const [manualFilters, setManualFilters] = React.useState<TaskListFilters | null>(
-    null,
-  );
+  const [manualFilters, setManualFilters] =
+    React.useState<TaskListFilters | null>(null);
   const appliedFilters = React.useMemo<TaskListFilters>(
     () => manualFilters ?? (me?.id ? { assigneeIds: [me.id] } : {}),
     [manualFilters, me],
@@ -332,17 +331,11 @@ export function TaskWorkItems({
       ...(statusIds.length ? { statusIds } : {}),
     });
   }
-  const taskListFilters = React.useMemo(
-    () => ({ ...appliedFilters, category: typeCategory }),
-    [appliedFilters, typeCategory],
-  );
-  const tasksQuery = useTasks(workspaceSlug, projectId, taskListFilters, {
-    // Wait for `me` so the default (assigned-to-me) filter is already known
-    // on the first request — otherwise it'd fetch once unfiltered, then
-    // again a moment later once `me` resolves. Also skip entirely while the
-    // Kanban view is active: TaskBoard runs its own independent tasks query,
-    // so this one (feeding the List view) would just be a wasted fetch.
-    enabled: view === "list" && Boolean(me?.id),
+  // The Kanban view renders <TaskBoard>, which fetches this project's tasks
+  // independently (its own filters, its own query) — skip this list-view
+  // fetch entirely while it's showing instead of running both at once.
+  const tasksQuery = useTasks(workspaceSlug, projectId, appliedFilters, {
+    enabled: view === "list",
   });
   const notifyTask = useNotifyTaskAssignee(workspaceSlug, projectId);
   const [nudgingId, setNudgingId] = React.useState<string | null>(null);
@@ -438,7 +431,12 @@ export function TaskWorkItems({
           date: task.updatedAt ?? task.createdAt ?? "",
         })),
     ].sort((left, right) => right.date.localeCompare(left.date));
-  }, [appliedFilters.search, appliedFilters.statusIds, appliedWorkTypes, tasks]);
+  }, [
+    appliedFilters.search,
+    appliedFilters.statusIds,
+    appliedWorkTypes,
+    tasks,
+  ]);
   const columnVisible = (column: OptionalColumn) =>
     visibleColumns.includes(column);
   const pageCount = Math.max(1, Math.ceil(workItems.length / PAGE_SIZE));
@@ -710,7 +708,7 @@ export function TaskWorkItems({
             statusesQuery.refetch();
             workTypesQuery.refetch();
           }}
-          skeleton={<TableSkeleton columns={6} rows={6} />}
+          skeleton={<TableSkeleton columns={8} rows={10} />}
         >
           {workItems.length === 0 ? (
             <EmptyState

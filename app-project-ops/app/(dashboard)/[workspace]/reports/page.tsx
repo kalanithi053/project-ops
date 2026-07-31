@@ -104,7 +104,7 @@ export default function ReportsPage() {
           projectsQuery.refetch();
           workReportQuery.refetch();
         }}
-        skeleton={<CardsSkeleton count={2} />}
+        skeleton={<CardsSkeleton count={3} />}
       >
         <ModulePanels panels={panels} />
       </QueryState>

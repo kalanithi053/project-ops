@@ -215,8 +215,16 @@ describe('ProjectsService', () => {
           createdBy: userId,
           assigneeId: userId,
           priorityId: 'priority-default',
+          position: 0,
         },
       });
+      // Spaced apart, not dense — see POSITION_GAP's own doc comment.
+      expect(prisma.workItem.create).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          data: expect.objectContaining({ position: 1000 }),
+        }),
+      );
       expect(prisma.activityLog.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           workspaceId,

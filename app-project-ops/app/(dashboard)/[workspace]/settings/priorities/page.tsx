@@ -69,7 +69,7 @@ export default function PrioritiesPage() {
         isError={settings.isError}
         error={settings.error}
         onRetry={() => settings.refetch()}
-        skeleton={<TableSkeleton columns={3} rows={4} />}
+        skeleton={<TableSkeleton columns={4} rows={4} />}
       >
         <TaxonomyTable
           rows={priorities}

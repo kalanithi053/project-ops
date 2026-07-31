@@ -32,7 +32,7 @@ import {
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { QueryState } from "@/components/shared/query-state";
 import { SelectField } from "@/components/shared/select-field";
-import { TableSkeleton } from "@/components/shared/skeletons";
+import { BoardSkeleton } from "@/components/shared/skeletons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -84,6 +84,16 @@ const collisionDetectionStrategy: CollisionDetection = (args) => {
  * has no default ticket status, so the board has to show them somewhere.
  */
 const UNASSIGNED = "__unassigned__";
+
+/**
+ * `position` is a gap-based (fractional-indexing) value, not a dense index —
+ * inserting between two rows assigns their midpoint. Widely spaced so a
+ * column can absorb a long run of drags into the same spot before its
+ * neighbors' gap shrinks below `MIN_POSITION_GAP` and a rebalance is needed.
+ */
+const POSITION_GAP = 1000;
+/** Below this gap between two neighbors, insert-by-midpoint has no room left — rebalance the column instead. */
+const MIN_POSITION_GAP = 1;
 
 interface BoardColumnDef {
   id: string;
@@ -367,41 +377,47 @@ export function TaskBoard({
       if (index !== -1) insertAt = index;
     }
 
-    const next = [...siblings];
-    next.splice(insertAt, 0, dragged);
-
     const movedColumn = targetColumn !== sourceColumn;
+    const statusFields = movedColumn
+      ? { statusId: targetColumn, status: target.statusRef ?? null }
+      : {};
 
-    // Renumber the target column; only send rows that actually moved.
-    const placements: TaskPlacement[] = next
-      .map((task, index) => ({ task, index }))
-      .filter(
-        ({ task, index }) =>
-          task.position !== index || (task.id === dragged.id && movedColumn),
-      )
-      .map(({ task, index }) => ({
+    // Gap-based positions: the dragged card's new value only ever needs to
+    // sit between its new neighbors, so a drag is normally a single PATCH —
+    // not a renumber of the whole column (previously up to N requests for
+    // an N-card column, which is what made dragging out of a large column
+    // like "New" fire dozens of calls).
+    const prevSibling = siblings[insertAt - 1];
+    const nextSibling = siblings[insertAt];
+    const prevPos =
+      prevSibling?.position ??
+      (nextSibling ? nextSibling.position - POSITION_GAP * 2 : 0);
+    const nextPos =
+      nextSibling?.position ??
+      (prevSibling ? prevSibling.position + POSITION_GAP * 2 : POSITION_GAP);
+
+    let placements: TaskPlacement[];
+    if (nextPos - prevPos > MIN_POSITION_GAP) {
+      const newPosition = (prevPos + nextPos) / 2;
+      // Picked up and dropped back in the same spot — dnd-kit still fires
+      // onDragEnd for this, but there's nothing to persist.
+      if (!movedColumn && Math.abs(newPosition - dragged.position) < 0.01) {
+        return;
+      }
+      placements = [{ id: dragged.id, position: newPosition, ...statusFields }];
+    } else {
+      // No room left between these two neighbors — most often because nothing
+      // in this column has ever been spaced out (every seeded row defaults to
+      // position 0). Rebalance just this column with fresh, widely-spaced
+      // values; every drag into or within it afterwards has room again.
+      const rebalanced = [...siblings];
+      rebalanced.splice(insertAt, 0, dragged);
+      placements = rebalanced.map((task, index) => ({
         id: task.id,
-        position: index,
-        ...(task.id === dragged.id && movedColumn
-          ? { statusId: targetColumn, status: target.statusRef ?? null }
-          : {}),
+        position: index * POSITION_GAP,
+        ...(task.id === dragged.id ? statusFields : {}),
       }));
-
-    // A card that changed columns leaves a position gap behind in its old
-    // column — renumber the remaining siblings there too, so `position`
-    // stays a gapless 0..n-1 sequence in both columns, not just the target.
-    if (movedColumn) {
-      const sourceSiblings = (grouped.get(sourceColumn) ?? []).filter(
-        (task) => task.id !== dragged.id,
-      );
-      sourceSiblings.forEach((task, index) => {
-        if (task.position !== index) {
-          placements.push({ id: task.id, position: index });
-        }
-      });
     }
-
-    if (placements.length === 0) return;
 
     reorder.reorder(placements, {
       onSuccess: () => {
@@ -433,7 +449,7 @@ export function TaskBoard({
           tasksQuery.refetch();
           statusesQuery.refetch();
         }}
-        skeleton={<TableSkeleton columns={4} rows={4} />}
+        skeleton={<BoardSkeleton columns={4} cardsPerColumn={4} />}
       >
         <DndContext
           sensors={sensors}

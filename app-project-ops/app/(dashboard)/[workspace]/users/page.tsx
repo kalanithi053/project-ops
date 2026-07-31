@@ -189,7 +189,7 @@ export default function UsersPage() {
         isError={isError}
         error={error}
         onRetry={() => refetch()}
-        skeleton={<TableSkeleton columns={3} />}
+        skeleton={<TableSkeleton columns={3} rows={10} />}
       >
         <DataTable
           columns={columns}

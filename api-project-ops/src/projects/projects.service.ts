@@ -7,6 +7,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
+import { POSITION_GAP } from '../common/constants/workspace-defaults';
 
 @Injectable()
 export class ProjectsService {
@@ -160,6 +161,12 @@ export class ProjectsService {
     });
     const entityType = workType?.category ?? 'task';
 
+    // Spaced from the start (not a dense 0, 1, 2, ...) so the Kanban board
+    // can insert between any two of these seed rows without needing to
+    // rebalance the whole column the first time one of them is dragged —
+    // see task-board.tsx's handleDragEnd.
+    let seedPosition = 0;
+
     for (const module of defaultModules) {
       const instance = await tx.moduleInstance.create({
         data: {
@@ -182,8 +189,10 @@ export class ProjectsService {
             createdBy: userId,
             assigneeId: userId,
             priorityId: defaultPriority?.id,
+            position: seedPosition,
           },
         });
+        seedPosition += POSITION_GAP;
 
         await tx.activityLog.create({
           data: {

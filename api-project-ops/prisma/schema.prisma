@@ -379,6 +379,14 @@ model WorkItem {
   createdBy        String    @map("created_by")
   estimateHours    Float?    @map("estimate_hours")
   completedHours   Float?    @map("completed_hours")
+  /** Flat ordering across the whole project (not per column) — see the Kanban
+   * board's drag-and-drop reordering. A gap-based (fractional-indexing)
+   * value: inserting between two rows only ever assigns the moved row a
+   * value between its new neighbors, so a drag never needs to renumber
+   * every other row in the column — see task-board.tsx's handleDragEnd.
+   * Defaults to 0 for pre-existing rows; `createdAt` breaks ties so their
+   * visual order is unaffected. */
+  position         Float     @default(0)
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
 
@@ -400,6 +408,7 @@ model WorkItem {
   @@index([priorityId])
   @@index([assigneeId])
   @@index([qaAssigneeId])
+  @@index([projectId, position])
   @@map("work_item")
 }
 

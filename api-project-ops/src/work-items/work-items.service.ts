@@ -11,7 +11,10 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
 import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
-import { generateRandomId } from 'src/common/constants/workspace-defaults';
+import {
+  generateRandomId,
+  POSITION_GAP,
+} from '../common/constants/workspace-defaults';
 
 /** Matches the Kanban board's "No status" column — see task-board.tsx's UNASSIGNED. */
 const UNASSIGNED_STATUS = '__unassigned__';
@@ -30,6 +33,7 @@ const WORK_ITEM_UPDATE_FIELDS = [
   'qaAssigneeId',
   'estimateHours',
   'completedHours',
+  'position',
 ] as const;
 
 /** Fallback activity log entityType when the work item has no WorkType set. */
@@ -109,7 +113,10 @@ export class WorkItemsService {
 
     return this.prisma.workItem.findMany({
       where: { projectId, ...(and.length ? { AND: and } : {}) },
-      orderBy: { createdAt: 'asc' },
+      // `position` is a flat ordering across the whole project (the Kanban
+      // board renumbers it on drag) — `createdAt` only breaks ties among rows
+      // that still share the `position` default of 0.
+      orderBy: [{ position: 'asc' }, { createdAt: 'asc' }],
       include: WORK_ITEM_INCLUDE,
     });
   }
@@ -184,6 +191,17 @@ export class WorkItemsService {
       workspaceId,
       dto.workItemTypeId,
     );
+    // New items land at the end of the project's flat ordering by default,
+    // spaced out so the board can insert between any two rows without a
+    // rebalance for a long time.
+    const nextPosition =
+      dto.position ??
+      ((
+        await this.prisma.workItem.aggregate({
+          where: { projectId },
+          _max: { position: true },
+        })
+      )._max.position ?? -POSITION_GAP) + POSITION_GAP;
 
     const created = await this.prisma.$transaction(async (tx) => {
       const created = await tx.workItem.create({
@@ -211,6 +229,7 @@ export class WorkItemsService {
           createdBy: userId,
           estimateHours: dto.estimateHours ?? null,
           completedHours: dto.completedHours ?? null,
+          position: nextPosition,
         },
         include: WORK_ITEM_INCLUDE,
       });
@@ -288,6 +307,7 @@ export class WorkItemsService {
           qaAssigneeId: dto.qaAssigneeId ?? undefined,
           estimateHours: dto.estimateHours ?? undefined,
           completedHours: dto.completedHours ?? undefined,
+          position: dto.position ?? undefined,
         },
         include: WORK_ITEM_INCLUDE,
       });

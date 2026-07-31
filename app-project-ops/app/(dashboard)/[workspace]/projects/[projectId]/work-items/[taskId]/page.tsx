@@ -4,7 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 
 import { TaskEditor } from "@/components/projects/task-editor";
 import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
+import { FormSkeleton } from "@/components/shared/skeletons";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { useTask } from "@/lib/api/hooks/use-tasks";
 import { PERMISSIONS } from "@/lib/api/permissions";
@@ -36,7 +36,7 @@ export default function EditTaskPage() {
       isError={taskQuery.isError}
       error={taskQuery.error}
       onRetry={() => taskQuery.refetch()}
-      skeleton={<CardsSkeleton count={1} />}
+      skeleton={<FormSkeleton />}
       errorLabel="The task could not be loaded."
     >
       {taskQuery.data ? (

@@ -82,7 +82,7 @@ export default function ProjectFilesPage() {
         isError={attachmentsQuery.isError}
         error={attachmentsQuery.error}
         onRetry={() => attachmentsQuery.refetch()}
-        skeleton={<TableSkeleton columns={4} rows={3} />}
+        skeleton={<TableSkeleton columns={5} rows={6} />}
       >
         {attachments.length === 0 ? (
           <EmptyState

@@ -24,11 +24,14 @@ export function CopyWorkItemLink({
   title,
   url,
   className,
+  disabled = false,
 }: {
   prefix: string;
   title: string;
   url: string;
   className?: string;
+  /** Greys the button out and blocks the copy — e.g. nothing has changed yet. */
+  disabled?: boolean;
 }) {
   async function handleCopy(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
@@ -61,10 +64,13 @@ export function CopyWorkItemLink({
   return (
     <button
       type="button"
+      disabled={disabled}
       aria-label={`Copy link for ${prefix}: ${title}`}
-      title="Copy work item link"
+      title={
+        disabled ? "Make a change to copy the updated link" : "Copy work item link"
+      }
       className={cn(
-        "rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/title:opacity-100",
+        "rounded p-1 text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/title:opacity-100 disabled:pointer-events-none disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground",
         className,
       )}
       onPointerDown={(event) => event.stopPropagation()}

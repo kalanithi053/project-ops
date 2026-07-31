@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
+import { ListSkeleton } from "@/components/shared/skeletons";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
 import { SettingsSection } from "@/components/settings/settings-section";
@@ -65,7 +65,7 @@ export default function RolesPage() {
         isError={settings.isError}
         error={settings.error}
         onRetry={() => settings.refetch()}
-        skeleton={<CardsSkeleton count={3} />}
+        skeleton={<ListSkeleton rows={4} />}
       >
         <div className="flex flex-col gap-3">
           {roles.map((role) => (

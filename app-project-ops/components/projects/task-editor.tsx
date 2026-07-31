@@ -7,6 +7,7 @@ import {
   ListChecks,
   Loader2,
   Save,
+  Undo2,
 } from "lucide-react";
 import * as React from "react";
 
@@ -321,89 +322,61 @@ export function TaskEditor({
             className="flex flex-col gap-3 p-4 pl-6 border-l-4 border-solid rounded-tl"
             style={{ borderLeftColor: headerAccent }}
           >
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="header -ml-6 min-w-0 flex-1 pl-6">
-                <div
-                  className={`mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info `}
-                >
-                  <ListChecks className="h-3.5 w-3.5" />
-                  <span className="uppercase tracking-wide">
-                    {workItemTypeLabel} {taskIdentifier}
-                  </span>
-                </div>
-                <div className="group/title relative">
-                  <Input
-                    id="task-name"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder={
-                      isEdit
-                        ? `Untitled ${workItemTypeLabel.toLowerCase()}`
-                        : `${workItemTypeLabel} name`
-                    }
-                    maxLength={200}
-                    autoFocus={!isEdit}
-                    disabled={!canSave}
-                    aria-label="Task name"
-                    className="h-auto rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-dashed hover:border-input focus-visible:border-dashed focus-visible:border-primary focus-visible:ring-0 placeholder:text-muted-foreground/70"
-                  />
-                  {isEdit && task && (
-                    <CopyWorkItemLink
-                      prefix={`Task ${task.prefix ?? task.id}`}
-                      title={name}
-                      url={`/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 group-focus-within/title:opacity-100"
-                    />
-                  )}
-                </div>
+            <div className="header -ml-6 min-w-0 pl-6">
+              <div
+                className={`mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info `}
+              >
+                <ListChecks className="h-3.5 w-3.5" />
+                <span className="uppercase tracking-wide">
+                  {workItemTypeLabel} {taskIdentifier}
+                </span>
               </div>
-
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={onDone}
-                  disabled={pending}
-                >
-                  Back to work items
-                </Button>
-                {canLogTime && task && (
-                  <TimeLogTimerButton
-                    workspaceSlug={workspaceSlug}
-                    projectId={projectId}
-                    workItemId={task.id}
-                  />
-                )}
-                {canSave && (
-                  <Button
-                    type="submit"
-                    disabled={pending || !name.trim() || (isEdit && !isDirty)}
-                  >
-                    {pending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Save className="h-4 w-4" />
-                    )}
-                    {pending
-                      ? "Saving…"
-                      : isEdit
-                        ? "Save changes"
-                        : `Create ${workItemTypeLabel ?? ""}`}
-                  </Button>
-                )}
+              <div className="group/title relative min-w-0">
+                <Input
+                  id="task-name"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={
+                    isEdit
+                      ? `Untitled ${workItemTypeLabel.toLowerCase()}`
+                      : `${workItemTypeLabel} name`
+                  }
+                  maxLength={200}
+                  autoFocus={!isEdit}
+                  disabled={!canSave}
+                  aria-label="Task name"
+                  title={name}
+                  className="h-auto min-w-0 truncate rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-dashed hover:border-input focus-visible:border-dashed focus-visible:border-primary focus-visible:ring-0 placeholder:text-muted-foreground/70"
+                />
+                <CopyWorkItemLink
+                  prefix={`${workItemTypeLabel} ${taskIdentifier}`}
+                  title={name}
+                  url={
+                    isEdit && task
+                      ? `/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`
+                      : `/${workspaceSlug}/projects/${projectId}/work-items/new${
+                          workItemTypeId
+                            ? `?workItemTypeId=${workItemTypeId}`
+                            : ""
+                        }`
+                  }
+                  disabled={isEdit ? !isDirty : !name.trim()}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 opacity-100"
+                />
               </div>
             </div>
           </div>
-          <div
-            className={cn(
-              "grid grid-cols-1 gap-2 rounded-lg rounded-tl-none bg-muted/40 p-2 text-sm border-t border-border px-4",
-              showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
-            )}
-          >
-            <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-              <span className="text-xs font-medium text-muted-foreground">
-                Assignee
-              </span>
+          <div className="flex flex-col gap-3 rounded-lg rounded-tl-none border-t border-border bg-muted/40 p-2 px-4 lg:flex-row lg:items-center lg:justify-between">
+            <div
+              className={cn(
+                "grid flex-1 grid-cols-1 gap-2 text-sm",
+                showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
+              )}
+            >
+              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Assignee
+                </span>
               <DropdownMenu>
                 <DropdownMenuTrigger
                   disabled={!canSave || assigneeOptions.length === 0}
@@ -528,6 +501,43 @@ export function TaskEditor({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+            </div>
+            </div>
+
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onDone}
+                disabled={pending}
+              >
+                <Undo2 className="h-4 w-4" />
+                Back to work items
+              </Button>
+              {canLogTime && task && (
+                <TimeLogTimerButton
+                  workspaceSlug={workspaceSlug}
+                  projectId={projectId}
+                  workItemId={task.id}
+                />
+              )}
+              {canSave && (
+                <Button
+                  type="submit"
+                  disabled={pending || !name.trim() || (isEdit && !isDirty)}
+                >
+                  {pending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {pending
+                    ? "Saving…"
+                    : isEdit
+                      ? "Save changes"
+                      : `Create ${workItemTypeLabel ?? ""}`}
+                </Button>
+              )}
             </div>
           </div>
           <div

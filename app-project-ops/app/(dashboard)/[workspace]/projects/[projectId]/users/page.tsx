@@ -104,7 +104,7 @@ export default function ProjectUsersPage() {
         isError={membersQuery.isError}
         error={membersQuery.error}
         onRetry={() => membersQuery.refetch()}
-        skeleton={<TableSkeleton columns={4} rows={3} />}
+        skeleton={<TableSkeleton columns={5} rows={8} />}
       >
         {members.length === 0 ? (
           <EmptyState

@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { QueryState } from "@/components/shared/query-state";
-import { CardsSkeleton } from "@/components/shared/skeletons";
+import { ListSkeleton } from "@/components/shared/skeletons";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { EmptyState } from "@/components/shared/empty-state";
 import { OwnerOnlyNotice } from "@/components/settings/owner-only-notice";
@@ -73,7 +73,7 @@ export default function ProjectTypesPage() {
         isError={settings.isError}
         error={settings.error}
         onRetry={() => settings.refetch()}
-        skeleton={<CardsSkeleton count={2} />}
+        skeleton={<ListSkeleton rows={2} />}
       >
         {projectTypes.length === 0 ? (
           <EmptyState

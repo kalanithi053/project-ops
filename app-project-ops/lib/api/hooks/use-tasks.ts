@@ -5,8 +5,6 @@ import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
-import { useAuthStore } from "@/lib/store/auth-store";
-import { toast } from "@/lib/toast/toast-store";
 import type {
   CreateTaskDto,
   Task,
@@ -15,6 +13,8 @@ import type {
   UpdateTaskDto,
   WorkTypeCategory,
 } from "@/lib/api/types";
+import { useAuthStore } from "@/lib/store/auth-store";
+import { toast } from "@/lib/toast/toast-store";
 
 /** Query key for a project's task list. */
 export function tasksKey(workspaceSlug: string, projectId: string) {
@@ -47,7 +47,7 @@ export function useTasks(
   workspaceSlug: string,
   projectId: string,
   filters: TaskListFilters = {},
-  options: { enabled?: boolean } = {},
+  options?: { enabled?: boolean },
 ) {
   const token = useAuthStore((state) => state.accessToken);
   const params = new URLSearchParams();
@@ -67,7 +67,8 @@ export function useTasks(
         { workspaceSlug },
       ),
     enabled:
-      Boolean(token && workspaceSlug && projectId) && (options.enabled ?? true),
+      Boolean(token && workspaceSlug && projectId) &&
+      (options?.enabled ?? true),
   });
 }
 
@@ -130,10 +131,14 @@ export function useCreateTask(workspaceSlug: string, projectId: string) {
         workspaceSlug,
       }),
     onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(workspaceSlug, projectId) });
+      queryClient.invalidateQueries({
+        queryKey: tasksKey(workspaceSlug, projectId),
+      });
       // Module instances meter overflow via addonTask, and the project header
       // shows a task count — both shift when a task is added.
-      queryClient.invalidateQueries({ queryKey: ["project", workspaceSlug, projectId] });
+      queryClient.invalidateQueries({
+        queryKey: ["project", workspaceSlug, projectId],
+      });
       queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
       toast.success("Task created", task?.name);
     },
@@ -151,7 +156,9 @@ export function useUpdateTask(workspaceSlug: string, projectId: string) {
         workspaceSlug,
       }),
     onSuccess: (task) => {
-      queryClient.invalidateQueries({ queryKey: tasksKey(workspaceSlug, projectId) });
+      queryClient.invalidateQueries({
+        queryKey: tasksKey(workspaceSlug, projectId),
+      });
       queryClient.invalidateQueries({
         queryKey: ["task", workspaceSlug, projectId, task.id],
       });
@@ -200,13 +207,11 @@ function applyPlacements(
 
 /**
  * Commits a drag on the board: moves a task between columns and/or reorders
- * it, renumbering the affected column so positions stay monotonic.
- *
- * `position` is a flat Int across the whole project with no gap strategy and
- * no bulk endpoint, so there's no midpoint to slot into — the caller
- * renumbers the touched column and this issues one PATCH per task whose
- * position actually changed. Columns are small, so that stays a handful of
- * requests.
+ * it. `position` is a gap-based (fractional-indexing) value — the caller
+ * (task-board.tsx's handleDragEnd) normally computes just the dragged row's
+ * new midpoint value, so this is usually a single PATCH, not a renumber of
+ * the whole column. It falls back to renumbering only that one column when
+ * two neighbors have no room left between them.
  *
  * Drag is also the one interaction that can't wait for the server: without an
  * optimistic write the card visibly snaps back until the PATCH resolves. The
@@ -218,11 +223,22 @@ function applyPlacements(
  * the cache before `mutate()` is even called closes that gap: the reorder and
  * `setActiveItem(null)` land in the same synchronous event-handler tick, so
  * React batches them into one commit.
+ *
+ * Reads/writes go through `getQueriesData`/`setQueriesData` — a *prefix*
+ * match on `tasksKey(...)` — rather than `getQueryData`/`setQueryData`'s
+ * exact-key match. `useTasks` appends a filters-derived query string onto
+ * this same prefix (`[...tasksKey(...), queryString]`), so an exact-key
+ * lookup for the bare prefix would silently miss the board's real (filtered)
+ * cache entry every time — the optimistic write would then land nowhere any
+ * mounted `useTasks` observer is subscribed to, so the board keeps showing
+ * the pre-drag order until an unrelated refetch happens to correct it.
  */
 export function useReorderTasks(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
-  const key = tasksKey(workspaceSlug, projectId);
-  const previousRef = React.useRef<Task[] | undefined>(undefined);
+  const keyPrefix = tasksKey(workspaceSlug, projectId);
+  const previousRef = React.useRef<
+    Array<[readonly unknown[], Task[] | undefined]>
+  >([]);
 
   const mutation = useMutation({
     mutationFn: (placements: TaskPlacement[]) =>
@@ -237,7 +253,9 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
       ),
 
     onError: () => {
-      if (previousRef.current) queryClient.setQueryData(key, previousRef.current);
+      for (const [queryKey, data] of previousRef.current) {
+        queryClient.setQueryData(queryKey, data);
+      }
     },
 
     // Each PATCH response already carries the authoritative position/status
@@ -246,7 +264,7 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
     // single drag for no reason.
     onSuccess: (updated) => {
       const byId = new Map(updated.map((task) => [task.id, task]));
-      queryClient.setQueryData<Task[]>(key, (current) =>
+      queryClient.setQueriesData<Task[]>({ queryKey: keyPrefix }, (current) =>
         (current ?? []).map((task) => byId.get(task.id) ?? task),
       );
     },
@@ -258,14 +276,16 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
       placements: TaskPlacement[],
       options?: { onSuccess?: () => void },
     ) => {
-      previousRef.current = queryClient.getQueryData<Task[]>(key);
-      queryClient.setQueryData<Task[]>(key, (current) =>
+      previousRef.current = queryClient.getQueriesData<Task[]>({
+        queryKey: keyPrefix,
+      });
+      queryClient.setQueriesData<Task[]>({ queryKey: keyPrefix }, (current) =>
         applyPlacements(current, placements),
       );
       // Fire-and-forget: aborts any in-flight refetch so it can't clobber the
       // write above with stale data: the promise's own resolution isn't
       // needed before proceeding.
-      queryClient.cancelQueries({ queryKey: key });
+      queryClient.cancelQueries({ queryKey: keyPrefix });
       mutation.mutate(placements, options);
     },
   };

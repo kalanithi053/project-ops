@@ -91,4 +91,13 @@ export class CreateWorkItemDto {
   @IsNumber()
   @Min(0)
   completedHours?: number;
+
+  @ApiProperty({
+    required: false,
+    description:
+      "Flat position across the project, for Kanban ordering — a gap-based (fractional-indexing) value, not a dense index. Normally omitted on create — the server appends new items to the end — and set explicitly by the board on drag-and-drop reorder to a value between the row's new neighbors.",
+  })
+  @IsOptional()
+  @IsNumber()
+  position?: number;
 }

@@ -271,7 +271,7 @@ export default function ProjectsPage() {
         isError={isError}
         error={error}
         onRetry={() => refetch()}
-        skeleton={<TableSkeleton columns={5} />}
+        skeleton={<TableSkeleton columns={7} rows={10} />}
       >
         <DataTable
           columns={columns}

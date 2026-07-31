@@ -86,7 +86,7 @@ export default function TicketStatusesPage() {
         isError={settings.isError}
         error={settings.error}
         onRetry={() => settings.refetch()}
-        skeleton={<TableSkeleton columns={4} rows={5} />}
+        skeleton={<TableSkeleton columns={5} rows={8} />}
       >
         <TaxonomyTable
           rows={statuses}

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 /**
  * Next.js error boundary. Deliberately shows a generic message —
@@ -37,7 +38,7 @@ export default function Error({
           Try again
         </Button>
         <Button asChild>
-          <a href="/dashboard">Back to dashboard</a>
+          <Link href="/">Back to dashboard</Link>
         </Button>
       </div>
     </div>

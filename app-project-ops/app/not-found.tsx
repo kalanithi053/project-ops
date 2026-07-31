@@ -1,6 +1,7 @@
 import { FileQuestion } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function NotFound() {
   return (
@@ -14,7 +15,7 @@ export default function NotFound() {
         </p>
       </div>
       <Button asChild>
-        <a href="/dashboard">Back to dashboard</a>
+        <Link href="/">Back to dashboard</Link>
       </Button>
     </div>
   );

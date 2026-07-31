@@ -313,16 +313,19 @@ export function TaskEditor({
   return (
     <Card className="mx-auto w-full max-w-6xl">
       <form onSubmit={handleSubmit} noValidate>
-        <CardHeader className="sticky z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm">
-          <div className="flex flex-col gap-3 p-4 pl-6">
+        <CardHeader
+          className="sticky z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm"
+          style={{ gap: 0 }}
+        >
+          <div
+            className="flex flex-col gap-3 p-4 pl-6 border-l-4 border-solid rounded-tl"
+            style={{ borderLeftColor: headerAccent }}
+          >
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className={`min-w-0 flex-1 border-l-4 border-l-[${headerAccent}] border-l-solid`}>
-
-                <div className={`mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info `}>
-                  {/* <span
-                    className={`absolute inset-y-0 left-0 w-1.5 bg-[${headerAccent}]`}
-                    aria-hidden
-                  /> */}
+              <div className="header -ml-6 min-w-0 flex-1 pl-6">
+                <div
+                  className={`mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info `}
+                >
                   <ListChecks className="h-3.5 w-3.5" />
                   <span className="uppercase tracking-wide">
                     {workItemTypeLabel} {taskIdentifier}
@@ -393,7 +396,7 @@ export function TaskEditor({
           </div>
           <div
             className={cn(
-              "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm border-t border-border px-4",
+              "grid grid-cols-1 gap-2 rounded-lg rounded-tl-none bg-muted/40 p-2 text-sm border-t border-border px-4",
               showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
             )}
           >

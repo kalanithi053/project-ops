@@ -1,5 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+
+/** Excludes a still-running timer's zero-duration row from hour totals. */
+const EXCLUDE_RUNNING_TIMER: Prisma.TimeLogWhereInput = {
+  NOT: { source: 'timer', endTime: null },
+};
 
 type ReportWorkItem = {
   moduleInstanceId: string;
@@ -47,48 +53,58 @@ export class ReportsService {
   async getProjectReport(workspaceId: string, projectId: string) {
     await this.assertProject(workspaceId, projectId);
 
-    const [instances, items, members, ticketStatuses] = await Promise.all([
-      this.prisma.moduleInstance.findMany({
-        where: { projectId },
-        include: { module: { select: { name: true } } },
-        orderBy: { createdAt: 'asc' },
-      }),
-      this.prisma.workItem.findMany({
-        where: {
-          projectId,
-          NOT: { status: { is: { category: 'removed' } } },
-        },
-        select: {
-          moduleInstanceId: true,
-          assigneeId: true,
-          workItemType: {
-            select: { id: true, name: true, category: true, color: true },
+    const [instances, items, members, ticketStatuses, timeLogTotals] =
+      await Promise.all([
+        this.prisma.moduleInstance.findMany({
+          where: { projectId },
+          include: { module: { select: { name: true } } },
+          orderBy: { createdAt: 'asc' },
+        }),
+        this.prisma.workItem.findMany({
+          where: {
+            projectId,
+            NOT: { status: { is: { category: 'removed' } } },
           },
-          status: { select: { name: true, category: true, isDefault: true } },
-          priority: { select: { name: true } },
-          estimateHours: true,
-          completedHours: true,
-        },
-      }),
-      this.prisma.projectMember.findMany({
-        where: { projectId, status: { not: 'removed' } },
-        include: {
-          user: {
-            select: {
-              id: true,
-              email: true,
-              firstName: true,
-              lastName: true,
+          select: {
+            moduleInstanceId: true,
+            assigneeId: true,
+            workItemType: {
+              select: { id: true, name: true, category: true, color: true },
+            },
+            status: { select: { name: true, category: true, isDefault: true } },
+            priority: { select: { name: true } },
+            estimateHours: true,
+            completedHours: true,
+          },
+        }),
+        this.prisma.projectMember.findMany({
+          where: { projectId, status: { not: 'removed' } },
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+              },
             },
           },
-        },
-      }),
-      this.prisma.ticketStatus.findMany({
-        where: { workspaceId, NOT: { category: 'removed' } },
-        select: { name: true, color: true, order: true },
-        orderBy: { order: 'asc' },
-      }),
-    ]);
+        }),
+        this.prisma.ticketStatus.findMany({
+          where: { workspaceId, NOT: { category: 'removed' } },
+          select: { name: true, color: true, order: true },
+          orderBy: { order: 'asc' },
+        }),
+        this.prisma.timeLog.groupBy({
+          by: ['userId'],
+          where: { projectId, ...EXCLUDE_RUNNING_TIMER },
+          _sum: { durationMinutes: true },
+        }),
+      ]);
+
+    const loggedMinutesByUser = new Map<string, number>(
+      timeLogTotals.map((row) => [row.userId, row._sum.durationMinutes ?? 0]),
+    );
 
     return {
       modules: this.buildModuleUsage(instances, items),
@@ -96,7 +112,7 @@ export class ReportsService {
       byPriority: this.buildPriorityMatrix(items),
       byType: this.buildTypeBreakdown(items),
       progress: this.buildProgress(items),
-      user: this.buildUserWorkload(members, items),
+      user: this.buildUserWorkload(members, items, loggedMinutesByUser),
     };
   }
 
@@ -250,6 +266,7 @@ export class ReportsService {
       };
     }>,
     items: ReportWorkItem[],
+    loggedMinutesByUser: Map<string, number>,
   ) {
     return members.map((member) => {
       const mine = items.filter((i) => i.assigneeId === member.userId);
@@ -277,6 +294,8 @@ export class ReportsService {
         completedItems,
         totalEstimateHours,
         totalCompletedHours,
+        /** Real tracked time (TimeLog entries) against this project, in minutes. */
+        loggedMinutes: loggedMinutesByUser.get(member.userId) ?? 0,
         byType: Object.fromEntries(byType),
       };
     });

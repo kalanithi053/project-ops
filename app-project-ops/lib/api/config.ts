@@ -9,7 +9,7 @@
  * Do NOT point this browser base at that absolute URL, or the browser would
  * call the backend cross-origin directly and hit CORS / connection errors.
  */
-export const API_BASE_URL = "/api/v1";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL
 
 /** Header the backend reads to scope a request to the active workspace. */
 export const WORKSPACE_HEADER = "x-workspace-slug";

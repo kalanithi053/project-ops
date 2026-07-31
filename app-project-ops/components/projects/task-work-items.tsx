@@ -62,13 +62,12 @@ import {
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { formatDate } from "@/lib/format";
-import type { WorkType } from "@/lib/api/types";
+import type { Task, WorkType } from "@/lib/api/types";
 
 type WorkItemsView = "list" | "kanban";
 
 const OPTIONAL_COLUMNS = [
   "type",
-  "module",
   "assignee",
   "status",
   "startDate",
@@ -77,12 +76,87 @@ const OPTIONAL_COLUMNS = [
 type OptionalColumn = (typeof OPTIONAL_COLUMNS)[number];
 const COLUMN_LABELS: Record<OptionalColumn, string> = {
   type: "Type",
-  module: "Module",
   assignee: "Assignee",
   status: "Status",
   startDate: "Start date",
   endDate: "End date",
 };
+
+const BUG_KEY = "__bug__";
+const INCIDENT_KEY = "__incident__";
+const NO_MODULE_KEY = "__none__";
+/** Category-based bucket names, shown ahead of the per-module groups. */
+const CATEGORY_GROUP_NAMES: Record<string, string> = {
+  [BUG_KEY]: "Bugs",
+  [INCIDENT_KEY]: "Incidents",
+  [NO_MODULE_KEY]: "No module",
+};
+
+/** A module's group-header label, e.g. "Professional - Workflows". */
+interface ModuleLabel {
+  name: string;
+  planName?: string;
+}
+
+/**
+ * One collapsible List-view section per module, labelled "{Plan} - {Module}"
+ * — plus leading "Bugs"/"Incidents" buckets (those categories never carry a
+ * module) and a trailing catch-all for anything else without one.
+ */
+interface ModuleGroup {
+  key: string;
+  name: string;
+  rows: Array<{ type: "Task"; item: Task; date: string }>;
+}
+
+function groupByModule(
+  rows: Array<{ type: "Task"; item: Task; date: string }>,
+  moduleLabels: Map<string, ModuleLabel>,
+  moduleOrder: string[],
+): ModuleGroup[] {
+  const buckets = new Map<string, ModuleGroup["rows"]>();
+  for (const row of rows) {
+    const category = row.item.workItemType?.category;
+    const key =
+      row.item.moduleInstanceId ??
+      (category === "bug"
+        ? BUG_KEY
+        : category === "incident"
+          ? INCIDENT_KEY
+          : NO_MODULE_KEY);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(row);
+    else buckets.set(key, [row]);
+  }
+
+  const orderedKeys = [
+    ...(buckets.has(BUG_KEY) ? [BUG_KEY] : []),
+    ...(buckets.has(INCIDENT_KEY) ? [INCIDENT_KEY] : []),
+    ...moduleOrder.filter((id) => buckets.has(id)),
+    ...Array.from(buckets.keys()).filter(
+      (key) =>
+        key !== BUG_KEY &&
+        key !== INCIDENT_KEY &&
+        key !== NO_MODULE_KEY &&
+        !moduleOrder.includes(key),
+    ),
+    ...(buckets.has(NO_MODULE_KEY) ? [NO_MODULE_KEY] : []),
+  ];
+
+  return orderedKeys.map((key) => {
+    const categoryName = CATEGORY_GROUP_NAMES[key];
+    if (categoryName) {
+      return { key, name: categoryName, rows: buckets.get(key) ?? [] };
+    }
+    const label = moduleLabels.get(key);
+    const name = label
+      ? label.planName
+        ? `${label.planName} - ${label.name}`
+        : label.name
+      : "—";
+    return { key, name, rows: buckets.get(key) ?? [] };
+  });
+}
 const PAGE_SIZE = 20;
 const WORK_TYPE_OPTIONS = [
   { value: "task", label: "Task" },
@@ -162,6 +236,17 @@ export function TaskWorkItems({
   );
   const [appliedWorkTypes, setAppliedWorkTypes] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
+  const [collapsedModules, setCollapsedModules] = React.useState<Set<string>>(
+    new Set(),
+  );
+  function toggleModuleGroup(key: string) {
+    setCollapsedModules((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }
   const columnStorageKey = `project-ops:work-items-columns:${workspaceSlug}:${projectId}`;
   const [visibleColumns, setVisibleColumns] = React.useState<OptionalColumn[]>(
     () => {
@@ -223,10 +308,13 @@ export function TaskWorkItems({
   const [nudgingId, setNudgingId] = React.useState<string | null>(null);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
   const membersQuery = useWorkspaceMembers(workspaceSlug);
-  const moduleNames = React.useMemo(() => {
-    const names = new Map<string, string>();
+  const moduleLabels = React.useMemo(() => {
+    const names = new Map<string, ModuleLabel>();
     for (const instance of modulesQuery.data ?? []) {
-      names.set(instance.id, instance.module.name);
+      names.set(instance.id, {
+        name: instance.module.name,
+        planName: instance.module.plan?.name,
+      });
     }
     return names;
   }, [modulesQuery.data]);
@@ -237,6 +325,10 @@ export function TaskWorkItems({
         label: instance.module.name,
       })),
     ],
+    [modulesQuery.data],
+  );
+  const moduleOrder = React.useMemo(
+    () => (modulesQuery.data ?? []).map((instance) => instance.id),
     [modulesQuery.data],
   );
   const statusOptions = React.useMemo(
@@ -315,6 +407,10 @@ export function TaskWorkItems({
   const paginatedWorkItems = workItems.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
+  );
+  const moduleGroups = React.useMemo(
+    () => groupByModule(paginatedWorkItems, moduleLabels, moduleOrder),
+    [paginatedWorkItems, moduleLabels, moduleOrder],
   );
   function toggleColumn(column: OptionalColumn) {
     setVisibleColumns((current) =>
@@ -579,7 +675,6 @@ export function TaskWorkItems({
                 <TableRow>
                   {columnVisible("type") && <TableHead>Type</TableHead>}
                   <TableHead>Work item</TableHead>
-                  {columnVisible("module") && <TableHead>Module</TableHead>}
                   {columnVisible("assignee") && <TableHead>Assignee</TableHead>}
                   {columnVisible("status") && <TableHead>Status</TableHead>}
                   {columnVisible("startDate") && (
@@ -590,116 +685,141 @@ export function TaskWorkItems({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedWorkItems.map(({ type, item }) => (
-                  <TableRow key={`${type}-${item.id}`}>
-                    {columnVisible("type") && (
-                      <TableCell className="text-xs font-medium text-muted-foreground">
-                        <WorkItemTypeIcon
-                          category={item.workItemType?.category}
-                          color={item.workItemType?.color}
-                          title={item.workItemType?.name}
-                        />
-                      </TableCell>
-                    )}
-                    <TableCell>
-                      {
-                        <div className="group/title flex items-center gap-1">
+                {moduleGroups.map((group) => {
+                  const groupExpanded = !collapsedModules.has(group.key);
+                  return (
+                    <React.Fragment key={group.key}>
+                      <TableRow className="bg-muted/30 hover:bg-muted/30">
+                        <TableCell colSpan={2 + visibleColumns.length}>
                           <button
                             type="button"
-                            className="text-left font-medium hover:text-primary hover:underline"
-                            onClick={() =>
-                              router.push(
-                                `/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`,
-                              )
-                            }
+                            onClick={() => toggleModuleGroup(group.key)}
+                            className="flex w-full items-center gap-1.5 text-left font-semibold"
                           >
-                            {item.prefix ? `${item.prefix} · ` : ""}
-                            {item.name}
-                          </button>
-                          <CopyWorkItemLink
-                            prefix={item.prefix ?? "Task"}
-                            title={item.name}
-                            url={`/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`}
-                          />
-                        </div>
-                      }
-                    </TableCell>
-                    {columnVisible("module") && (
-                      <TableCell>
-                        {type === "Task" && item.moduleInstanceId
-                          ? (moduleNames.get(item.moduleInstanceId) ?? "—")
-                          : "—"}
-                      </TableCell>
-                    )}
-                    {columnVisible("assignee") &&
-                      (() => {
-                        const assigneeName =
-                          assigneeNames.get(item.assigneeId ?? "") ??
-                          "Unassigned";
-                        return (
-                          <TableCell>
-                            <span className="inline-flex items-center gap-2">
-                              <Avatar className="h-6 w-6">
-                                <AvatarFallback className="text-[9px]">
-                                  {item.assigneeId
-                                    ? initials(assigneeName)
-                                    : "—"}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span>{assigneeName}</span>
+                            {groupExpanded ? (
+                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            )}
+                            {group.name}
+                            <span className="ml-auto text-sm font-normal text-muted-foreground">
+                              {group.rows.length}{" "}
+                              {group.rows.length === 1 ? "item" : "items"}
                             </span>
-                          </TableCell>
-                        );
-                      })()}
-                    {columnVisible("status") && (
-                      <TableCell>
-                        <span className="inline-flex items-center gap-1.5">
-                          <span
-                            className="h-2 w-2 shrink-0 rounded-full"
-                            style={{
-                              backgroundColor:
-                                item.status?.color ?? "var(--status-neutral)",
-                            }}
-                            aria-hidden
-                          />
-                          <span>{item.status?.name ?? "No status"}</span>
-                        </span>
-                      </TableCell>
-                    )}
-                    {columnVisible("startDate") && (
-                      <TableCell>
-                        {type === "Task" ? formatDate(item.startDate) : "—"}
-                      </TableCell>
-                    )}
-                    {columnVisible("endDate") && (
-                      <TableCell>
-                        {type === "Task" ? formatDate(item.dueDate) : "—"}
-                      </TableCell>
-                    )}
-                    <TableCell className="text-right">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={!item.assigneeId || nudgingId === item.id}
-                        title={
-                          item.assigneeId
-                            ? "Email the assignee"
-                            : "This item has no assignee"
-                        }
-                        onClick={() => {
-                          setNudgingId(item.id);
-                          notifyTask.mutate(item.id, {
-                            onSettled: () => setNudgingId(null),
-                          });
-                        }}
-                      >
-                        <BellRing className="h-3.5 w-3.5" />
-                        Nudge
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                          </button>
+                        </TableCell>
+                      </TableRow>
+
+                      {groupExpanded &&
+                        group.rows.map(({ type, item }) => (
+                          <TableRow key={`${type}-${item.id}`}>
+                            {columnVisible("type") && (
+                              <TableCell className="text-xs font-medium text-muted-foreground">
+                                <WorkItemTypeIcon
+                                  category={item.workItemType?.category}
+                                  color={item.workItemType?.color}
+                                  title={item.workItemType?.name}
+                                />
+                              </TableCell>
+                            )}
+                            <TableCell>
+                              {
+                                <div className="group/title flex items-center gap-1">
+                                  <button
+                                    type="button"
+                                    className="text-left font-medium hover:text-primary hover:underline"
+                                    onClick={() =>
+                                      router.push(
+                                        `/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`,
+                                      )
+                                    }
+                                  >
+                                    {item.prefix ? `${item.prefix} · ` : ""}
+                                    {item.name}
+                                  </button>
+                                  <CopyWorkItemLink
+                                    prefix={item.prefix ?? "Task"}
+                                    title={item.name}
+                                    url={`/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`}
+                                  />
+                                </div>
+                              }
+                            </TableCell>
+                            {columnVisible("assignee") &&
+                              (() => {
+                                const assigneeName =
+                                  assigneeNames.get(item.assigneeId ?? "") ??
+                                  "Unassigned";
+                                return (
+                                  <TableCell>
+                                    <span className="inline-flex items-center gap-2">
+                                      <Avatar className="h-6 w-6">
+                                        <AvatarFallback className="text-[9px]">
+                                          {item.assigneeId
+                                            ? initials(assigneeName)
+                                            : "—"}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                      <span>{assigneeName}</span>
+                                    </span>
+                                  </TableCell>
+                                );
+                              })()}
+                            {columnVisible("status") && (
+                              <TableCell>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <span
+                                    className="h-2 w-2 shrink-0 rounded-full"
+                                    style={{
+                                      backgroundColor:
+                                        item.status?.color ??
+                                        "var(--status-neutral)",
+                                    }}
+                                    aria-hidden
+                                  />
+                                  <span>{item.status?.name ?? "No status"}</span>
+                                </span>
+                              </TableCell>
+                            )}
+                            {columnVisible("startDate") && (
+                              <TableCell>
+                                {type === "Task"
+                                  ? formatDate(item.startDate)
+                                  : "—"}
+                              </TableCell>
+                            )}
+                            {columnVisible("endDate") && (
+                              <TableCell>
+                                {type === "Task" ? formatDate(item.dueDate) : "—"}
+                              </TableCell>
+                            )}
+                            <TableCell className="text-right">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                disabled={!item.assigneeId || nudgingId === item.id}
+                                title={
+                                  item.assigneeId
+                                    ? "Email the assignee"
+                                    : "This item has no assignee"
+                                }
+                                onClick={() => {
+                                  setNudgingId(item.id);
+                                  notifyTask.mutate(item.id, {
+                                    onSettled: () => setNudgingId(null),
+                                  });
+                                }}
+                              >
+                                <BellRing className="h-3.5 w-3.5" />
+                                Nudge
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                    </React.Fragment>
+                  );
+                })}
               </TableBody>
             </Table>
           )}

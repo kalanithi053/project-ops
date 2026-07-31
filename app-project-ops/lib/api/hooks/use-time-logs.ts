@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiDownload, apiFetch } from "@/lib/api/client";
+import { apiFetch } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { toast } from "@/lib/toast/toast-store";
 import type {
@@ -32,6 +32,11 @@ export function projectTimeLogsKey(workspaceSlug: string, projectId: string) {
 /** Query key prefix for the caller's global running timer (header widget). */
 export function myRunningTimerKey() {
   return ["time-logs", "running"] as const;
+}
+
+/** Query key prefix for the workspace-wide team calendar. */
+export function workspaceTimeLogsKey(workspaceSlug: string) {
+  return ["time-logs", "workspace", workspaceSlug] as const;
 }
 
 /**
@@ -92,6 +97,24 @@ export function useProjectTimeLogs(
         { workspaceSlug },
       ),
     enabled: Boolean(token && workspaceSlug && projectId),
+  });
+}
+
+/** GET /time-logs — every entry across every project in the workspace, for the team calendar. */
+export function useWorkspaceTimeLogs(
+  workspaceSlug: string,
+  filters: TimeLogFilters = {},
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  const queryString = filtersToQueryString(filters);
+  return useQuery({
+    queryKey: [...workspaceTimeLogsKey(workspaceSlug), queryString],
+    queryFn: () =>
+      apiFetch<TimeLog[]>(
+        `/time-logs${queryString ? `?${queryString}` : ""}`,
+        { workspaceSlug },
+      ),
+    enabled: Boolean(token && workspaceSlug),
   });
 }
 
@@ -208,29 +231,4 @@ export function useDeleteTimeLog(
       toast.success("Time log deleted");
     },
   });
-}
-
-/**
- * Downloads the project's (filtered) time logs as CSV through the
- * authenticated API — mirrors `downloadAttachment` in use-attachments.ts.
- */
-export async function downloadTimeLogsCsv(
-  workspaceSlug: string,
-  projectId: string,
-  filters: TimeLogFilters = {},
-): Promise<void> {
-  const queryString = filtersToQueryString(filters);
-  const blob = await apiDownload(
-    `/projects/${projectId}/time-logs/export${queryString ? `?${queryString}` : ""}`,
-    { workspaceSlug },
-  );
-
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `time-logs-${projectId}.csv`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  URL.revokeObjectURL(url);
 }

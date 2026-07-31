@@ -11,6 +11,7 @@ describe('ReportsService', () => {
     workItem: { findMany: jest.Mock };
     projectMember: { findMany: jest.Mock };
     ticketStatus: { findMany: jest.Mock };
+    timeLog: { groupBy: jest.Mock };
   };
 
   beforeEach(async () => {
@@ -20,7 +21,11 @@ describe('ReportsService', () => {
       workItem: { findMany: jest.fn() },
       projectMember: { findMany: jest.fn() },
       ticketStatus: { findMany: jest.fn() },
+      timeLog: { groupBy: jest.fn() },
     };
+    // Defaults to no logged time so existing assertions on `user` workload
+    // don't need to know about time logs unless a test cares about them.
+    prisma.timeLog.groupBy.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [ReportsService, { provide: PrismaService, useValue: prisma }],
@@ -179,6 +184,7 @@ describe('ReportsService', () => {
             completedItems: 1,
             totalEstimateHours: 8,
             totalCompletedHours: 5,
+            loggedMinutes: 0,
             byType: { Task: 1, Bug: 1 },
           },
           {
@@ -187,6 +193,7 @@ describe('ReportsService', () => {
             completedItems: 0,
             totalEstimateHours: 0,
             totalCompletedHours: 0,
+            loggedMinutes: 0,
             byType: {},
           },
         ]),

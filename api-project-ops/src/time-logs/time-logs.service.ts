@@ -33,61 +33,6 @@ const TIME_LOG_INCLUDE = {
   user: { select: { id: true, email: true, firstName: true, lastName: true } },
 } as const;
 
-const CSV_COLUMNS = [
-  'Date',
-  'User',
-  'Work item',
-  'Duration (hours)',
-  'Start',
-  'End',
-  'Billing',
-  'Notes',
-] as const;
-
-/** Never surfaces a raw email — falls back to its local-part (e.g. "jane"). */
-function displayName(user: {
-  email: string;
-  firstName: string | null;
-  lastName: string | null;
-}): string {
-  const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
-  return name || user.email.split('@')[0];
-}
-
-/** Minutes as decimal hours, e.g. 90 -> "1.50". */
-function minutesToHours(minutes: number): string {
-  return (minutes / 60).toFixed(2);
-}
-
-/** A UTC timestamp as "dd/mm/yyyy hh:mm a", e.g. "05/03/2026 02:30 pm". */
-function formatCsvDateTime(date: Date | null): string {
-  if (!date) return '';
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const year = date.getUTCFullYear();
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  const period = date.getUTCHours() >= 12 ? 'pm' : 'am';
-  const hour12 = String(date.getUTCHours() % 12 || 12).padStart(2, '0');
-  return `${day}/${month}/${year} ${hour12}:${minutes} ${period}`;
-}
-
-/**
- * Minimal CSV writer — quotes/escapes only the handful of characters that
- * matter. `summary` renders as label/value lines above a blank separator row,
- * ahead of the CSV_COLUMNS header and data rows.
- */
-function toCsv(rows: string[][], summary: Array<[string, string]>): string {
-  const escape = (value: string) =>
-    /[",\n]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value;
-  const summaryLines = summary.map(([label, value]) =>
-    [label, value].map(escape).join(','),
-  );
-  const tableLines = [Array.from(CSV_COLUMNS), ...rows].map((row) =>
-    row.map(escape).join(','),
-  );
-  return [...summaryLines, '', ...tableLines].join('\r\n');
-}
-
 @Injectable()
 export class TimeLogsService {
   constructor(
@@ -161,6 +106,10 @@ export class TimeLogsService {
     this.assertLogDateAllowed(preferences, dto.date);
 
     const { startTime, endTime, durationMinutes } = this.resolvePeriod(dto);
+    if (startTime && endTime) {
+      this.assertNotFuture(endTime);
+      await this.assertNoOverlap(userId, startTime, endTime);
+    }
     const entityType = await this.resolveEntityType(
       workspaceId,
       workItem.workItemTypeId,
@@ -318,53 +267,41 @@ export class TimeLogsService {
       orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
       include: {
         ...TIME_LOG_INCLUDE,
-        workItem: { select: { id: true, name: true, prefix: true } },
+        project: { select: { id: true, name: true } },
+        workItem: {
+          select: {
+            id: true,
+            name: true,
+            prefix: true,
+            workItemType: {
+              select: { id: true, name: true, category: true, color: true },
+            },
+          },
+        },
       },
     });
   }
 
-  async exportCsv(
-    workspaceId: string,
-    projectId: string,
-    filters: ListTimeLogsDto,
-  ): Promise<string> {
-    const project = await this.prisma.project.findFirst({
-      where: { id: projectId, workspaceId, deletedAt: null },
-      select: { name: true, workspace: { select: { name: true } } },
+  /** Every entry across every project in the workspace, for the team calendar/grid. */
+  async listForWorkspace(workspaceId: string, filters: ListTimeLogsDto) {
+    return this.prisma.timeLog.findMany({
+      where: this.buildWorkspaceFilter(workspaceId, filters),
+      orderBy: [{ date: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        ...TIME_LOG_INCLUDE,
+        project: { select: { id: true, name: true } },
+        workItem: {
+          select: {
+            id: true,
+            name: true,
+            prefix: true,
+            workItemType: {
+              select: { id: true, name: true, category: true, color: true },
+            },
+          },
+        },
+      },
     });
-    if (!project) throw new NotFoundException('Project not found');
-
-    const entries = await this.listForProject(workspaceId, projectId, filters);
-
-    const userNames = [
-      ...new Map(
-        entries.map((entry) => [entry.user.id, displayName(entry.user)]),
-      ).values(),
-    ];
-    const totalMinutes = entries.reduce(
-      (sum, entry) => sum + entry.durationMinutes,
-      0,
-    );
-
-    const rows = entries.map((entry) => [
-      entry.date.toISOString().slice(0, 10),
-      displayName(entry.user),
-      entry.workItem.prefix
-        ? `${entry.workItem.prefix} - ${entry.workItem.name}`
-        : entry.workItem.name,
-      minutesToHours(entry.durationMinutes),
-      formatCsvDateTime(entry.startTime),
-      formatCsvDateTime(entry.endTime),
-      entry.billingType,
-      entry.notes ?? '',
-    ]);
-
-    return toCsv(rows, [
-      ['Workspace', project.workspace.name],
-      ['Project', project.name],
-      ['User', userNames.join(', ')],
-      ['Total hours logged', minutesToHours(totalMinutes)],
-    ]);
   }
 
   /** Edits an entry — only the entry's own logger may edit it. */
@@ -393,6 +330,8 @@ export class TimeLogsService {
       if (nextEnd <= nextStart) {
         throw new BadRequestException('endTime must be after startTime');
       }
+      this.assertNotFuture(nextEnd);
+      await this.assertNoOverlap(entry.userId, nextStart, nextEnd, entry.id);
       startTime = nextStart;
       endTime = nextEnd;
       durationMinutes = Math.max(
@@ -469,6 +408,39 @@ export class TimeLogsService {
     }
   }
 
+  /** A period's end can't lie after the current moment — you can't log time that hasn't happened yet. */
+  private assertNotFuture(endTime: Date) {
+    if (endTime.getTime() > Date.now()) {
+      throw new BadRequestException('Cannot log time in the future.');
+    }
+  }
+
+  /**
+   * Rejects a period that overlaps another of the same user's entries —
+   * duration-only entries (no startTime/endTime) have no clock period to
+   * compare against and are excluded.
+   */
+  private async assertNoOverlap(
+    userId: string,
+    startTime: Date,
+    endTime: Date,
+    excludeId?: string,
+  ) {
+    const overlapping = await this.prisma.timeLog.findFirst({
+      where: {
+        userId,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+        startTime: { not: null, lt: endTime },
+        endTime: { not: null, gt: startTime },
+      },
+    });
+    if (overlapping) {
+      throw new ConflictException(
+        'This overlaps another time log entry for this user.',
+      );
+    }
+  }
+
   private assertAssignee(
     workItem: { assigneeId: string | null },
     userId: string,
@@ -526,8 +498,20 @@ export class TimeLogsService {
     projectId: string,
     filters: ListTimeLogsDto,
   ): Prisma.TimeLogWhereInput {
+    return { projectId, ...this.buildCommonFilter(filters) };
+  }
+
+  private buildWorkspaceFilter(
+    workspaceId: string,
+    filters: ListTimeLogsDto,
+  ): Prisma.TimeLogWhereInput {
+    return { workspaceId, ...this.buildCommonFilter(filters) };
+  }
+
+  private buildCommonFilter(
+    filters: ListTimeLogsDto,
+  ): Prisma.TimeLogWhereInput {
     return {
-      projectId,
       ...EXCLUDE_RUNNING_TIMER,
       ...(filters.userId ? { userId: filters.userId } : {}),
       ...(filters.startDate || filters.endDate

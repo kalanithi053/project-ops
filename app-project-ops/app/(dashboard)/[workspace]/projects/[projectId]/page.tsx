@@ -33,6 +33,7 @@ import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useProjectReport } from "@/lib/api/hooks/use-project-report";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useTasks } from "@/lib/api/hooks/use-tasks";
+import { formatDurationMinutes } from "@/lib/format";
 
 function daysBetween(start?: string, end?: string): number | null {
   if (!start || !end) return null;
@@ -290,7 +291,37 @@ export default function ProjectOverviewPage() {
               </CardContent>
             </Card>
 
-
+            <Card data-tour="project-hours-logged">
+              <CardHeader>
+                <CardTitle>Hours logged</CardTitle>
+                <CardDescription>
+                  Actual time tracked per member.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {report?.user.length ? (
+                  <ul className="flex flex-col gap-2.5">
+                    {[...report.user]
+                      .sort((a, b) => b.loggedMinutes - a.loggedMinutes)
+                      .map((user) => (
+                        <li
+                          key={user.name}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <span className="text-sm">{user.name}</span>
+                          <span className="text-sm font-medium">
+                            {formatDurationMinutes(user.loggedMinutes)}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No project members are available for time reporting.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </div>
 

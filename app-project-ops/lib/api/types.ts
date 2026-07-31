@@ -63,7 +63,7 @@ export interface ProjectModuleInstance {
   taskLimit: number;
   /** Tasks created beyond `taskLimit` — metered, never rejected. */
   addonTask: number;
-  module: { key: string; name: string };
+  module: { key: string; name: string; plan?: { name: string } };
   [key: string]: unknown;
 }
 
@@ -103,6 +103,7 @@ export interface MemberUser {
 
 export interface WorkspaceMember {
   id: string;
+  roleId?: string;
   /** The member's user record (name/email live here). */
   user?: MemberUser;
   role?: Role | string;
@@ -113,6 +114,12 @@ export interface WorkspaceMember {
   lastName?: string;
   email?: string;
   [key: string]: unknown;
+}
+
+/** PATCH /workspace-members/:memberId */
+export interface UpdateWorkspaceMemberDto {
+  roleId?: string;
+  status?: MembershipStatus;
 }
 
 export interface Plan {
@@ -592,6 +599,8 @@ export interface ProjectReport {
     completedItems: number;
     totalEstimateHours: number;
     totalCompletedHours: number;
+    /** Real tracked time (TimeLog entries) against this project, in minutes. */
+    loggedMinutes: number;
     /** Work item count per WorkType name. */
     byType: Record<string, number>;
   }>;
@@ -708,7 +717,20 @@ export interface TimeLog {
   updatedAt: string;
   user: TaskCommentUser;
   /** Present only on project-level (cross-work-item) reads. */
-  workItem?: { id: string; name: string; prefix?: string | null };
+  workItem?: {
+    id: string;
+    name: string;
+    prefix?: string | null;
+    /** Present only on workspace-level reads (the team calendar/grid). */
+    workItemType?: {
+      id: string;
+      name: string;
+      category: string;
+      color?: string | null;
+    } | null;
+  };
+  /** Present only on workspace-level reads (the team calendar/grid). */
+  project?: { id: string; name: string };
 }
 
 /** GET .../time-logs for one work item. */

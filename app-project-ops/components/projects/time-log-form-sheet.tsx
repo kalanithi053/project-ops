@@ -42,6 +42,11 @@ function toTimeInput(value?: string | null): string {
   ).padStart(2, "0")}`;
 }
 
+/** Minutes as an hours string for the duration input, e.g. 90 -> "1.5". */
+function toHoursInput(minutes: number): string {
+  return (Math.round((minutes / 60) * 100) / 100).toString();
+}
+
 /** Add/edit form for a manual time log entry — shared by the work item panel
  * and the project-level Time Logs tab. */
 export function TimeLogFormSheet({
@@ -64,6 +69,7 @@ export function TimeLogFormSheet({
   const update = useUpdateTimeLog(workspaceSlug, projectId, workItemId);
   const { data: settings } = useWorkspaceSettings(workspaceSlug);
   const minDate = minLoggableDate(settings?.preferences);
+  const maxDate = todayDateInput();
   const isEdit = Boolean(entry);
 
   // Initial values only — the parent remounts this component (via a `key`
@@ -73,7 +79,7 @@ export function TimeLogFormSheet({
     entry ? toDateInput(entry.date) : todayDateInput(),
   );
   const [duration, setDuration] = React.useState(() =>
-    entry ? String(entry.durationMinutes) : "",
+    entry ? toHoursInput(entry.durationMinutes) : "",
   );
   const [usePeriod, setUsePeriod] = React.useState(() =>
     Boolean(entry?.startTime && entry?.endTime),
@@ -98,11 +104,15 @@ export function TimeLogFormSheet({
     if (minDate && date < minDate) {
       return setError(`You can't log time before ${minDate}.`);
     }
+    if (date > maxDate) {
+      return setError("You can't log time in the future.");
+    }
     if (usePeriod && (!startTime || !endTime)) {
       return setError("Set both a start and an end time.");
     }
-    if (!usePeriod && (!duration || Number(duration) < 1)) {
-      return setError("Enter a duration of at least 1 minute.");
+    const durationMinutes = Math.round(Number(duration) * 60);
+    if (!usePeriod && (!duration || durationMinutes < 1)) {
+      return setError("Enter a duration of at least 1 minute (0.02 hours).");
     }
 
     const dto = {
@@ -114,7 +124,7 @@ export function TimeLogFormSheet({
             startTime: new Date(`${date}T${startTime}`).toISOString(),
             endTime: new Date(`${date}T${endTime}`).toISOString(),
           }
-        : { durationMinutes: Number(duration) }),
+        : { durationMinutes }),
     };
 
     if (isEdit && entry) {
@@ -147,19 +157,21 @@ export function TimeLogFormSheet({
                 type="date"
                 value={date}
                 min={minDate}
+                max={maxDate}
                 onChange={(event) => setDate(event.target.value)}
               />
             </label>
 
             {!usePeriod && (
               <label className="flex flex-col gap-1.5 text-sm font-medium">
-                Duration (minutes)
+                Duration (hours)
                 <Input
                   type="number"
-                  min={1}
+                  min={0}
+                  step={0.25}
                   value={duration}
                   onChange={(event) => setDuration(event.target.value)}
-                  placeholder="30"
+                  placeholder="0.5"
                 />
               </label>
             )}

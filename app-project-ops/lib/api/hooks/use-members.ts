@@ -10,6 +10,7 @@ import type {
   InviteMemberDto,
   ProjectMember,
   Role,
+  UpdateWorkspaceMemberDto,
   WorkspaceMember,
 } from "@/lib/api/types";
 
@@ -108,6 +109,42 @@ export function useAddWorkspaceMember(workspaceSlug: string) {
         }
       }
       toast.success(message);
+    },
+  });
+}
+
+/** PATCH /workspace-members/:memberId — update a member's role or status. */
+export function useUpdateWorkspaceMember(workspaceSlug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, dto }: { id: string; dto: UpdateWorkspaceMemberDto }) =>
+      apiFetch<WorkspaceMember>(`/workspace-members/${id}`, {
+        method: "PATCH",
+        body: dto,
+        workspaceSlug,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["members", workspaceSlug] });
+      toast.success("Member updated");
+    },
+  });
+}
+
+/**
+ * DELETE /workspace-members/:memberId — revoke a member's workspace access
+ * (the workspace owner can't be removed; the backend rejects that attempt).
+ */
+export function useRemoveWorkspaceMember(workspaceSlug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) =>
+      apiFetch<{ id: string; removed: boolean }>(`/workspace-members/${id}`, {
+        method: "DELETE",
+        workspaceSlug,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["members", workspaceSlug] });
+      toast.success("Member removed");
     },
   });
 }

@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { DataTable } from "@/components/shared/data-table";
 import { FormPanel } from "@/components/shared/form-panel";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
@@ -20,7 +21,12 @@ import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { useAddWorkspaceMember, useWorkspaceMembers } from "@/lib/api/hooks/use-members";
+import {
+  useAddWorkspaceMember,
+  useRemoveWorkspaceMember,
+  useUpdateWorkspaceMember,
+  useWorkspaceMembers,
+} from "@/lib/api/hooks/use-members";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
@@ -51,51 +57,21 @@ function roleName(m: WorkspaceMember): string {
   return typeof m.role === "string" ? m.role : (m.role.name ?? "—");
 }
 
-const columns: ColumnDef<WorkspaceMember>[] = [
-  {
-    key: "name",
-    header: "User",
-    sortable: true,
-    sortAccessor: (m) => memberName(m),
-    cell: (m) => (
-      <div className="flex flex-col">
-        <span className="font-medium">{memberName(m)}</span>
-        {/* <span className="text-xs text-muted-foreground">{memberEmail(m)}</span> */}
-      </div>
-    ),
-  },
-  {
-    key: "role",
-    header: "Role",
-    hideBelow: "sm",
-    sortable: true,
-    sortAccessor: (m) => roleName(m),
-    cell: (m) => roleName(m),
-  },
-  {
-    key: "status",
-    header: "Status",
-    align: "right",
-    cell: (m) =>
-      m.status ? (
-        <StatusBadge
-          label={String(m.status)}
-          tone={
-            String(m.status).toLowerCase() === "active" ? "success" : "neutral"
-          }
-        />
-      ) : (
-        "—"
-      ),
-  },
-];
+function roleIdOf(m: WorkspaceMember): string | undefined {
+  if (m.roleId) return m.roleId;
+  return m.role && typeof m.role !== "string" ? m.role.id : undefined;
+}
 
 export default function UsersPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const { data, isLoading, isError, error, refetch } =
     useWorkspaceMembers(workspace);
+  const { data: settings } = useWorkspaceSettings(workspace);
   const { can } = usePermissions(workspace);
+  const updateMember = useUpdateWorkspaceMember(workspace);
+  const removeMember = useRemoveWorkspaceMember(workspace);
   const [open, setOpen] = React.useState(false);
+  const [removing, setRemoving] = React.useState<WorkspaceMember | null>(null);
   const members = data ?? [];
 
   const stats = [
@@ -109,6 +85,90 @@ export default function UsersPage() {
   ];
 
   const canInvite = can(PERMISSIONS.MEMBER_INVITE);
+  const canRemove = can(PERMISSIONS.MEMBER_REMOVE);
+  const roleOptions: SelectOption[] = (settings?.roles ?? []).map((role) => ({
+    label: role.name,
+    value: role.id,
+  }));
+
+  const columns: ColumnDef<WorkspaceMember>[] = [
+    {
+      key: "name",
+      header: "User",
+      sortable: true,
+      sortAccessor: (m) => memberName(m),
+      cell: (m) => (
+        <div className="flex flex-col">
+          <span className="font-medium">{memberName(m)}</span>
+        </div>
+      ),
+    },
+    {
+      key: "role",
+      header: "Role",
+      hideBelow: "sm",
+      sortable: true,
+      sortAccessor: (m) => roleName(m),
+      cell: (m) => {
+        if (!canInvite) return roleName(m);
+        const busy =
+          updateMember.isPending && updateMember.variables?.id === m.id;
+        return (
+          <div className="flex items-center gap-2">
+            <SelectField
+              aria-label={`Role for ${memberName(m)}`}
+              options={roleOptions}
+              value={roleIdOf(m)}
+              onValueChange={(roleId) =>
+                updateMember.mutate({ id: m.id, dto: { roleId } })
+              }
+              placeholder="Select a role"
+              disabled={busy}
+              className="h-8 w-40"
+            />
+            {busy && (
+              <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
+            )}
+          </div>
+        );
+      },
+    },
+    {
+      key: "status",
+      header: "Status",
+      align: canRemove ? "left" : "right",
+      cell: (m) =>
+        m.status ? (
+          <StatusBadge
+            label={String(m.status)}
+            tone={
+              String(m.status).toLowerCase() === "active" ? "success" : "neutral"
+            }
+          />
+        ) : (
+          "—"
+        ),
+    },
+    ...(canRemove
+      ? [
+          {
+            key: "actions",
+            header: "Actions",
+            align: "right" as const,
+            cell: (m: WorkspaceMember) => (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-muted-foreground hover:text-destructive"
+                onClick={() => setRemoving(m)}
+              >
+                Remove
+              </Button>
+            ),
+          },
+        ]
+      : []),
+  ];
 
   return (
     <PageContainer className="flex flex-col gap-6">
@@ -148,6 +208,22 @@ export default function UsersPage() {
       {open && (
         <AddUserPanel workspaceSlug={workspace} onDone={() => setOpen(false)} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(removing)}
+        onOpenChange={(nextOpen) => !nextOpen && setRemoving(null)}
+        title={`Remove ${removing ? memberName(removing) : "this member"}?`}
+        description="They lose access to this workspace and every project in it."
+        confirmLabel="Remove access"
+        destructive
+        pending={removeMember.isPending}
+        onConfirm={() =>
+          removing &&
+          removeMember.mutate(removing.id, {
+            onSuccess: () => setRemoving(null),
+          })
+        }
+      />
     </PageContainer>
   );
 }

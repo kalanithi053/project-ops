@@ -16,7 +16,11 @@ export class ModuleInstancesService {
     await this.assertProject(workspaceId, projectId);
     return this.prisma.moduleInstance.findMany({
       where: { projectId },
-      include: { module: { select: { key: true, name: true } } },
+      include: {
+        module: {
+          select: { key: true, name: true, plan: { select: { name: true } } },
+        },
+      },
     });
   }
 

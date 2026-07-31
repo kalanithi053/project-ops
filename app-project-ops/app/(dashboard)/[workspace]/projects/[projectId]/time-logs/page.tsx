@@ -2,7 +2,7 @@
 
 import { useParams } from "next/navigation";
 
-import { TimeLogsView } from "@/components/projects/time-logs-view";
+import { ProjectTimeLogsBoard } from "@/components/projects/project-time-logs-board";
 
 export default function ProjectTimeLogsPage() {
   const { workspace, projectId } = useParams<{
@@ -11,6 +11,6 @@ export default function ProjectTimeLogsPage() {
   }>();
 
   return (
-    <TimeLogsView workspaceSlug={workspace} projectId={projectId} sticky />
+    <ProjectTimeLogsBoard workspaceSlug={workspace} projectId={projectId} />
   );
 }

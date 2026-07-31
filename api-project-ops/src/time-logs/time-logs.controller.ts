@@ -7,11 +7,9 @@ import {
   Patch,
   Post,
   Query,
-  Res,
   UseGuards,
 } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { Response } from 'express';
 import { PERMISSIONS } from '../common/constants/permissions';
 import {
   CurrentWorkspace,
@@ -114,6 +112,19 @@ export class TimeLogsController {
     );
   }
 
+  @Get('time-logs')
+  @RequirePermission(PERMISSIONS.TIMELOG_READ)
+  @ApiOperation({
+    summary:
+      'List time logs across every project in the workspace, filterable by date range/user (the team calendar)',
+  })
+  listForWorkspace(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Query() query: ListTimeLogsDto,
+  ) {
+    return this.timeLogs.listForWorkspace(workspaceId, query);
+  }
+
   @Get('projects/:projectId/time-logs')
   @RequirePermission(PERMISSIONS.TIMELOG_READ)
   @ApiOperation({
@@ -125,24 +136,6 @@ export class TimeLogsController {
     @Query() query: ListTimeLogsDto,
   ) {
     return this.timeLogs.listForProject(workspaceId, projectId, query);
-  }
-
-  @Get('projects/:projectId/time-logs/export')
-  @RequirePermission(PERMISSIONS.TIMELOG_READ)
-  @ApiOperation({ summary: 'Download the filtered time logs as CSV' })
-  async exportCsv(
-    @CurrentWorkspace('workspaceId') workspaceId: string,
-    @Param('projectId') projectId: string,
-    @Query() query: ListTimeLogsDto,
-    @Res() res: Response,
-  ) {
-    const csv = await this.timeLogs.exportCsv(workspaceId, projectId, query);
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="time-logs-${projectId}.csv"`,
-    );
-    res.send(csv);
   }
 
   @Patch('time-logs/:id')

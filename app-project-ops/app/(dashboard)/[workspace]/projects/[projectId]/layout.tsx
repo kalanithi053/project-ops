@@ -4,8 +4,6 @@ import Link from "next/link";
 import { useParams, usePathname } from "next/navigation";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { Skeleton } from "@/components/ui/skeleton";
-import { useProject } from "@/lib/api/hooks/use-projects";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -44,43 +42,7 @@ export default function ProjectLayout({
   }
 
   return (
-    <PageContainer className="flex flex-col gap-6">
-      {/* <Button
-        asChild
-        variant="ghost"
-        size="sm"
-        className="-ml-2 w-fit text-muted-foreground"
-      >
-        <Link href={`/${workspace}/projects`}>
-          <ArrowLeft className="h-4 w-4" />
-          All projects
-        </Link>
-      </Button> */}
-      {/* {isLoading ? <Skeleton className="h-8 w-64" /> : null} */}
-      {/* <div className="flex flex-col gap-2">
-
-        ) : (
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight">
-              {project?.name ?? "Project"}
-            </h1>
-            {project?.projectType && (
-              <Badge variant="info">{project.projectType.name}</Badge>
-            )}
-          </div>
-        )}
-
-        {project?.description && (
-          <p className="text-sm text-muted-foreground">{project.description}</p>
-        )}
-
-        {(project?.startDate || project?.endDate) && (
-          <p className="text-sm text-muted-foreground">
-            {formatDate(project.startDate)} — {formatDate(project.endDate)}
-          </p>
-        )}
-      </div> */}
-
+    <PageContainer className="flex flex-col gap-3">
       <nav
         aria-label="Project sections"
         className="sticky top-0 z-30 -mx-4 flex gap-1 border-b border-border bg-background px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"

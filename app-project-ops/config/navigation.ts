@@ -1,5 +1,6 @@
 import {
   BarChart3,
+  Clock,
   FolderKanban,
   LayoutDashboard,
   Settings,
@@ -41,6 +42,12 @@ export const navigationConfig: NavigationSection[] = [
         href: "/reports",
         icon: BarChart3,
         tourId: "nav-reports",
+      },
+      {
+        label: "Time log",
+        href: "/time-logs",
+        icon: Clock,
+        tourId: "nav-time-logs",
       },
     ],
   },

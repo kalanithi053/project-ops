@@ -336,7 +336,7 @@ export function TaskWorkItems({
   }
   return (
     <section className="flex flex-col gap-4">
-      <div className="sticky top-10 z-20 -mx-4 flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-9 z-20 -mx-4 flex flex-col gap-4 bg-background px-4  sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lg font-semibold">Work items</h2>

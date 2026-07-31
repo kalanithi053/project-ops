@@ -70,6 +70,8 @@ interface TaskEditorProps {
   canSave: boolean;
   canComment: boolean;
   onDone: () => void;
+  /** Fired after a successful create/update with the saved work item's id. */
+  onSaved: (workItemId: string) => void;
 }
 
 /**
@@ -89,6 +91,7 @@ export function TaskEditor({
   canSave,
   canComment,
   onDone,
+  onSaved,
 }: TaskEditorProps) {
   const create = useCreateTask(workspaceSlug, projectId);
   const update = useUpdateTask(workspaceSlug, projectId);
@@ -223,9 +226,6 @@ export function TaskEditor({
     Boolean(project?.projectType?.isPlanAdd) &&
     workItemType?.category === "task";
   const requiresModule = showModuleField;
-  // The title's accent bar reflects the work item's own type (task/bug/
-  // incident), not the project's type or the item's status/priority.
-  const headerAccent = workItemType?.color ?? "var(--status-info)";
   // Creating is always "dirty" (there's nothing to compare against yet);
   // editing only counts as dirty once a field diverges from what loaded.
   const snapshot = initialSnapshot;
@@ -301,26 +301,28 @@ export function TaskEditor({
     };
 
     if (task) {
-      update.mutate({ id: task.id, dto }, { onSuccess: onDone });
+      update.mutate(
+        { id: task.id, dto },
+        { onSuccess: (updated) => onSaved(updated.id) },
+      );
     } else {
-      create.mutate(dto, { onSuccess: onDone });
+      create.mutate(dto, { onSuccess: (created) => onSaved(created.id) });
     }
   }
-
+  const headerAccent = workItemType?.color ?? "var(--status-info)";
   return (
     <Card className="mx-auto w-full max-w-6xl">
       <form onSubmit={handleSubmit} noValidate>
         <CardHeader className="sticky z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm">
-          <span
-            className="absolute inset-y-0 left-0 w-1.5"
-            style={{ backgroundColor: headerAccent }}
-            aria-hidden
-          />
-
           <div className="flex flex-col gap-3 p-4 pl-6">
             <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-              <div className="min-w-0 flex-1">
-                <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info">
+              <div className={`min-w-0 flex-1 border-l-4 border-l-[${headerAccent}] border-l-solid`}>
+
+                <div className={`mb-1 flex items-center gap-1.5 text-xs font-medium text-status-info `}>
+                  {/* <span
+                    className={`absolute inset-y-0 left-0 w-1.5 bg-[${headerAccent}]`}
+                    aria-hidden
+                  /> */}
                   <ListChecks className="h-3.5 w-3.5" />
                   <span className="uppercase tracking-wide">
                     {workItemTypeLabel} {taskIdentifier}
@@ -383,56 +385,90 @@ export function TaskEditor({
                       ? "Saving…"
                       : isEdit
                         ? "Save changes"
-                        : "Create task"}
+                        : `Create ${workItemTypeLabel ?? ""}`}
                   </Button>
                 )}
               </div>
             </div>
+          </div>
+          <div
+            className={cn(
+              "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm border-t border-border px-4",
+              showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
+            )}
+          >
+            <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Assignee
+              </span>
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  disabled={!canSave || assigneeOptions.length === 0}
+                  className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                  aria-label="Change assignee"
+                >
+                  <Avatar className="h-7 w-7">
+                    <AvatarFallback>
+                      {assigneeIds ? initials(assigneeLabel) : "—"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="truncate font-medium">{assigneeLabel}</span>
+                  {canSave && assigneeOptions.length > 0 && (
+                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  )}
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="min-w-56">
+                  {assigneeOptions.map((option) => (
+                    <DropdownMenuItem
+                      key={option.value}
+                      onSelect={() => setAssigneeIds(option.value)}
+                      className="justify-between"
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback>
+                            {initials(option.label)}
+                          </AvatarFallback>
+                        </Avatar>
+                        {option.label}
+                      </span>
+                      {option.value === assigneeIds && (
+                        <Check className="h-4 w-4" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
 
-            <div
-              className={cn(
-                "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm",
-                showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
-              )}
-            >
+            {showModuleField && (
               <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Assignee
+                  Module
                 </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    disabled={!canSave || assigneeOptions.length === 0}
-                    className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-                    aria-label="Change assignee"
+                    disabled={isEdit || !canSave || moduleOptions.length === 0}
+                    className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Change module"
                   >
-                    <Avatar className="h-7 w-7">
-                      <AvatarFallback>
-                        {assigneeIds ? initials(assigneeLabel) : "—"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="truncate font-medium">
-                      {assigneeLabel}
+                    <FolderKanban className="h-4 w-4 shrink-0" />
+                    <span className="truncate">
+                      {selectedModule?.label ?? "Select module"}
                     </span>
-                    {canSave && assigneeOptions.length > 0 && (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    {!isEdit && canSave && moduleOptions.length > 0 && (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                     )}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="min-w-56">
-                    {assigneeOptions.map((option) => (
+                    {moduleOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.value}
-                        onSelect={() => setAssigneeIds(option.value)}
+                        onSelect={() => setModuleInstanceId(option.value)}
                         className="justify-between"
                       >
-                        <span className="inline-flex items-center gap-2">
-                          <Avatar className="h-6 w-6">
-                            <AvatarFallback>
-                              {initials(option.label)}
-                            </AvatarFallback>
-                          </Avatar>
-                          {option.label}
-                        </span>
-                        {option.value === assigneeIds && (
+                        {option.label}
+                        {option.value === moduleInstanceId && (
                           <Check className="h-4 w-4" />
                         )}
                       </DropdownMenuItem>
@@ -440,101 +476,61 @@ export function TaskEditor({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
+            )}
 
-              {showModuleField && (
-                <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Module
-                  </span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      disabled={
-                        isEdit || !canSave || moduleOptions.length === 0
-                      }
-                      className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label="Change module"
-                    >
-                      <FolderKanban className="h-4 w-4 shrink-0" />
-                      <span className="truncate">
-                        {selectedModule?.label ?? "Select module"}
-                      </span>
-                      {!isEdit && canSave && moduleOptions.length > 0 && (
-                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                      )}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-56">
-                      {moduleOptions.map((option) => (
+            <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+              <span className="text-xs font-medium text-muted-foreground">
+                Status
+              </span>
+              <div className="flex h-8 items-center gap-2">
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    disabled={!canSave || statusOptions.length === 0}
+                    className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-label="Change status"
+                  >
+                    <span className="truncate">
+                      {selectedStatus?.name ?? "Select status"}
+                    </span>
+                    {canSave && statusOptions.length > 0 && (
+                      <ChevronDown className="h-3 w-3 shrink-0" />
+                    )}
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="start" className="min-w-48">
+                    {(statuses ?? [])
+                      .slice()
+                      .sort((a, b) => a.order - b.order)
+                      .map((status) => (
                         <DropdownMenuItem
-                          key={option.value}
-                          onSelect={() => setModuleInstanceId(option.value)}
+                          key={status.id}
+                          onSelect={() => setStatusId(status.id)}
                           className="justify-between"
                         >
-                          {option.label}
-                          {option.value === moduleInstanceId && (
+                          <span className="inline-flex items-center gap-2">
+                            <span
+                              className="h-2.5 w-2.5 rounded-full"
+                              style={{
+                                backgroundColor:
+                                  status.color ?? "var(--status-info)",
+                              }}
+                              aria-hidden
+                            />
+                            {status.name}
+                          </span>
+                          {status.id === statusId && (
                             <Check className="h-4 w-4" />
                           )}
                         </DropdownMenuItem>
                       ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              )}
-
-              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Status
-                </span>
-                <div className="flex h-8 items-center gap-2">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      disabled={!canSave || statusOptions.length === 0}
-                      className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
-                      aria-label="Change status"
-                    >
-                      <span className="truncate">
-                        {selectedStatus?.name ?? "Select status"}
-                      </span>
-                      {canSave && statusOptions.length > 0 && (
-                        <ChevronDown className="h-3 w-3 shrink-0" />
-                      )}
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start" className="min-w-48">
-                      {(statuses ?? [])
-                        .slice()
-                        .sort((a, b) => a.order - b.order)
-                        .map((status) => (
-                          <DropdownMenuItem
-                            key={status.id}
-                            onSelect={() => setStatusId(status.id)}
-                            className="justify-between"
-                          >
-                            <span className="inline-flex items-center gap-2">
-                              <span
-                                className="h-2.5 w-2.5 rounded-full"
-                                style={{
-                                  backgroundColor:
-                                    status.color ?? "var(--status-info)",
-                                }}
-                                aria-hidden
-                              />
-                              {status.name}
-                            </span>
-                            {status.id === statusId && (
-                              <Check className="h-4 w-4" />
-                            )}
-                          </DropdownMenuItem>
-                        ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             </div>
           </div>
-
           <div
             role="tablist"
             aria-label="Task editor sections"
-            className="flex border-t border-border px-4"
+            className="flex px-4"
           >
             <button
               type="button"

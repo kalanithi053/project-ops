@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
 import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
+import { generateRandomId } from 'src/common/constants/workspace-defaults';
 
 /** Matches the Kanban board's "No status" column — see task-board.tsx's UNASSIGNED. */
 const UNASSIGNED_STATUS = '__unassigned__';
@@ -35,7 +36,9 @@ const WORK_ITEM_UPDATE_FIELDS = [
 const DEFAULT_ENTITY_TYPE = 'task';
 
 const WORK_ITEM_INCLUDE = {
-  workItemType: { select: { id: true, name: true, category: true, color: true } },
+  workItemType: {
+    select: { id: true, name: true, category: true, color: true },
+  },
   status: { select: { id: true, name: true, category: true, color: true } },
   priority: { select: { id: true, name: true, color: true } },
   assignee: { select: { id: true, email: true } },
@@ -155,7 +158,14 @@ export class WorkItemsService {
       dto.priorityId ??
       (
         await this.prisma.priority.findFirst({
-          where: { workspaceId: dto.workItemTypeId, isDefault: true },
+          where: { workspaceId, isDefault: true },
+        })
+      )?.id;
+    const defaultStatus =
+      dto.statusId ??
+      (
+        await this.prisma.ticketStatus.findFirst({
+          where: { workspaceId, isDefault: true },
         })
       )?.id;
     const entityType = await this.resolveEntityType(
@@ -170,11 +180,19 @@ export class WorkItemsService {
           moduleInstanceId: dto?.moduleInstanceId,
           workItemTypeId: dto.workItemTypeId ?? null,
           name: dto.name,
-          prefix: dto.prefix ?? null,
+          prefix: dto.prefix ?? generateRandomId(),
           description: dto.description ?? null,
-          startDate: dto.startDate ? new Date(dto.startDate) : null,
-          dueDate: dto.dueDate ? new Date(dto.dueDate) : null,
-          statusId: dto.statusId ?? null,
+          startDate: dto.startDate
+            ? new Date(dto.startDate)
+            : project.startDate
+              ? new Date(project.startDate)
+              : null,
+          dueDate: dto.dueDate
+            ? new Date(dto.dueDate)
+            : project.endDate
+              ? new Date(project.endDate)
+              : null,
+          statusId: defaultStatus ?? null,
           priorityId: defaultPriority ?? null,
           assigneeId: dto.assigneeId ?? userId ?? null,
           qaAssigneeId: dto.qaAssigneeId ?? null,

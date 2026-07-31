@@ -21,7 +21,7 @@ import * as React from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
-import { CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
+import { CATEGORY_ICON, CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
 import { TaskBoard } from "@/components/projects/task-board";
 import { QueryState } from "@/components/shared/query-state";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
@@ -88,6 +88,24 @@ const WORK_TYPE_OPTIONS = [
   { value: "task", label: "Task" },
   { value: "incident", label: "Incident" },
 ];
+
+function WorkItemTypeIcon({
+  category,
+  color,
+  title
+}: {
+  category?: string;
+  color?: string | null;
+  title?:string
+}) {
+  const Icon =
+    CATEGORY_ICON[category as keyof typeof CATEGORY_ICON] ?? ListChecks;
+  return (
+    <span title={title}>
+      <Icon className="h-4 w-4" style={{ color: color ?? undefined }} />
+    </span>
+  );
+}
 
 function initials(value: string): string {
   return value
@@ -265,9 +283,16 @@ export function TaskWorkItems({
   );
   const workItems = React.useMemo(() => {
     const query = (appliedFilters.search ?? "").trim().toLowerCase();
+    // Removed-category items (e.g. the seeded "Removed" status) are noise in
+    // the default view — hide them unless the user explicitly filtered by
+    // status, in which case their pick wins.
+    const hideRemoved = !appliedFilters.statusIds?.length;
     return [
       ...(appliedWorkTypes.length === 0 || appliedWorkTypes.includes("task")
         ? tasks
+            .filter(
+              (task) => !hideRemoved || task.status?.category !== "removed",
+            )
             .filter(
               (task) =>
                 !query ||
@@ -282,7 +307,7 @@ export function TaskWorkItems({
             }))
         : []),
     ].sort((left, right) => right.date.localeCompare(left.date));
-  }, [appliedFilters.search, appliedWorkTypes, tasks]);
+  }, [appliedFilters.search, appliedFilters.statusIds, appliedWorkTypes, tasks]);
   const columnVisible = (column: OptionalColumn) =>
     visibleColumns.includes(column);
   const pageCount = Math.max(1, Math.ceil(workItems.length / PAGE_SIZE));
@@ -309,7 +334,6 @@ export function TaskWorkItems({
     setAppliedWorkTypes([]);
     setAppliedFilters(me?.id ? { assigneeIds: [me.id] } : {});
   }
-
   return (
     <section className="flex flex-col gap-4">
       <div className="sticky top-10 z-20 -mx-4 flex flex-col gap-4 border-b border-border bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
@@ -333,7 +357,7 @@ export function TaskWorkItems({
             )}
             {view === "list" && (
               <>
-               <DropdownMenu>
+                <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button type="button" variant="outline">
                       <Columns3 className="h-4 w-4" />
@@ -440,7 +464,11 @@ export function TaskWorkItems({
                       </label>
                     </SheetBody>
                     <SheetFooter>
-                      <Button type="button" variant="ghost" onClick={clearFilters}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={clearFilters}
+                      >
                         <X className="h-3.5 w-3.5" />
                         Reset filters
                       </Button>
@@ -457,7 +485,6 @@ export function TaskWorkItems({
                     </SheetFooter>
                   </SheetContent>
                 </Sheet>
-
               </>
             )}
             <div className="inline-flex items-center rounded-md border border-border p-0.5">
@@ -509,204 +536,210 @@ export function TaskWorkItems({
           onFiltersOpenChange={setKanbanFiltersOpen}
         />
       ) : (
-      <QueryState
-        isLoading={
-          tasksQuery.isLoading ||
-          modulesQuery.isLoading ||
-          statusesQuery.isLoading
-        }
-        isError={
-          tasksQuery.isError || modulesQuery.isError || statusesQuery.isError
-        }
-        error={tasksQuery.error ?? modulesQuery.error ?? statusesQuery.error}
-        onRetry={() => {
-          tasksQuery.refetch();
-          modulesQuery.refetch();
-          statusesQuery.refetch();
-        }}
-        skeleton={<TableSkeleton columns={6} rows={6} />}
-      >
-        {workItems.length === 0 ? (
-          <EmptyState
-            icon={ListChecks}
-            title="No work items"
-            description="No work items match this assignee."
-            action={
-              canCreate ? (
-                <CreateWorkItemMenu
-                  workspaceSlug={workspaceSlug}
-                  onSelect={(workType) => goToCreate(workType)}
-                  align="start"
-                >
-                  <Button type="button">
-                    <Plus className="h-4 w-4" />
-                    Create work item
-                  </Button>
-                </CreateWorkItemMenu>
-              ) : undefined
-            }
-          />
-        ) : (
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
-              <TableRow>
-                {columnVisible("type") && <TableHead>Type</TableHead>}
-                <TableHead>Work item</TableHead>
-                {columnVisible("module") && <TableHead>Module</TableHead>}
-                {columnVisible("assignee") && <TableHead>Assignee</TableHead>}
-                {columnVisible("status") && <TableHead>Status</TableHead>}
-                {columnVisible("startDate") && (
-                  <TableHead>Start date</TableHead>
-                )}
-                {columnVisible("endDate") && <TableHead>End date</TableHead>}
-                <TableHead className="w-24 text-right">Nudge</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {paginatedWorkItems.map(({ type, item }) => (
-                <TableRow key={`${type}-${item.id}`}>
-                  {columnVisible("type") && (
-                    <TableCell className="text-xs font-medium text-muted-foreground">
-                      {<ListChecks className="h-4 w-4" />}
-                    </TableCell>
-                  )}
-                  <TableCell>
-                    {
-                      <div className="group/title flex items-center gap-1">
-                        <button
-                          type="button"
-                          className="text-left font-medium hover:text-primary hover:underline"
-                          onClick={() =>
-                            router.push(
-                              `/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`,
-                            )
-                          }
-                        >
-                          {item.prefix ? `${item.prefix} · ` : ""}
-                          {item.name}
-                        </button>
-                        <CopyWorkItemLink
-                          prefix={item.prefix ?? "Task"}
-                          title={item.name}
-                          url={`/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`}
-                        />
-                      </div>
-                    }
-                  </TableCell>
-                  {columnVisible("module") && (
-                    <TableCell>
-                      {type === "Task" && item.moduleInstanceId
-                        ? (moduleNames.get(item.moduleInstanceId) ?? "—")
-                        : "—"}
-                    </TableCell>
-                  )}
-                  {columnVisible("assignee") &&
-                    (() => {
-                      const assigneeName =
-                        assigneeNames.get(item.assigneeId ?? "") ??
-                        "Unassigned";
-                      return (
-                        <TableCell>
-                          <span className="inline-flex items-center gap-2">
-                            <Avatar className="h-6 w-6">
-                              <AvatarFallback className="text-[9px]">
-                                {item.assigneeId ? initials(assigneeName) : "—"}
-                              </AvatarFallback>
-                            </Avatar>
-                            <span>{assigneeName}</span>
-                          </span>
-                        </TableCell>
-                      );
-                    })()}
-                  {columnVisible("status") && (
-                    <TableCell>
-                      <span className="inline-flex items-center gap-1.5">
-                        <span
-                          className="h-2 w-2 shrink-0 rounded-full"
-                          style={{
-                            backgroundColor:
-                              item.status?.color ?? "var(--status-neutral)",
-                          }}
-                          aria-hidden
-                        />
-                        <span>{item.status?.name ?? "No status"}</span>
-                      </span>
-                    </TableCell>
-                  )}
-                  {columnVisible("startDate") && (
-                    <TableCell>
-                      {type === "Task" ? formatDate(item.startDate) : "—"}
-                    </TableCell>
-                  )}
-                  {columnVisible("endDate") && (
-                    <TableCell>
-                      {type === "Task" ? formatDate(item.dueDate) : "—"}
-                    </TableCell>
-                  )}
-                  <TableCell className="text-right">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={!item.assigneeId || nudgingId === item.id}
-                      title={
-                        item.assigneeId
-                          ? "Email the assignee"
-                          : "This item has no assignee"
-                      }
-                      onClick={() => {
-                        setNudgingId(item.id);
-                        notifyTask.mutate(item.id, {
-                          onSettled: () => setNudgingId(null),
-                        });
-                      }}
-                    >
-                      <BellRing className="h-3.5 w-3.5" />
-                      Nudge
+        <QueryState
+          isLoading={
+            tasksQuery.isLoading ||
+            modulesQuery.isLoading ||
+            statusesQuery.isLoading
+          }
+          isError={
+            tasksQuery.isError || modulesQuery.isError || statusesQuery.isError
+          }
+          error={tasksQuery.error ?? modulesQuery.error ?? statusesQuery.error}
+          onRetry={() => {
+            tasksQuery.refetch();
+            modulesQuery.refetch();
+            statusesQuery.refetch();
+          }}
+          skeleton={<TableSkeleton columns={6} rows={6} />}
+        >
+          {workItems.length === 0 ? (
+            <EmptyState
+              icon={ListChecks}
+              title="No work items"
+              description="No work items match this assignee."
+              action={
+                canCreate ? (
+                  <CreateWorkItemMenu
+                    workspaceSlug={workspaceSlug}
+                    onSelect={(workType) => goToCreate(workType)}
+                    align="start"
+                  >
+                    <Button type="button">
+                      <Plus className="h-4 w-4" />
+                      Create work item
                     </Button>
-                  </TableCell>
+                  </CreateWorkItemMenu>
+                ) : undefined
+              }
+            />
+          ) : (
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-background shadow-sm">
+                <TableRow>
+                  {columnVisible("type") && <TableHead>Type</TableHead>}
+                  <TableHead>Work item</TableHead>
+                  {columnVisible("module") && <TableHead>Module</TableHead>}
+                  {columnVisible("assignee") && <TableHead>Assignee</TableHead>}
+                  {columnVisible("status") && <TableHead>Status</TableHead>}
+                  {columnVisible("startDate") && (
+                    <TableHead>Start date</TableHead>
+                  )}
+                  {columnVisible("endDate") && <TableHead>End date</TableHead>}
+                  <TableHead className="w-24 text-right">Nudge</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-        {workItems.length > PAGE_SIZE && (
-          <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
-            <span>
-              {(currentPage - 1) * PAGE_SIZE + 1}–
-              {Math.min(currentPage * PAGE_SIZE, workItems.length)} of{" "}
-              {workItems.length}
-            </span>
-            <div className="flex items-center gap-1">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setPage((current) => Math.max(1, current - 1))}
-              >
-                <ChevronLeft className="h-4 w-4" />
-                Previous
-              </Button>
-              <span className="px-2 text-xs">
-                Page {currentPage} of {pageCount}
+              </TableHeader>
+              <TableBody>
+                {paginatedWorkItems.map(({ type, item }) => (
+                  <TableRow key={`${type}-${item.id}`}>
+                    {columnVisible("type") && (
+                      <TableCell className="text-xs font-medium text-muted-foreground">
+                        <WorkItemTypeIcon
+                          category={item.workItemType?.category}
+                          color={item.workItemType?.color}
+                          title={item.workItemType?.name}
+                        />
+                      </TableCell>
+                    )}
+                    <TableCell>
+                      {
+                        <div className="group/title flex items-center gap-1">
+                          <button
+                            type="button"
+                            className="text-left font-medium hover:text-primary hover:underline"
+                            onClick={() =>
+                              router.push(
+                                `/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`,
+                              )
+                            }
+                          >
+                            {item.prefix ? `${item.prefix} · ` : ""}
+                            {item.name}
+                          </button>
+                          <CopyWorkItemLink
+                            prefix={item.prefix ?? "Task"}
+                            title={item.name}
+                            url={`/${workspaceSlug}/projects/${projectId}/work-items/${item.id}`}
+                          />
+                        </div>
+                      }
+                    </TableCell>
+                    {columnVisible("module") && (
+                      <TableCell>
+                        {type === "Task" && item.moduleInstanceId
+                          ? (moduleNames.get(item.moduleInstanceId) ?? "—")
+                          : "—"}
+                      </TableCell>
+                    )}
+                    {columnVisible("assignee") &&
+                      (() => {
+                        const assigneeName =
+                          assigneeNames.get(item.assigneeId ?? "") ??
+                          "Unassigned";
+                        return (
+                          <TableCell>
+                            <span className="inline-flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-[9px]">
+                                  {item.assigneeId
+                                    ? initials(assigneeName)
+                                    : "—"}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span>{assigneeName}</span>
+                            </span>
+                          </TableCell>
+                        );
+                      })()}
+                    {columnVisible("status") && (
+                      <TableCell>
+                        <span className="inline-flex items-center gap-1.5">
+                          <span
+                            className="h-2 w-2 shrink-0 rounded-full"
+                            style={{
+                              backgroundColor:
+                                item.status?.color ?? "var(--status-neutral)",
+                            }}
+                            aria-hidden
+                          />
+                          <span>{item.status?.name ?? "No status"}</span>
+                        </span>
+                      </TableCell>
+                    )}
+                    {columnVisible("startDate") && (
+                      <TableCell>
+                        {type === "Task" ? formatDate(item.startDate) : "—"}
+                      </TableCell>
+                    )}
+                    {columnVisible("endDate") && (
+                      <TableCell>
+                        {type === "Task" ? formatDate(item.dueDate) : "—"}
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        disabled={!item.assigneeId || nudgingId === item.id}
+                        title={
+                          item.assigneeId
+                            ? "Email the assignee"
+                            : "This item has no assignee"
+                        }
+                        onClick={() => {
+                          setNudgingId(item.id);
+                          notifyTask.mutate(item.id, {
+                            onSettled: () => setNudgingId(null),
+                          });
+                        }}
+                      >
+                        <BellRing className="h-3.5 w-3.5" />
+                        Nudge
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {workItems.length > PAGE_SIZE && (
+            <div className="flex items-center justify-between gap-3 px-1 text-sm text-muted-foreground">
+              <span>
+                {(currentPage - 1) * PAGE_SIZE + 1}–
+                {Math.min(currentPage * PAGE_SIZE, workItems.length)} of{" "}
+                {workItems.length}
               </span>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={currentPage === pageCount}
-                onClick={() =>
-                  setPage((current) => Math.min(pageCount, current + 1))
-                }
-              >
-                Next
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === 1}
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <span className="px-2 text-xs">
+                  Page {currentPage} of {pageCount}
+                </span>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={currentPage === pageCount}
+                  onClick={() =>
+                    setPage((current) => Math.min(pageCount, current + 1))
+                  }
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
-      </QueryState>
+          )}
+        </QueryState>
       )}
     </section>
   );

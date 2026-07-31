@@ -113,7 +113,10 @@ export default function ProjectOverviewPage() {
       isLoading={projectQuery.isLoading || reportQuery.isLoading}
       isError={projectQuery.isError || reportQuery.isError}
       error={projectQuery.error ?? reportQuery.error}
-      onRetry={() => { projectQuery.refetch(); reportQuery.refetch(); }}
+      onRetry={() => {
+        projectQuery.refetch();
+        reportQuery.refetch();
+      }}
       skeleton={<CardsSkeleton count={2} />}
     >
       <div className="flex flex-col gap-6">
@@ -194,39 +197,101 @@ export default function ProjectOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card data-tour="project-work-by-status">
-            <CardHeader>
-              <CardTitle>Work by status</CardTitle>
-              <CardDescription>Where the work currently sits.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
-              {!report ? null : (
-                <ul className="flex flex-col gap-2.5">
-                  {report.statusBreakdown.map((status) => (
-                    <li key={status.name} className="flex items-center justify-between gap-2">
-                      <span className="inline-flex items-center gap-2 text-sm"><span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: status.color ?? "var(--status-neutral)" }} />{status.name}</span>
-                      <span className="text-sm font-medium">{status.count}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {report?.progress.totalItems === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No work has been reported yet.
-                </p>
-              )}
+          <div className="flex flex-col gap-4">
+            <Card data-tour="project-work-by-type">
+              <CardHeader>
+                <CardTitle>Work by type</CardTitle>
+                <CardDescription>
+                  {report?.byType
+                    ?.map((v) => v.name)
+                    ?.join(", ")
+                    ?.trim() ?? "Work Type"}{" "}
+                  counts.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {report?.byType.length ? (
+                  <ul className="flex flex-col gap-2.5">
+                    {report.byType.map((type) => (
+                      <li
+                        key={type.name}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="inline-flex items-center gap-2 text-sm">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{
+                              backgroundColor:
+                                type.color ?? "var(--status-neutral)",
+                            }}
+                          />
+                          {type.name}
+                        </span>
+                        <span className="text-sm font-medium">
+                          {type.total}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    No work has been reported yet.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+            <Card data-tour="project-work-by-status">
+              <CardHeader>
+                <CardTitle>Work by status</CardTitle>
+                <CardDescription>
+                  Where the work currently sits.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                {!report ? null : (
+                  <ul className="flex flex-col gap-2.5">
+                    {report.statusBreakdown.map((status) => (
+                      <li
+                        key={status.name}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="inline-flex items-center gap-2 text-sm">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full"
+                            style={{
+                              backgroundColor:
+                                status.color ?? "var(--status-neutral)",
+                            }}
+                          />
+                          {status.name}
+                        </span>
+                        <span className="text-sm font-medium">
+                          {status.count}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {report?.progress.totalItems === 0 && (
+                  <p className="text-sm text-muted-foreground">
+                    No work has been reported yet.
+                  </p>
+                )}
 
-              <Button asChild variant="outline" size="sm" className="mt-1">
-                <Link
-                  href={`/${workspace}/projects/${projectId}/work-items`}
-                  className="justify-center"
-                >
-                  <ListChecks className="h-4 w-4" />
-                  Open work items
-                </Link>
-              </Button>
-            </CardContent>
-          </Card>
+                <Button asChild variant="outline" size="sm" className="mt-1">
+                  <Link
+                    href={`/${workspace}/projects/${projectId}/work-items`}
+                    className="justify-center"
+                  >
+                    <ListChecks className="h-4 w-4" />
+                    Open work items
+                  </Link>
+                </Button>
+              </CardContent>
+            </Card>
+
+
+          </div>
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
@@ -253,7 +318,9 @@ export default function ProjectOverviewPage() {
                   <TableBody>
                     {report.byPriority.map((entry) => (
                       <TableRow key={entry.priority}>
-                        <TableCell className="font-medium">{entry.priority}</TableCell>
+                        <TableCell className="font-medium">
+                          {entry.priority}
+                        </TableCell>
                         {priorityStatusNames.map((status) => (
                           <TableCell key={status} className="text-right">
                             {entry.statuses[status] ?? 0}
@@ -292,13 +359,18 @@ export default function ProjectOverviewPage() {
                   <TableBody>
                     {report.user.map((user) => (
                       <TableRow key={user.name}>
-                        <TableCell className="font-medium">{user.name}</TableCell>
-                        <TableCell className="text-right">{user.totalItems}</TableCell>
+                        <TableCell className="font-medium">
+                          {user.name}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {user.totalItems}
+                        </TableCell>
                         <TableCell className="text-right">
                           {user.completedItems}
                         </TableCell>
                         <TableCell className="text-right">
-                          {user.totalCompletedHours}h / {user.totalEstimateHours}h
+                          {user.totalCompletedHours}h /{" "}
+                          {user.totalEstimateHours}h
                         </TableCell>
                       </TableRow>
                     ))}

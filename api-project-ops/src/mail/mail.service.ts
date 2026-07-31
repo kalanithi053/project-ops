@@ -9,6 +9,7 @@ import {
   WorkItemStatusRef,
   workItemNotificationEmailTemplate,
 } from './templates/work-item-notification-email.template';
+import { workspaceInviteEmailTemplate } from './templates/workspace-invite-email.template';
 
 @Injectable()
 export class MailService implements OnModuleInit {

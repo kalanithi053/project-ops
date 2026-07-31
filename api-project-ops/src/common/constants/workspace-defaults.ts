@@ -216,3 +216,14 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
   { name: 'Ultimate', features: SHARED_PLAN_FEATURES, isActive: true },
   { name: 'Enterprise', features: SHARED_PLAN_FEATURES, isActive: true },
 ];
+
+export function generateRandomId(length = 6): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let id = '';
+
+  for (let i = 0; i < length; i++) {
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+
+  return id;
+}

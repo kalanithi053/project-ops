@@ -234,6 +234,7 @@ export const STATUS_CATEGORIES = [
   "review",
   "done",
   "blocked",
+  "removed",
 ] as const;
 
 export type StatusCategory = (typeof STATUS_CATEGORIES)[number];
@@ -247,6 +248,7 @@ export const STATUS_CATEGORY_LABELS: Record<StatusCategory, string> = {
   review: "Review",
   done: "Done",
   blocked: "Blocked",
+  removed: "Removed",
 };
 
 export interface TicketStatus {
@@ -574,6 +576,7 @@ export interface ProjectReport {
   byType: Array<{
     name: string;
     category: string;
+    color?: string | null;
     total: number;
     done: number;
   }>;

@@ -69,11 +69,11 @@ function WorkspacesHub() {
 
   useEffect(() => {
     // `replace`, not `push` — otherwise Back lands here and forwards again.
-    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/projects`);
+    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/dashboard`);
   }, [autoOpenSlug, router]);
 
   function openWorkspace(workspace: Workspace) {
-    router.push(`/${workspace.slug}/projects`);
+    router.push(`/${workspace.slug}/dashboard`);
   }
 
   function setAsDefault(workspace: Workspace) {
@@ -113,7 +113,7 @@ function WorkspacesHub() {
         </div>
 
         <WorkspaceForm
-          onCreated={(slug) => router.push(`/${slug}/projects`)}
+          onCreated={(slug) => router.push(`/${slug}/dashboard`)}
         />
       </div>
     );
@@ -171,23 +171,23 @@ function WorkspacesHub() {
                           projectops.app/{workspace.slug}
                         </span>
                       </span>
+                      {workspace.isDefault ? (
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          Default
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => setAsDefault(workspace)}
+                          disabled={setDefaultWorkspace.isPending}
+                          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          <Star className="h-3.5 w-3.5" />
+                          Set as default
+                        </button>
+                      )}
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                     </button>
-                    {workspace.isDefault ? (
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        Default
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setAsDefault(workspace)}
-                        disabled={setDefaultWorkspace.isPending}
-                        className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        <Star className="h-3.5 w-3.5" />
-                        Set as default
-                      </button>
-                    )}
                   </div>
                 </li>
               ))}

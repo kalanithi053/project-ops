@@ -61,8 +61,18 @@ describe('ReportsService', () => {
         },
       ]);
 
-      const taskType = { id: 'wt-task', name: 'Task', category: 'task' };
-      const bugType = { id: 'wt-bug', name: 'Bug', category: 'bug' };
+      const taskType = {
+        id: 'wt-task',
+        name: 'Task',
+        category: 'task',
+        color: '#3b82f6',
+      };
+      const bugType = {
+        id: 'wt-bug',
+        name: 'Bug',
+        category: 'bug',
+        color: '#ef4444',
+      };
       const todoStatus = { name: 'To Do', category: 'todo', isDefault: true };
       const doneStatus = { name: 'Done', category: 'done', isDefault: false };
       const highPriority = { name: 'High' };
@@ -148,8 +158,8 @@ describe('ReportsService', () => {
 
       // byType: sorted by total desc
       expect(report.byType).toEqual([
-        { name: 'Task', category: 'task', total: 2, done: 1 },
-        { name: 'Bug', category: 'bug', total: 1, done: 0 },
+        { name: 'Task', category: 'task', color: '#3b82f6', total: 2, done: 1 },
+        { name: 'Bug', category: 'bug', color: '#ef4444', total: 1, done: 0 },
       ]);
 
       // progress: 1 of 3 done => 33%

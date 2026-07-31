@@ -4,7 +4,12 @@ import { PrismaService } from '../prisma/prisma.service';
 type ReportWorkItem = {
   moduleInstanceId: string;
   assigneeId: string | null;
-  workItemType: { id: string; name: string; category: string } | null;
+  workItemType: {
+    id: string;
+    name: string;
+    category: string;
+    color: string | null;
+  } | null;
   status: { name: string; category: string; isDefault: boolean } | null;
   priority: { name: string } | null;
   estimateHours: number | null;
@@ -56,7 +61,9 @@ export class ReportsService {
         select: {
           moduleInstanceId: true,
           assigneeId: true,
-          workItemType: { select: { id: true, name: true, category: true } },
+          workItemType: {
+            select: { id: true, name: true, category: true, color: true },
+          },
           status: { select: { name: true, category: true, isDefault: true } },
           priority: { select: { name: true } },
           estimateHours: true,
@@ -193,7 +200,13 @@ export class ReportsService {
   private buildTypeBreakdown(items: ReportWorkItem[]) {
     const byType = new Map<
       string,
-      { name: string; category: string; total: number; done: number }
+      {
+        name: string;
+        category: string;
+        color: string | null;
+        total: number;
+        done: number;
+      }
     >();
     for (const item of items) {
       const key = item.workItemType?.id ?? 'uncategorized';
@@ -201,6 +214,7 @@ export class ReportsService {
         byType.set(key, {
           name: item.workItemType?.name ?? UNCATEGORIZED,
           category: item.workItemType?.category ?? 'uncategorized',
+          color: item.workItemType?.color ?? null,
           total: 0,
           done: 0,
         });

@@ -16,9 +16,14 @@ export default function NewTaskPage() {
   const router = useRouter();
   const { can } = usePermissions(workspace);
 
-  function finish() {
+  function cancel() {
     notifyTaskBoard(workspace, projectId);
     router.push(`/${workspace}/projects/${projectId}/work-items`);
+  }
+
+  function saved(workItemId: string) {
+    notifyTaskBoard(workspace, projectId);
+    router.push(`/${workspace}/projects/${projectId}/work-items/${workItemId}`);
   }
 
   return (
@@ -30,7 +35,8 @@ export default function NewTaskPage() {
       defaultWorkItemTypeId={searchParams.get("workItemTypeId") ?? undefined}
       canSave={can(PERMISSIONS.WORKITEM_CREATE)}
       canComment={can(PERMISSIONS.COMMENT_CREATE)}
-      onDone={finish}
+      onDone={cancel}
+      onSaved={saved}
     />
   );
 }

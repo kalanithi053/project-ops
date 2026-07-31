@@ -3,13 +3,20 @@
 import * as React from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Boxes, CalendarDays, Clock, GripVertical } from "lucide-react";
+import {
+  Boxes,
+  CalendarDays,
+  Clock,
+  GripVertical,
+  ListChecks,
+} from "lucide-react";
 
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { formatDate } from "@/lib/format";
 import type { Task } from "@/lib/api/types";
+import { CATEGORY_ICON } from "./create-work-item-menu";
 
 /** Two-letter monogram for an assignee with no avatar image. */
 function initials(username: string) {
@@ -37,7 +44,9 @@ export function TaskCardView({
   const overdue = task.dueDate ? new Date(task.dueDate) < new Date() : false;
   const assignees = task.assignees ?? [];
   const estimateHours = task.estimateHours ?? task.etaHours;
-
+  const Icon =
+    CATEGORY_ICON[task.workItemType?.category as keyof typeof CATEGORY_ICON] ??
+    ListChecks;
   return (
     <div
       className={cn(
@@ -52,11 +61,14 @@ export function TaskCardView({
         }}
         aria-hidden
       />
-      {task.prefix && (
-        <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
-          {task.prefix}
-        </span>
-      )}
+
+      <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground flex gap-1">
+        <Icon
+          className="h-4 w-4 shrink-0"
+          style={{ color: task.workItemType?.color ?? undefined }}
+        />
+        {task.prefix && task.prefix}
+      </span>
 
       <p className="pr-4 text-sm font-medium leading-snug">{task.name}</p>
 
@@ -71,7 +83,8 @@ export function TaskCardView({
               <span
                 className="h-2 w-2 shrink-0 rounded-full"
                 style={{
-                  backgroundColor: task.priority.color ?? "var(--status-neutral)",
+                  backgroundColor:
+                    task.priority.color ?? "var(--status-neutral)",
                 }}
                 aria-hidden
               />
@@ -175,7 +188,10 @@ export function SortableTaskCard({
     <div
       ref={setNodeRef}
       style={{ transform: CSS.Transform.toString(transform), transition }}
-      className={cn("group/title relative touch-none", isDragging && "opacity-40")}
+      className={cn(
+        "group/title relative touch-none",
+        isDragging && "opacity-40",
+      )}
       // Pointer listeners only — a 5px activation distance on the sensor
       // keeps a plain click falling through to the button below.
       {...listeners}

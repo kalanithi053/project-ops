@@ -11,7 +11,7 @@ import {
 import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
 import type { WorkType, WorkTypeCategory } from "@/lib/api/types";
 
-const CATEGORY_ICON: Record<WorkTypeCategory, typeof ListChecks> = {
+export const CATEGORY_ICON: Record<WorkTypeCategory, typeof ListChecks> = {
   task: ListChecks,
   incident: AlertTriangle,
   bug: Bug,

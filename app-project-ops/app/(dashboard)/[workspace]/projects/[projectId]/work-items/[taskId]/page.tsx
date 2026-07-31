@@ -20,9 +20,14 @@ export default function EditTaskPage() {
   const router = useRouter();
   const { can } = usePermissions(workspace);
 
-  function finish() {
+  function cancel() {
     notifyTaskBoard(workspace, projectId);
     router.push(`/${workspace}/projects/${projectId}/work-items`);
+  }
+
+  function saved(workItemId: string) {
+    notifyTaskBoard(workspace, projectId);
+    router.push(`/${workspace}/projects/${projectId}/work-items/${workItemId}`);
   }
 
   return (
@@ -41,7 +46,8 @@ export default function EditTaskPage() {
           task={taskQuery.data}
           canSave={can(PERMISSIONS.WORKITEM_UPDATE)}
           canComment={can(PERMISSIONS.COMMENT_CREATE)}
-          onDone={finish}
+          onDone={cancel}
+          onSaved={saved}
         />
       ) : null}
     </QueryState>

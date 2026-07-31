@@ -20,6 +20,8 @@ export interface ProjectType {
   id: string;
   name: string;
   description?: string;
+  /** Drives the title accent bar on that type's work items. */
+  color?: string | null;
   /** When false, projects of this type skip plan/module/seed-task provisioning. */
   isPlanAdd?: boolean;
   /** Summary of plans under this type (from GET /project-types). */
@@ -31,6 +33,7 @@ export interface ProjectType {
 export interface ProjectTypeRef {
   id: string;
   name: string;
+  color?: string | null;
   isPlanAdd?: boolean;
   [key: string]: unknown;
 }
@@ -142,6 +145,8 @@ export interface Me {
   phone?: string;
   productTourCompletedAt?: string | null;
   isTourDone?: boolean;
+  projectOverviewTourCompletedAt?: string | null;
+  isProjectOverviewTourDone?: boolean;
   [key: string]: unknown;
 }
 
@@ -436,6 +441,7 @@ export type UpdateRoleDto = Partial<CreateRoleDto>;
 export interface CreateProjectTypeDto {
   name: string;
   description?: string;
+  color?: string;
   isPlanAdd?: boolean;
 }
 
@@ -523,7 +529,7 @@ export interface Task {
   priorityId?: string | null;
   /** WorkType this item is classified as (task/incident/bug). */
   workItemTypeId?: string | null;
-  workItemType?: Pick<WorkType, "id" | "name" | "category"> | null;
+  workItemType?: Pick<WorkType, "id" | "name" | "category" | "color"> | null;
   createdBy?: string;
   /** Flat ordering across the whole project, not per column. */
   position: number;
@@ -549,36 +555,6 @@ export interface Task {
   qaAssignee?: TaskCommentUser | null;
   [key: string]: unknown;
 }
-
-export interface Incident {
-  id: string;
-  projectId: string;
-  title: string;
-  description?: string | null;
-  statusId: string;
-  status: TaskStatusRef;
-  assigneeId?: string | null;
-  qaAssigneeId?: string | null;
-  estimateHours?: number | null;
-  completedHours?: number | null;
-  createdAt: string;
-  updatedAt: string;
-  assignee?: TaskCommentUser | null;
-  qaAssignee?: TaskCommentUser | null;
-  [key: string]: unknown;
-}
-
-export interface CreateIncidentDto {
-  title: string;
-  description?: string;
-  statusId?: string;
-  assigneeId?: string;
-  qaAssigneeId?: string;
-  estimateHours?: number;
-  completedHours?: number;
-}
-
-export interface UpdateIncidentDto extends Partial<CreateIncidentDto> {}
 
 export interface ProjectReport {
   modules: Array<{
@@ -677,10 +653,6 @@ export interface TaskActivityEntry {
   createdAt: string;
   description: string;
   metadata?: Record<string, unknown> | null;
-}
-
-export interface IncidentActivityEntry extends Omit<TaskActivityEntry, "entityType"> {
-  entityType: "incident";
 }
 
 export interface TaskCommentUser {

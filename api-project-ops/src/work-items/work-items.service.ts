@@ -35,7 +35,7 @@ const WORK_ITEM_UPDATE_FIELDS = [
 const DEFAULT_ENTITY_TYPE = 'task';
 
 const WORK_ITEM_INCLUDE = {
-  workItemType: { select: { id: true, name: true, category: true } },
+  workItemType: { select: { id: true, name: true, category: true, color: true } },
   status: { select: { id: true, name: true, category: true, color: true } },
   priority: { select: { id: true, name: true, color: true } },
   assignee: { select: { id: true, email: true } },
@@ -284,9 +284,19 @@ export class WorkItemsService {
       await this.notifyReassignment(project, updated, userId, entityType);
     }
     if (Object.keys(changes).length > 0) {
-      await this.notifyWorkItemEvent(project, updated, 'updated', entityType, {
-        skipAssignee: assigneeChanged,
-      });
+      const statusChanged = Boolean(changes.statusId);
+      await this.notifyWorkItemEvent(
+        project,
+        updated,
+        statusChanged ? 'status_changed' : 'updated',
+        entityType,
+        {
+          skipAssignee: assigneeChanged,
+          ...(statusChanged
+            ? { fromStatus: workItem.status, toStatus: updated.status }
+            : {}),
+        },
+      );
     }
     return updated;
   }
@@ -362,9 +372,13 @@ export class WorkItemsService {
       assignee: { id: string; email: string } | null;
       qaAssignee: { id: string; email: string } | null;
     },
-    action: 'created' | 'updated',
+    action: 'created' | 'updated' | 'status_changed',
     entityType: string,
-    options?: { skipAssignee?: boolean },
+    options?: {
+      skipAssignee?: boolean;
+      fromStatus?: { name: string; color: string | null } | null;
+      toStatus?: { name: string; color: string | null } | null;
+    },
   ) {
     const recipients = new Map<string, string>([
       [project.owner.id, project.owner.email],
@@ -392,6 +406,8 @@ export class WorkItemsService {
             workItemName,
             projectName: project.name,
             actionUrl,
+            ...(options?.fromStatus ? { fromStatus: options.fromStatus } : {}),
+            ...(options?.toStatus ? { toStatus: options.toStatus } : {}),
           })
           .catch((error) =>
             this.logger.error(

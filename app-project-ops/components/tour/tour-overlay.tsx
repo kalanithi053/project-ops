@@ -82,10 +82,21 @@ export function TourOverlay({
   const [rect, setRect] = React.useState<DOMRect | null>(null);
   const [ready, setReady] = React.useState(false);
   const onNextRef = React.useRef(onNext);
-  onNextRef.current = onNext;
+  const onBackRef = React.useRef(onBack);
+  const onSkipRef = React.useRef(onSkip);
+  React.useEffect(() => {
+    onNextRef.current = onNext;
+    onBackRef.current = onBack;
+    onSkipRef.current = onSkip;
+  });
 
   // Navigate to the step's route (if needed) and wait for its target to mount.
   React.useEffect(() => {
+    // Resetting local state when `step.id` changes (not every render) is the
+    // "synchronize with an external system" case Effects exist for — the new
+    // target has to be located (possibly after a route change) before the
+    // spotlight/card can show again, which can't be derived during render.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReady(false);
     setTarget(null);
     setRect(null);
@@ -109,7 +120,13 @@ export function TourOverlay({
         onNextRef.current();
         return;
       }
-      el.scrollIntoView({ block: "center", behavior: "smooth" });
+      // An animated ("smooth") scroll here races the scroll-lock effect's
+      // `body.style.overflow = "hidden"` below: locking overflow mid-animation
+      // freezes the compositor's in-flight scroll offset, leaving the painted
+      // frame (sticky header/sidebar included) stuck at a stale position even
+      // though layout — and getBoundingClientRect — already reflect the final
+      // scroll. An instant jump has no animation window for that to land in.
+      el.scrollIntoView({ block: "center", behavior: "auto" });
       setTarget(el);
       setReady(true);
     });
@@ -143,29 +160,58 @@ export function TourOverlay({
   }, [target]);
 
   // Lock page scroll and wire keyboard shortcuts while the tour is on screen.
+  // Mounts once for the overlay's whole lifetime (empty deps) — reading
+  // onNext/onBack/onSkip via refs instead of closing over them directly.
+  //
+  // Deliberately does NOT toggle `body.style.overflow`: the app shell's
+  // header/sidebar are `position: sticky` against the document scroller, and
+  // toggling that scroller's `overflow` around the scrollIntoView call above
+  // leaves the browser's compositor holding a stale painted position for
+  // those sticky layers — getBoundingClientRect reports the correct layout
+  // immediately, but the frame stays visually wrong until something forces a
+  // repaint. Blocking the scroll-producing input events instead (wheel,
+  // touch, and scroll-relevant keys) locks scrolling without ever touching
+  // `overflow`, so there's nothing for the compositor to desync.
   React.useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    function preventScroll(event: Event) {
+      event.preventDefault();
+    }
+    window.addEventListener("wheel", preventScroll, { passive: false });
+    window.addEventListener("touchmove", preventScroll, { passive: false });
+
+    const SCROLL_KEYS = new Set([
+      "ArrowUp",
+      "ArrowDown",
+      "PageUp",
+      "PageDown",
+      "Home",
+      "End",
+      " ",
+    ]);
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         event.preventDefault();
-        onSkip();
+        onSkipRef.current();
       } else if (event.key === "ArrowRight" || event.key === "Enter") {
         event.preventDefault();
-        onNext();
+        onNextRef.current();
       } else if (event.key === "ArrowLeft") {
         event.preventDefault();
-        onBack();
+        onBackRef.current();
+      } else if (SCROLL_KEYS.has(event.key)) {
+        event.preventDefault();
       }
     }
     window.addEventListener("keydown", onKeyDown);
 
     return () => {
-      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("wheel", preventScroll);
+      window.removeEventListener("touchmove", preventScroll);
       window.removeEventListener("keydown", onKeyDown);
     };
-  }, [onNext, onBack, onSkip]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (typeof document === "undefined") return null;
 
@@ -199,15 +245,15 @@ export function TourOverlay({
               animate={{
                 opacity: 1,
                 boxShadow: [
-                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px var(--ring)",
-                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 4px var(--ring)",
-                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px var(--ring)",
+                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px var(--ring), 0 0 20px 2px var(--ring)",
+                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 5px var(--primary), 0 0 28px 6px var(--primary)",
+                  "0 0 0 9999px rgba(0,0,0,0.6), 0 0 0 2px var(--ring), 0 0 20px 2px var(--ring)",
                 ],
               }}
               exit={{ opacity: 0 }}
               transition={{
                 opacity: { duration: 0.2 },
-                boxShadow: { duration: 2, repeat: Infinity, ease: "easeInOut" },
+                boxShadow: { duration: 2.2, repeat: Infinity, ease: "easeInOut" },
               }}
             />
           )

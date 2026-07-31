@@ -10,8 +10,11 @@ import {
 } from "lucide-react";
 import * as React from "react";
 
+import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
 import { TaskActivity } from "@/components/projects/task-activity";
 import { TaskComments } from "@/components/projects/task-comments";
+import { TimeLogPanel } from "@/components/projects/time-log-panel";
+import { TimeLogTimerButton } from "@/components/projects/time-log-timer-button";
 import { SettingsField } from "@/components/settings/settings-section";
 import {
   RichTextEditor,
@@ -22,7 +25,6 @@ import {
   type SelectOption,
 } from "@/components/shared/select-field";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import {
@@ -32,22 +34,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
-import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
-import { TimeLogPanel } from "@/components/projects/time-log-panel";
-import { TimeLogTimerButton } from "@/components/projects/time-log-timer-button";
 import { usePriorities } from "@/lib/api/hooks/use-priorities";
 import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
 import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
-import {
-  useCreateTask,
-  useUpdateTask,
-} from "@/lib/api/hooks/use-tasks";
+import { useCreateTask, useUpdateTask } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
 import type { CreateTaskDto, Task, UpdateMeDto } from "@/lib/api/types";
 import { todayDateInput } from "@/lib/format";
-import { getFullname } from "@/lib/utils";
+import { cn, getFullname } from "@/lib/utils";
 
 /** ISO timestamp -> the `YYYY-MM-DD` an <input type="date"> expects. */
 function toDateInput(value?: string | null): string {
@@ -110,7 +106,6 @@ export function TaskEditor({
   // date that will only fail on save.
   const projectStart = toDateInput(project?.startDate);
   const projectEnd = toDateInput(project?.endDate);
-  const requiresModule = Boolean(project?.projectType?.isPlanAdd);
 
   const isEdit = Boolean(task);
   const pending = create.isPending || update.isPending;
@@ -132,6 +127,14 @@ export function TaskEditor({
   const [assigneeIds, setAssigneeIds] = React.useState<string>(
     task?.assigneeId ?? "",
   );
+  // New work items default to the creator as assignee — still fully
+  // editable before saving. Only fires once (there's no "None" option to
+  // clear back to, per this file's own comment below), and only on create;
+  // `me` loads asynchronously so this can't be a plain useState initializer.
+  React.useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (!isEdit && !assigneeIds && me?.id) setAssigneeIds(me.id);
+  }, [isEdit, me, assigneeIds]);
   const [qaAssigneeId, setQaAssigneeId] = React.useState<string>(
     task?.qaAssigneeId ?? "",
   );
@@ -155,6 +158,31 @@ export function TaskEditor({
   >("details");
   const canLogTime = Boolean(task && me?.id && me.id === task.assigneeId);
 
+  // Captured once from the task being edited, so "Save changes" can stay
+  // disabled until the user actually changes something rather than just
+  // whenever a name is present (every existing task already has one).
+  // `useState` (never written to again) rather than a ref — refs aren't
+  // meant to be read during render, only `.current`-mutated outside it.
+  const [initialSnapshot] = React.useState(() => ({
+    name: task?.name ?? "",
+    description: task?.description ?? "",
+    moduleInstanceId: task?.moduleInstanceId ?? undefined,
+    statusId: task?.statusId ?? defaultStatusId,
+    priorityId: task?.priorityId ?? undefined,
+    assigneeIds: task?.assigneeId ?? "",
+    qaAssigneeId: task?.qaAssigneeId ?? "",
+    etaHours:
+      task?.estimateHours != null
+        ? String(task.estimateHours)
+        : task?.etaHours != null
+          ? String(task.etaHours)
+          : "",
+    completedHours:
+      task?.completedHours != null ? String(task.completedHours) : "",
+    startDate: task ? toDateInput(task.startDate) : todayDateInput(),
+    dueDate: toDateInput(task?.dueDate),
+  }));
+
   const moduleOptions: SelectOption[] = (modules ?? []).map((instance) => ({
     label: instance.module.name,
     value: instance.id,
@@ -176,9 +204,6 @@ export function TaskEditor({
   const selectedStatus = (statuses ?? []).find(
     (status) => status.id === statusId,
   );
-  const selectedPriority = (priorities ?? []).find(
-    (priority) => priority.id === priorityId,
-  );
   const assigneeLabel =
     assigneeOptions.find((option) => option.value === assigneeIds)?.label ??
     "Unassigned";
@@ -187,11 +212,36 @@ export function TaskEditor({
   );
   const taskIdentifier =
     task?.prefix ?? (task ? task.id.slice(0, 8).toUpperCase() : "NEW");
-  const workItemTypeLabel =
-    (workTypes ?? []).find((type) => type.id === workItemTypeId)?.name ??
-    "Task";
-  const headerAccent =
-    selectedStatus?.color ?? selectedPriority?.color ?? "var(--status-info)";
+  const workItemType = (workTypes ?? []).find(
+    (type) => type.id === workItemTypeId,
+  );
+  const workItemTypeLabel = workItemType?.name ?? "Task";
+  // Module only applies to task-category work items on a plan-provisioned
+  // project type — a "Blank" project type has no modules to pick from at
+  // all, and bugs/incidents never carry one.
+  const showModuleField =
+    Boolean(project?.projectType?.isPlanAdd) &&
+    workItemType?.category === "task";
+  const requiresModule = showModuleField;
+  // The title's accent bar reflects the work item's own type (task/bug/
+  // incident), not the project's type or the item's status/priority.
+  const headerAccent = workItemType?.color ?? "var(--status-info)";
+  // Creating is always "dirty" (there's nothing to compare against yet);
+  // editing only counts as dirty once a field diverges from what loaded.
+  const snapshot = initialSnapshot;
+  const isDirty =
+    !isEdit ||
+    name !== snapshot.name ||
+    description !== snapshot.description ||
+    moduleInstanceId !== snapshot.moduleInstanceId ||
+    statusId !== snapshot.statusId ||
+    priorityId !== snapshot.priorityId ||
+    assigneeIds !== snapshot.assigneeIds ||
+    qaAssigneeId !== snapshot.qaAssigneeId ||
+    etaHours !== snapshot.etaHours ||
+    completedHours !== snapshot.completedHours ||
+    startDate !== snapshot.startDate ||
+    dueDate !== snapshot.dueDate;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -260,7 +310,7 @@ export function TaskEditor({
   return (
     <Card className="mx-auto w-full max-w-6xl">
       <form onSubmit={handleSubmit} noValidate>
-        <CardHeader className="sticky top-14 z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm">
+        <CardHeader className="sticky z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm">
           <span
             className="absolute inset-y-0 left-0 w-1.5"
             style={{ backgroundColor: headerAccent }}
@@ -281,7 +331,11 @@ export function TaskEditor({
                     id="task-name"
                     value={name}
                     onChange={(event) => setName(event.target.value)}
-                    placeholder={isEdit ? "Untitled task" : "Task name"}
+                    placeholder={
+                      isEdit
+                        ? `Untitled ${workItemTypeLabel.toLowerCase()}`
+                        : `${workItemTypeLabel} name`
+                    }
                     maxLength={200}
                     autoFocus={!isEdit}
                     disabled={!canSave}
@@ -316,7 +370,10 @@ export function TaskEditor({
                   />
                 )}
                 {canSave && (
-                  <Button type="submit" disabled={pending}>
+                  <Button
+                    type="submit"
+                    disabled={pending || !name.trim() || (isEdit && !isDirty)}
+                  >
                     {pending ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
@@ -332,7 +389,12 @@ export function TaskEditor({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm sm:grid-cols-3">
+            <div
+              className={cn(
+                "grid grid-cols-1 gap-2 rounded-lg bg-muted/40 p-2 text-sm",
+                showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
+              )}
+            >
               <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">
                   Assignee
@@ -348,7 +410,9 @@ export function TaskEditor({
                         {assigneeIds ? initials(assigneeLabel) : "—"}
                       </AvatarFallback>
                     </Avatar>
-                    <span className="truncate font-medium">{assigneeLabel}</span>
+                    <span className="truncate font-medium">
+                      {assigneeLabel}
+                    </span>
                     {canSave && assigneeOptions.length > 0 && (
                       <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
@@ -377,44 +441,48 @@ export function TaskEditor({
                 </DropdownMenu>
               </div>
 
-              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Module
-                </span>
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    disabled={isEdit || !canSave || moduleOptions.length === 0}
-                    className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Change module"
-                  >
-                    <FolderKanban className="h-4 w-4 shrink-0" />
-                    <span className="truncate">
-                      {selectedModule?.label ?? "Select module"}
-                    </span>
-                    {!isEdit && canSave && moduleOptions.length > 0 && (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
-                    )}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-56">
-                    {moduleOptions.map((option) => (
-                      <DropdownMenuItem
-                        key={option.value}
-                        onSelect={() => setModuleInstanceId(option.value)}
-                        className="justify-between"
-                      >
-                        {option.label}
-                        {option.value === moduleInstanceId && (
-                          <Check className="h-4 w-4" />
-                        )}
-                      </DropdownMenuItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+              {showModuleField && (
+                <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Module
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={
+                        isEdit || !canSave || moduleOptions.length === 0
+                      }
+                      className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Change module"
+                    >
+                      <FolderKanban className="h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {selectedModule?.label ?? "Select module"}
+                      </span>
+                      {!isEdit && canSave && moduleOptions.length > 0 && (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-56">
+                      {moduleOptions.map((option) => (
+                        <DropdownMenuItem
+                          key={option.value}
+                          onSelect={() => setModuleInstanceId(option.value)}
+                          className="justify-between"
+                        >
+                          {option.label}
+                          {option.value === moduleInstanceId && (
+                            <Check className="h-4 w-4" />
+                          )}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
 
               <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">
-                  Stage
+                  Status
                 </span>
                 <div className="flex h-8 items-center gap-2">
                   <DropdownMenu>
@@ -458,9 +526,6 @@ export function TaskEditor({
                         ))}
                     </DropdownMenuContent>
                   </DropdownMenu>
-                  {selectedPriority && (
-                    <Badge variant="outline">{selectedPriority.name}</Badge>
-                  )}
                 </div>
               </div>
             </div>

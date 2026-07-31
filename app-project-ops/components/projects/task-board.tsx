@@ -6,34 +6,29 @@ import {
   KeyboardSensor,
   PointerSensor,
   closestCorners,
-  useDraggable,
+  pointerWithin,
+  rectIntersection,
   useDroppable,
   useSensor,
   useSensors,
+  type CollisionDetection,
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { restrictToWindowEdges } from "@dnd-kit/modifiers";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  AlertTriangle,
-  GripVertical,
-  Plus,
-  Search,
-  X,
-} from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
 import * as React from "react";
 
+import { CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
 import {
   SortableTaskCard,
   TaskCardView,
 } from "@/components/projects/task-card";
-import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
-import { CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { QueryState } from "@/components/shared/query-state";
 import { SelectField } from "@/components/shared/select-field";
@@ -49,7 +44,6 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useIncidents, useUpdateIncident } from "@/lib/api/hooks/use-incidents";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { useProjectModules } from "@/lib/api/hooks/use-projects";
 import {
@@ -60,7 +54,6 @@ import {
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import type {
-  Incident,
   Task,
   TaskStatusRef,
   TicketStatus,
@@ -70,6 +63,20 @@ import { taskBoardSyncKey } from "@/lib/tasks/tab-sync";
 import { toast } from "@/lib/toast/toast-store";
 import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
+
+/**
+ * dnd-kit's own recommended multi-container fallback chain: a precise
+ * pointer-in-rect check first, falling back to broader rect intersection,
+ * falling back to nearest-corner — precise near column edges without going
+ * erratic in the sparser cases pointerWithin alone can miss.
+ */
+const collisionDetectionStrategy: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) return pointerCollisions;
+  const rectCollisions = rectIntersection(args);
+  if (rectCollisions.length > 0) return rectCollisions;
+  return closestCorners(args);
+};
 
 /**
  * Column key for tasks with no status. Seed tasks land here when a workspace
@@ -94,12 +101,6 @@ interface BoardColumnDef {
 function columnIdFor(task: Task, known: Set<string>): string {
   if (task.statusId && known.has(task.statusId)) return task.statusId;
   return UNASSIGNED;
-}
-
-function columnIdForIncident(incident: Incident, known: Set<string>): string {
-  return incident.statusId && known.has(incident.statusId)
-    ? incident.statusId
-    : UNASSIGNED;
 }
 
 interface TaskBoardProps {
@@ -140,10 +141,10 @@ export function TaskBoard({
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
   const membersQuery = useWorkspaceMembers(workspaceSlug);
   const reorder = useReorderTasks(workspaceSlug, projectId);
-  const updateIncident = useUpdateIncident(workspaceSlug, projectId);
-  const [activeItem, setActiveItem] = React.useState<
-    { type: "task"; item: Task } | { type: "incident"; item: Incident } | null
-  >(null);
+  const [activeItem, setActiveItem] = React.useState<{
+    type: "task";
+    item: Task;
+  } | null>(null);
   const [search, setSearch] = React.useState("");
   const [moduleIds, setModuleIds] = React.useState<string[]>([]);
   const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
@@ -274,14 +275,13 @@ export function TaskBoard({
   }, [statuses, tasks, knownStatusIds]);
   const router = useRouter();
   const grouped = React.useMemo(() => {
-    const map = new Map<string, { tasks: Task[]; incidents: Incident[] }>();
-    for (const column of columns)
-      map.set(column.id, { tasks: [], incidents: [] });
+    const map = new Map<string, Task[]>();
+    for (const column of columns) map.set(column.id, []);
     for (const task of tasks) {
-      map.get(columnIdFor(task, knownStatusIds))?.tasks.push(task);
+      map.get(columnIdFor(task, knownStatusIds))?.push(task);
     }
 
-    for (const { tasks: columnTasks } of map.values()) {
+    for (const columnTasks of map.values()) {
       columnTasks.sort((a, b) => a.position - b.position);
     }
     return map;
@@ -349,7 +349,7 @@ export function TaskBoard({
     const sourceColumn = columnIdFor(dragged, knownStatusIds);
     if (!target.droppable && targetColumn !== sourceColumn) return;
 
-    const siblings = (grouped.get(targetColumn)?.tasks ?? []).filter(
+    const siblings = (grouped.get(targetColumn) ?? []).filter(
       (task) => task.id !== dragged.id,
     );
 
@@ -379,9 +379,23 @@ export function TaskBoard({
           : {}),
       }));
 
+    // A card that changed columns leaves a position gap behind in its old
+    // column — renumber the remaining siblings there too, so `position`
+    // stays a gapless 0..n-1 sequence in both columns, not just the target.
+    if (movedColumn) {
+      const sourceSiblings = (grouped.get(sourceColumn) ?? []).filter(
+        (task) => task.id !== dragged.id,
+      );
+      sourceSiblings.forEach((task, index) => {
+        if (task.position !== index) {
+          placements.push({ id: task.id, position: index });
+        }
+      });
+    }
+
     if (placements.length === 0) return;
 
-    reorder.mutate(placements, {
+    reorder.reorder(placements, {
       onSuccess: () => {
         // Only announce a real status change. A within-column reorder is
         // self-evident from the card landing where it was dropped, and
@@ -415,7 +429,8 @@ export function TaskBoard({
       >
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetectionStrategy}
+          modifiers={[restrictToWindowEdges]}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveItem(null)}
@@ -522,12 +537,10 @@ export function TaskBoard({
               <BoardColumn
                 key={column.id}
                 column={column}
-                tasks={grouped.get(column.id)?.tasks ?? []}
-                incidents={grouped.get(column.id)?.incidents ?? []}
+                tasks={grouped.get(column.id) ?? []}
                 moduleNames={moduleNames}
                 dragDisabled={filtersActive}
                 canCreate={canCreate && column.droppable}
-                canUpdate={canUpdate}
                 workspaceSlug={workspaceSlug}
                 projectId={projectId}
                 onCreate={(workType) =>
@@ -540,11 +553,6 @@ export function TaskBoard({
                 onOpenTask={(task) =>
                   openTaskTab(
                     `/${workspaceSlug}/projects/${projectId}/work-items/${task.id}`,
-                  )
-                }
-                onOpenIncident={(incident) =>
-                  openTaskTab(
-                    `/${workspaceSlug}/projects/${projectId}/incidents/${incident.id}`,
                   )
                 }
               />
@@ -563,8 +571,6 @@ export function TaskBoard({
                 }
                 overlay
               />
-            ) : activeItem?.type === "incident" ? (
-              <IncidentCard incident={activeItem.item} overlay />
             ) : null}
           </DragOverlay>
         </DndContext>
@@ -573,112 +579,24 @@ export function TaskBoard({
   );
 }
 
-function IncidentCard({
-  incident,
-  onOpen,
-  disabled = false,
-  overlay = false,
-  copyUrl,
-}: {
-  incident: Incident;
-  onOpen?: () => void;
-  disabled?: boolean;
-  overlay?: boolean;
-  copyUrl?: string;
-}) {
-  const {
-    attributes,
-    listeners,
-    setActivatorNodeRef,
-    setNodeRef,
-    transform,
-    isDragging,
-  } = useDraggable({
-    id: incident.id,
-    data: { type: "incident" },
-    disabled: overlay || disabled,
-  });
-
-  return (
-    <article
-      ref={setNodeRef}
-      style={{ transform: CSS.Translate.toString(transform) }}
-      className={cn(
-        "group/title relative rounded-md border border-status-error/30 bg-card p-3 shadow-sm",
-        isDragging && "opacity-40",
-        overlay && "rotate-2 shadow-lg",
-      )}
-    >
-      <button
-        type="button"
-        onClick={onOpen}
-        className="block w-full rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <div className="mb-2 flex items-center gap-1.5 text-xs font-medium text-status-error">
-          <AlertTriangle className="h-3.5 w-3.5" />
-          Incident
-        </div>
-        <p className="pr-4 text-sm font-medium leading-snug">
-          {incident.title}
-        </p>
-        <span className="mt-2 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className="h-2 w-2 rounded-full"
-            style={{
-              backgroundColor: incident.status.color ?? "var(--status-error)",
-            }}
-          />
-          {incident.status.name}
-        </span>
-      </button>
-      {copyUrl && !overlay && (
-        <CopyWorkItemLink
-          prefix="Incident"
-          title={incident.title}
-          url={copyUrl}
-          className="absolute right-7 top-8"
-        />
-      )}
-      {!overlay && !disabled && (
-        <button
-          ref={setActivatorNodeRef}
-          type="button"
-          aria-label={`Move ${incident.title}`}
-          className="absolute right-1 top-2 rounded p-0.5 text-muted-foreground/40 hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          {...attributes}
-          {...listeners}
-        >
-          <GripVertical className="h-3.5 w-3.5" />
-        </button>
-      )}
-    </article>
-  );
-}
-
 function BoardColumn({
   column,
   tasks,
-  incidents,
   moduleNames,
   dragDisabled,
   canCreate,
-  canUpdate,
   onCreate,
   onOpenTask,
-  onOpenIncident,
   workspaceSlug,
   projectId,
 }: {
   column: BoardColumnDef;
   tasks: Task[];
-  incidents: Incident[];
   moduleNames: Map<string, string>;
   dragDisabled: boolean;
   canCreate: boolean;
-  canUpdate: boolean;
   onCreate: (workType: WorkType) => void;
   onOpenTask: (task: Task) => void;
-  onOpenIncident: (incident: Incident) => void;
   workspaceSlug: string;
   projectId: string;
 }) {
@@ -704,7 +622,7 @@ function BoardColumn({
           />
           <h3 className="truncate text-sm font-medium">{column.name}</h3>
           <span className="shrink-0 rounded-full bg-background px-1.5 text-xs text-muted-foreground">
-            {tasks.length + incidents.length}
+            {tasks.length}
           </span>
         </div>
         {canCreate && (
@@ -726,10 +644,7 @@ function BoardColumn({
       </header>
 
       <SortableContext
-        items={[
-          ...tasks.map((task) => task.id),
-          ...incidents.map((incident) => incident.id),
-        ]}
+        items={tasks.map((task) => task.id)}
         strategy={verticalListSortingStrategy}
       >
         <div
@@ -754,17 +669,7 @@ function BoardColumn({
             />
           ))}
 
-          {incidents.map((incident) => (
-            <IncidentCard
-              key={incident.id}
-              incident={incident}
-              onOpen={() => onOpenIncident(incident)}
-              disabled={dragDisabled || !canUpdate}
-              copyUrl={`/${workspaceSlug}/projects/${projectId}/incidents/${incident.id}`}
-            />
-          ))}
-
-          {tasks.length + incidents.length === 0 && (
+          {tasks.length === 0 && (
             <p className="px-2 py-6 text-center text-xs text-muted-foreground">
               {column.droppable ? "Drop tasks here" : "Nothing here"}
             </p>

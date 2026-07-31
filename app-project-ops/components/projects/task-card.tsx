@@ -41,10 +41,17 @@ export function TaskCardView({
   return (
     <div
       className={cn(
-        "flex flex-col gap-2 rounded-md border border-border bg-card p-3 text-left shadow-sm transition-colors",
+        "relative flex flex-col gap-2 overflow-hidden rounded-md border border-border bg-card p-3 pl-4 text-left shadow-sm transition-colors",
         overlay && "rotate-2 shadow-lg",
       )}
     >
+      <span
+        className="absolute inset-y-0 left-0 w-1"
+        style={{
+          backgroundColor: task.workItemType?.color ?? "var(--status-neutral)",
+        }}
+        aria-hidden
+      />
       {task.prefix && (
         <span className="font-mono text-[11px] uppercase tracking-wide text-muted-foreground">
           {task.prefix}

@@ -8,6 +8,7 @@ import { Layers, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { ColorPicker, isValidHex } from "@/components/shared/color-picker";
 import { FormPanel } from "@/components/shared/form-panel";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -144,8 +145,15 @@ function ProjectTypeCard({
     <Card className="flex flex-col gap-3 p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted">
-            <Layers className="h-4 w-4 text-muted-foreground" />
+          <span
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-muted"
+            style={
+              projectType.color
+                ? { backgroundColor: `${projectType.color}1a`, color: projectType.color }
+                : undefined
+            }
+          >
+            <Layers className="h-4 w-4 text-muted-foreground" style={projectType.color ? { color: projectType.color } : undefined} />
           </span>
           <div className="flex min-w-0 flex-col gap-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -238,6 +246,7 @@ function ProjectTypeDialog({
   const [description, setDescription] = React.useState(
     projectType?.description ?? "",
   );
+  const [color, setColor] = React.useState(projectType?.color ?? "#6366f1");
   const [isPlanAdd, setIsPlanAdd] = React.useState(
     projectType?.isPlanAdd ?? true,
   );
@@ -251,10 +260,14 @@ function ProjectTypeDialog({
     if (trimmed.length < 2) {
       return setError("Project type name must be at least 2 characters.");
     }
+    if (color && !isValidHex(color)) {
+      return setError("Color must be a hex value like #6366f1.");
+    }
 
     const dto = {
       name: trimmed,
       description: description.trim(),
+      color,
       isPlanAdd,
     };
 
@@ -315,6 +328,21 @@ function ProjectTypeDialog({
           maxLength={500}
           rows={3}
         />
+      </SettingsField>
+
+      <SettingsField
+        label="Color"
+        htmlFor="type-color"
+        hint="Sets the title accent bar on this type's work items."
+      >
+        <div>
+          <ColorPicker
+            id="type-color"
+            aria-label="Project type color"
+            value={color}
+            onChange={setColor}
+          />
+        </div>
       </SettingsField>
 
       <div className="flex items-start justify-between gap-4 rounded-md border border-border p-3">

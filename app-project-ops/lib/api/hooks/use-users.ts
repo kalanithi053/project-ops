@@ -43,3 +43,17 @@ export function useCompleteProductTour() {
     },
   });
 }
+
+/** PATCH /users/me/project-overview-tour — mark the project-overview tour as seen. */
+export function useCompleteProjectOverviewTour() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiFetch<Me>("/users/me/project-overview-tour", { method: "PATCH" }),
+    onSuccess: (me) => {
+      queryClient.setQueryData<Me | undefined>(["me"], (prev) =>
+        prev ? { ...prev, ...me } : prev,
+      );
+    },
+  });
+}

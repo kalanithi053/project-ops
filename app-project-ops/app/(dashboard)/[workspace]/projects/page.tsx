@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { Eye, FolderKanban, ListChecks, Loader2, Plus } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
@@ -298,6 +298,7 @@ function NewProjectPanel({
   workspaceSlug: string;
   onDone: () => void;
 }) {
+  const router = useRouter();
   const createProject = useCreateProject(workspaceSlug);
   const { data: typeData } = useProjectTypes(workspaceSlug);
   const [name, setName] = React.useState("");
@@ -359,8 +360,15 @@ function NewProjectPanel({
       planId: requiresPlan ? planIds : undefined,
     };
 
-    // API errors surface via the global error toast; success closes the panel.
-    createProject.mutate(dto, { onSuccess: () => onDone() });
+    // API errors surface via the global error toast; success closes the panel
+    // and drops the user straight into the new project's overview — which is
+    // also where the project-overview tour offers itself for the first time.
+    createProject.mutate(dto, {
+      onSuccess: (project) => {
+        onDone();
+        if (project?.id) router.push(`/${workspaceSlug}/projects/${project.id}`);
+      },
+    });
   }
 
   return (

@@ -1,8 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
-import { ArrowLeft, ArrowRight, CheckCheck, X } from "lucide-react";
+import { motion, type Variants } from "framer-motion";
+import { ArrowLeft, ArrowRight, CheckCheck, Sparkles, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -60,6 +60,31 @@ function computePosition(rect: DOMRect, placement: TourStep["placement"] = "bott
   };
 }
 
+/** Card-level entrance (scale/opacity) also drives the staggered reveal of its children below. */
+function cardVariants(centered: boolean): Variants {
+  return {
+    hidden: { opacity: 0, scale: 0.96, y: centered ? 8 : 0 },
+    visible: {
+      opacity: 1,
+      scale: 1,
+      y: 0,
+      transition: {
+        type: "spring",
+        stiffness: 340,
+        damping: 30,
+        staggerChildren: 0.06,
+        delayChildren: 0.08,
+      },
+    },
+    exit: { opacity: 0, scale: 0.96, transition: { duration: 0.15 } },
+  };
+}
+
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 6 },
+  visible: { opacity: 1, y: 0, transition: { duration: 0.25, ease: "easeOut" } },
+};
+
 export function TourStepCard({
   step,
   stepIndex,
@@ -73,54 +98,83 @@ export function TourStepCard({
   const isLast = stepIndex === stepCount - 1;
   const centered = !rect;
   const position = rect ? computePosition(rect, step.placement) : null;
+  const Icon = step.icon ?? Sparkles;
+  const progressPct = ((stepIndex + 1) / stepCount) * 100;
 
   return (
     <motion.div
       role="dialog"
       aria-modal="true"
       aria-label={step.title}
-      initial={{ opacity: 0, scale: 0.96, y: centered ? 8 : 0 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96, transition: { duration: 0.15 } }}
-      transition={{ type: "spring", stiffness: 340, damping: 30 }}
+      initial="hidden"
+      animate="visible"
+      exit="exit"
+      variants={cardVariants(centered)}
       style={
         centered
           ? undefined
           : { position: "fixed", top: position!.top, left: position!.left, width: CARD_WIDTH }
       }
       className={cn(
-        "pointer-events-auto relative z-[210] w-80 rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-lg",
+        "pointer-events-auto relative z-[210] w-80 overflow-hidden rounded-lg border border-border bg-popover p-5 text-popover-foreground shadow-lg",
         centered && "fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2",
       )}
     >
+      {centered && (
+        <div
+          className="pointer-events-none absolute inset-0"
+          style={{
+            background:
+              "radial-gradient(circle at 22% 12%, color-mix(in oklch, var(--primary) 22%, transparent), transparent 65%)",
+          }}
+          aria-hidden
+        />
+      )}
+
       <button
         type="button"
         onClick={onSkip}
         aria-label="Skip tour"
-        className="absolute right-3 top-3 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="absolute right-3 top-3 z-10 rounded-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
         <X className="h-4 w-4" />
       </button>
 
-      <div className="mb-3 flex items-center gap-1.5">
-        {Array.from({ length: stepCount }).map((_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1 flex-1 rounded-full transition-colors",
-              i <= stepIndex ? "bg-primary" : "bg-muted",
-            )}
+      <motion.div variants={itemVariants} className="relative mb-4 flex items-center gap-3">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <motion.span
+            className="flex items-center justify-center"
+            animate={
+              isLast || step.id === "welcome" || step.id === "project-welcome"
+                ? { rotate: [0, 10, -10, 0], scale: [1, 1.1, 1] }
+                : undefined
+            }
+            transition={{ duration: 1.8, repeat: Infinity, ease: "easeInOut" }}
+          >
+            <Icon className="h-5 w-5" />
+          </motion.span>
+        </span>
+        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+          <motion.div
+            className="h-full rounded-full bg-gradient-to-r from-primary to-ring"
+            initial={false}
+            animate={{ width: `${progressPct}%` }}
+            transition={{ type: "spring", stiffness: 220, damping: 28 }}
           />
-        ))}
-      </div>
+        </div>
+      </motion.div>
 
-      <p className="mb-1 text-xs font-medium text-muted-foreground">
+      <motion.p variants={itemVariants} className="relative mb-1 text-xs font-medium text-muted-foreground">
         Step {stepIndex + 1} of {stepCount}
-      </p>
-      <h3 className="mb-1.5 pr-4 text-base font-semibold text-foreground">{step.title}</h3>
-      <p className="mb-5 text-sm text-muted-foreground">{step.body}</p>
+      </motion.p>
+      <motion.h3 variants={itemVariants} className="relative mb-1.5 pr-4 text-base font-semibold text-foreground">
+        {step.title}
+      </motion.h3>
+      <motion.p variants={itemVariants} className="relative mb-5 text-sm text-muted-foreground">
+        {step.body}
+      </motion.p>
 
-      <div className="flex items-center justify-between gap-2">
+      <motion.div variants={itemVariants} className="relative flex items-center justify-between gap-2">
         {!isLast ? (
           <Button variant="ghost" size="sm" onClick={onSkip} className="text-muted-foreground">
             Skip tour
@@ -149,7 +203,7 @@ export function TourStepCard({
             )}
           </Button>
         </div>
-      </div>
+      </motion.div>
     </motion.div>
   );
 }

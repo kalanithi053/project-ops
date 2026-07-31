@@ -1,5 +1,7 @@
 "use client";
 
+import * as React from "react";
+
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
@@ -169,6 +171,28 @@ export interface TaskPlacement {
   status?: TaskStatusRef | null;
 }
 
+/** Applies a batch of position/status placements to a cached task list. */
+function applyPlacements(
+  current: Task[] | undefined,
+  placements: TaskPlacement[],
+): Task[] {
+  const byId = new Map(placements.map((p) => [p.id, p]));
+  return (current ?? []).map((task) => {
+    const placement = byId.get(task.id);
+    if (!placement) return task;
+    return {
+      ...task,
+      position: placement.position,
+      ...(placement.statusId
+        ? {
+            statusId: placement.statusId,
+            status: placement.status ?? task.status,
+          }
+        : {}),
+    };
+  });
+}
+
 /**
  * Commits a drag on the board: moves a task between columns and/or reorders
  * it, renumbering the affected column so positions stay monotonic.
@@ -180,15 +204,22 @@ export interface TaskPlacement {
  * requests.
  *
  * Drag is also the one interaction that can't wait for the server: without an
- * optimistic write the card visibly snaps back until the PATCH resolves. So
- * the cache is rewritten immediately and rolled back on failure. No success
- * toast — the card landing *is* the feedback.
+ * optimistic write the card visibly snaps back until the PATCH resolves. The
+ * write has to happen through the returned `reorder()` function rather than
+ * TanStack Query's own `onMutate` lifecycle — `mutate()` reaches `onMutate`
+ * through at least one internal `await`, so by the time it runs, dnd-kit has
+ * already reset the dragged card's transform against the *old* order (a
+ * visible "snap back to start, then jump to the real spot" glitch). Writing
+ * the cache before `mutate()` is even called closes that gap: the reorder and
+ * `setActiveItem(null)` land in the same synchronous event-handler tick, so
+ * React batches them into one commit.
  */
 export function useReorderTasks(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
   const key = tasksKey(workspaceSlug, projectId);
+  const previousRef = React.useRef<Task[] | undefined>(undefined);
 
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: (placements: TaskPlacement[]) =>
       Promise.all(
         placements.map(({ id, position, statusId }) =>
@@ -200,41 +231,39 @@ export function useReorderTasks(workspaceSlug: string, projectId: string) {
         ),
       ),
 
-    onMutate: async (placements) => {
-      // Stop any in-flight refetch from clobbering the optimistic write.
-      await queryClient.cancelQueries({ queryKey: key });
-      const previous = queryClient.getQueryData<Task[]>(key);
-      const byId = new Map(placements.map((p) => [p.id, p]));
+    onError: () => {
+      if (previousRef.current) queryClient.setQueryData(key, previousRef.current);
+    },
 
+    // Each PATCH response already carries the authoritative position/status
+    // for the row it updated — merge those in directly instead of
+    // invalidating, which would fire a whole extra list refetch after every
+    // single drag for no reason.
+    onSuccess: (updated) => {
+      const byId = new Map(updated.map((task) => [task.id, task]));
       queryClient.setQueryData<Task[]>(key, (current) =>
-        (current ?? []).map((task) => {
-          const placement = byId.get(task.id);
-          if (!placement) return task;
-          return {
-            ...task,
-            position: placement.position,
-            ...(placement.statusId
-              ? {
-                  statusId: placement.statusId,
-                  status: placement.status ?? task.status,
-                }
-              : {}),
-          };
-        }),
+        (current ?? []).map((task) => byId.get(task.id) ?? task),
       );
-
-      return { previous };
-    },
-
-    onError: (_error, _placements, context) => {
-      if (context?.previous) queryClient.setQueryData(key, context.previous);
-    },
-
-    // Reconcile either way — the PATCH response has no nested objects.
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: key });
     },
   });
+
+  return {
+    ...mutation,
+    reorder: (
+      placements: TaskPlacement[],
+      options?: { onSuccess?: () => void },
+    ) => {
+      previousRef.current = queryClient.getQueryData<Task[]>(key);
+      queryClient.setQueryData<Task[]>(key, (current) =>
+        applyPlacements(current, placements),
+      );
+      // Fire-and-forget: aborts any in-flight refetch so it can't clobber the
+      // write above with stale data: the promise's own resolution isn't
+      // needed before proceeding.
+      queryClient.cancelQueries({ queryKey: key });
+      mutation.mutate(placements, options);
+    },
+  };
 }
 
 /** POST /projects/:projectId/work-items/:taskId/notify — email the assignee. */

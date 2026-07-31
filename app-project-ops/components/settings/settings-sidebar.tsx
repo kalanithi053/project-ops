@@ -34,7 +34,7 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
       className={cn(
         "flex gap-1 overflow-x-auto border-b border-border pb-0",
         "md:w-52 md:shrink-0 md:flex-col md:overflow-visible md:border-r md:border-b-0 md:pb-0",
-        "md:sticky md:top-20 md:self-start",
+        "md:sticky md:top-6 md:self-start",
       )}
     >
       {visibleNav.map((item) => {

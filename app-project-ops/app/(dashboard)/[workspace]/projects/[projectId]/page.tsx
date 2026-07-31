@@ -117,7 +117,9 @@ export default function ProjectOverviewPage() {
       skeleton={<CardsSkeleton count={2} />}
     >
       <div className="flex flex-col gap-6">
-        <StatsGrid stats={stats} />
+        <div data-tour="project-stats">
+          <StatsGrid stats={stats} />
+        </div>
 
         {planNames.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
@@ -133,7 +135,7 @@ export default function ProjectOverviewPage() {
         )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
+          <Card className="lg:col-span-2" data-tour="project-module-capacity">
             <CardHeader>
               <CardTitle>Module capacity</CardTitle>
               <CardDescription>
@@ -192,7 +194,7 @@ export default function ProjectOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-tour="project-work-by-status">
             <CardHeader>
               <CardTitle>Work by status</CardTitle>
               <CardDescription>Where the work currently sits.</CardDescription>
@@ -228,7 +230,7 @@ export default function ProjectOverviewPage() {
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-          <Card>
+          <Card data-tour="project-priority-by-status">
             <CardHeader>
               <CardTitle>Priority by status</CardTitle>
               <CardDescription>
@@ -269,7 +271,7 @@ export default function ProjectOverviewPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card data-tour="project-team-workload">
             <CardHeader>
               <CardTitle>Team workload</CardTitle>
               <CardDescription>
@@ -311,7 +313,7 @@ export default function ProjectOverviewPage() {
           </Card>
         </div>
 
-        <Card>
+        <Card data-tour="project-recent-activity">
           <CardHeader>
             <CardTitle>Recent activity</CardTitle>
             <CardDescription>

@@ -1,34 +1,26 @@
+import { renderEmailLayout } from './email-layout.template';
+
 export function otpEmailTemplate(code: string, ttlMinutes: number): string {
-  return `
-<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
+  const bodyHtml = `
+    <p style="margin:0 0 16px 0;font-size:14px;color:#374151;line-height:1.6;">
+      Use the code below to sign in. It expires in ${ttlMinutes} minute${ttlMinutes === 1 ? '' : 's'}.
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
       <tr>
-        <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
-            <tr>
-              <td style="padding:32px 40px 16px 40px;">
-                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectOps</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 40px 24px 40px;">
-                <p style="margin:0 0 16px 0;font-size:14px;color:#374151;">
-                  Use the code below to sign in. This code expires in ${ttlMinutes} minutes.
-                </p>
-                <div style="margin:0 0 16px 0;padding:16px 24px;background-color:#f4f5f7;border-radius:6px;text-align:center;">
-                  <span style="font-size:32px;font-weight:bold;letter-spacing:8px;color:#111827;">${code}</span>
-                </div>
-                <p style="margin:0;font-size:13px;color:#6b7280;">
-                  If you didn't request this code, you can safely ignore this email.
-                </p>
-              </td>
-            </tr>
-          </table>
+        <td style="padding:18px 0;background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;text-align:center;">
+          <span style="font-size:30px;font-weight:700;letter-spacing:10px;color:#111827;">${code}</span>
         </td>
       </tr>
     </table>
-  </body>
-</html>`;
+    <p style="margin:16px 0 0 0;font-size:13px;color:#6b7280;">
+      Didn't request this code? You can safely ignore this email.
+    </p>`;
+
+  return renderEmailLayout({
+    accentColor: '#4f46e5',
+    badgeGlyph: '🔒',
+    eyebrow: 'Sign-in code',
+    title: 'Verify it&rsquo;s you',
+    bodyHtml,
+  });
 }

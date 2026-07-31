@@ -26,7 +26,7 @@ export function AppShell({ user, notifications, children }: AppShellProps) {
 
   return (
     <TooltipProvider>
-      <div className="flex min-h-screen bg-background">
+      <div className="flex h-screen overflow-hidden bg-background">
         <AppSidebar collapsed={collapsed} permissions={user.permissions} />
         <MobileSidebar
           open={mobileOpen}
@@ -41,7 +41,13 @@ export function AppShell({ user, notifications, children }: AppShellProps) {
             onOpenMobileNav={() => setMobileOpen(true)}
             onToggleSidebar={toggleCollapsed}
           />
-          <main className="flex-1">
+          {/* The only scrolling region in the shell — header/sidebar live
+              outside it entirely so they never need to reposition on
+              scroll (a document-level `position: sticky` header/sidebar
+              can desync from a programmatic scroll like the product
+              tour's `scrollIntoView`, painting stale until a real
+              user-gesture scroll forces a repaint). */}
+          <main className="flex-1 overflow-y-auto">
             <ErrorBoundary>{children}</ErrorBoundary>
           </main>
         </div>

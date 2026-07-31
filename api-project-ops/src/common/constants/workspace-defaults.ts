@@ -157,17 +157,17 @@ export const DEFAULT_WORK_TYPES: Array<{
 }> = [
   {
     name: 'Task',
-    color: '#e4f468ff',
+    color: '#fde68a',
     category: 'task',
   },
   {
     name: 'Incident',
-    color: '#fd0909',
+    color: '#3b82f6',
     category: 'incident',
   },
   {
     name: 'Bug',
-    color: '#f5ee13',
+    color: '#f43f5e',
     category: 'bug',
   },
 ];

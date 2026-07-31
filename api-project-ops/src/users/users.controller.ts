@@ -44,4 +44,12 @@ export class UsersController {
   completeTour(@CurrentUser('sub') userId: string) {
     return this.users.completeProductTour(userId);
   }
+
+  @Patch('me/project-overview-tour')
+  @ApiOperation({
+    summary: 'Mark the project-overview tour as completed for the current user',
+  })
+  completeProjectOverviewTour(@CurrentUser('sub') userId: string) {
+    return this.users.completeProjectOverviewTour(userId);
+  }
 }

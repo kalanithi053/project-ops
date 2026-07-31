@@ -25,6 +25,8 @@ export class UsersService {
         createdAt: true,
         productTourCompletedAt: true,
         isTourDone: true,
+        projectOverviewTourCompletedAt: true,
+        isProjectOverviewTourDone: true,
       },
     });
     if (!user) {
@@ -54,6 +56,18 @@ export class UsersService {
       where: { id: userId },
       data: { productTourCompletedAt: new Date(), isTourDone: true },
       select: { id: true, productTourCompletedAt: true },
+    });
+  }
+
+  /** Marks the project-overview tour as seen (finished or skipped). */
+  async completeProjectOverviewTour(userId: string) {
+    return this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        projectOverviewTourCompletedAt: new Date(),
+        isProjectOverviewTourDone: true,
+      },
+      select: { id: true, projectOverviewTourCompletedAt: true },
     });
   }
 }

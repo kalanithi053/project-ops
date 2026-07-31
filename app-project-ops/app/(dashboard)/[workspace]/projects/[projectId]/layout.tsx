@@ -83,7 +83,7 @@ export default function ProjectLayout({
 
       <nav
         aria-label="Project sections"
-        className="sticky top-14 z-30 -mx-4 flex gap-1 border-b border-border bg-background px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
+        className="sticky top-0 z-30 -mx-4 flex gap-1 border-b border-border bg-background px-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8"
       >
         {TABS.map((tab) => {
           const href = tab.segment ? `${base}/${tab.segment}` : base;

@@ -4,8 +4,11 @@ import * as nodemailer from 'nodemailer';
 import { commentMentionEmailTemplate } from './templates/comment-mention-email.template';
 import { otpEmailTemplate } from './templates/otp-email.template';
 import { projectInviteEmailTemplate } from './templates/project-invite-email.template';
-import { workItemNotificationEmailTemplate } from './templates/work-item-notification-email.template';
-import { workspaceInviteEmailTemplate } from './templates/workspace-invite-email.template';
+import {
+  WorkItemNotificationAction,
+  WorkItemStatusRef,
+  workItemNotificationEmailTemplate,
+} from './templates/work-item-notification-email.template';
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -95,13 +98,16 @@ export class MailService implements OnModuleInit {
   async sendWorkItemNotificationEmail(
     to: string,
     params: {
-      action: 'created' | 'updated' | 'reminder' | 'assigned';
+      action: WorkItemNotificationAction;
       entityType: string;
       workItemName: string;
       projectName: string;
       actionUrl: string;
       /** Who reassigned it — only used for the 'assigned' action. */
       actorName?: string;
+      /** Only used for the 'status_changed' action. */
+      fromStatus?: WorkItemStatusRef;
+      toStatus?: WorkItemStatusRef;
     },
   ): Promise<void> {
     const subject =
@@ -109,7 +115,9 @@ export class MailService implements OnModuleInit {
         ? `[${params.projectName}] Reminder: ${params.workItemName}`
         : params.action === 'assigned'
           ? `[${params.projectName}] You've been assigned ${params.workItemName}`
-          : `[${params.projectName}] ${params.workItemName} ${params.action}`;
+          : params.action === 'status_changed'
+            ? `[${params.projectName}] ${params.workItemName} → ${params.toStatus?.name ?? 'status changed'}`
+            : `[${params.projectName}] ${params.workItemName} ${params.action}`;
     await this.transporter.sendMail({
       from: this.from,
       to,

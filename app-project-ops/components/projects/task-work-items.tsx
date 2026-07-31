@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   BellRing,
+  Bug,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
@@ -21,7 +22,10 @@ import * as React from "react";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
-import { CATEGORY_ICON, CreateWorkItemMenu } from "@/components/projects/create-work-item-menu";
+import {
+  CATEGORY_ICON,
+  CreateWorkItemMenu,
+} from "@/components/projects/create-work-item-menu";
 import { TaskBoard } from "@/components/projects/task-board";
 import { QueryState } from "@/components/shared/query-state";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
@@ -61,10 +65,22 @@ import {
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { useMe } from "@/lib/api/hooks/use-users";
+import { useWorkTypes } from "@/lib/api/hooks/use-work-types";
 import { formatDate } from "@/lib/format";
-import type { Task, WorkType } from "@/lib/api/types";
+import type { Task, WorkType, WorkTypeCategory } from "@/lib/api/types";
 
 type WorkItemsView = "list" | "kanban";
+
+/** Top-level work-item-type filter, shown as buttons next to the header. */
+const TYPE_CATEGORY_TABS: Array<{
+  value: WorkTypeCategory;
+  label: string;
+  icon: typeof ListChecks;
+}> = [
+  { value: "task", label: "Task", icon: ListChecks },
+  { value: "bug", label: "Bug", icon: Bug },
+  { value: "incident", label: "Incident", icon: AlertTriangle },
+];
 
 const OPTIONAL_COLUMNS = [
   "type",
@@ -85,12 +101,6 @@ const COLUMN_LABELS: Record<OptionalColumn, string> = {
 const BUG_KEY = "__bug__";
 const INCIDENT_KEY = "__incident__";
 const NO_MODULE_KEY = "__none__";
-/** Category-based bucket names, shown ahead of the per-module groups. */
-const CATEGORY_GROUP_NAMES: Record<string, string> = {
-  [BUG_KEY]: "Bugs",
-  [INCIDENT_KEY]: "Incidents",
-  [NO_MODULE_KEY]: "No module",
-};
 
 /** A module's group-header label, e.g. "Professional - Workflows". */
 interface ModuleLabel {
@@ -101,7 +111,8 @@ interface ModuleLabel {
 /**
  * One collapsible List-view section per module, labelled "{Plan} - {Module}"
  * — plus leading "Bugs"/"Incidents" buckets (those categories never carry a
- * module) and a trailing catch-all for anything else without one.
+ * module) and a trailing catch-all, by work-item-type name, for anything
+ * else without one (e.g. plain tasks on a non-plan-provisioned project type).
  */
 interface ModuleGroup {
   key: string;
@@ -115,15 +126,20 @@ function groupByModule(
   moduleOrder: string[],
 ): ModuleGroup[] {
   const buckets = new Map<string, ModuleGroup["rows"]>();
+  const bucketNames = new Map<string, string>();
+
   for (const row of rows) {
     const category = row.item.workItemType?.category;
-    const key =
-      row.item.moduleInstanceId ??
-      (category === "bug"
+    const key = row.item.moduleInstanceId
+      ? row.item.moduleInstanceId
+      : category === "bug"
         ? BUG_KEY
         : category === "incident"
           ? INCIDENT_KEY
-          : NO_MODULE_KEY);
+          : (row.item.workItemType?.name ?? NO_MODULE_KEY);
+    if (!bucketNames.has(key)) {
+      bucketNames.set(key, row.item.workItemType?.name ?? "No module");
+    }
     const bucket = buckets.get(key);
     if (bucket) bucket.push(row);
     else buckets.set(key, [row]);
@@ -135,42 +151,30 @@ function groupByModule(
     ...moduleOrder.filter((id) => buckets.has(id)),
     ...Array.from(buckets.keys()).filter(
       (key) =>
-        key !== BUG_KEY &&
-        key !== INCIDENT_KEY &&
-        key !== NO_MODULE_KEY &&
-        !moduleOrder.includes(key),
+        key !== BUG_KEY && key !== INCIDENT_KEY && !moduleOrder.includes(key),
     ),
-    ...(buckets.has(NO_MODULE_KEY) ? [NO_MODULE_KEY] : []),
   ];
 
   return orderedKeys.map((key) => {
-    const categoryName = CATEGORY_GROUP_NAMES[key];
-    if (categoryName) {
-      return { key, name: categoryName, rows: buckets.get(key) ?? [] };
-    }
     const label = moduleLabels.get(key);
     const name = label
       ? label.planName
         ? `${label.planName} - ${label.name}`
         : label.name
-      : "—";
+      : (bucketNames.get(key) ?? "—");
     return { key, name, rows: buckets.get(key) ?? [] };
   });
 }
 const PAGE_SIZE = 20;
-const WORK_TYPE_OPTIONS = [
-  { value: "task", label: "Task" },
-  { value: "incident", label: "Incident" },
-];
 
 function WorkItemTypeIcon({
   category,
   color,
-  title
+  title,
 }: {
   category?: string;
   color?: string | null;
-  title?:string
+  title?: string;
 }) {
   const Icon =
     CATEGORY_ICON[category as keyof typeof CATEGORY_ICON] ?? ListChecks;
@@ -202,7 +206,7 @@ export function TaskWorkItems({
   canUpdate: boolean;
 }) {
   const router = useRouter();
-  const { data: me } = useMe();
+  const { data: me, isLoading: meLoading } = useMe();
   const viewStorageKey = `project-ops:work-items-view:${workspaceSlug}:${projectId}`;
   const [view, setView] = React.useState<WorkItemsView>(() => {
     if (typeof window === "undefined") return "list";
@@ -210,6 +214,8 @@ export function TaskWorkItems({
       ? "kanban"
       : "list";
   });
+  const [typeCategory, setTypeCategory] =
+    React.useState<WorkTypeCategory>("task");
   const [kanbanFiltersOpen, setKanbanFiltersOpen] = React.useState(false);
   const [listFiltersOpen, setListFiltersOpen] = React.useState(false);
   React.useEffect(() => {
@@ -224,15 +230,29 @@ export function TaskWorkItems({
       `/${workspaceSlug}/projects/${projectId}/work-items/new?${params.toString()}`,
     );
   }
-  const [assigneeIds, setAssigneeIds] = React.useState<string[]>([]);
+  // Draft value for the (closed) Filters sheet's Assignee field — seeded to
+  // "@Me" when `me` is already cached. The default that actually drives the
+  // tasks fetch is derived separately below, straight from `me`.
+  const [assigneeIds, setAssigneeIds] = React.useState<string[]>(() =>
+    me?.id ? [me.id] : [],
+  );
   const [keyword, setKeyword] = React.useState("");
   const [workTypes, setWorkTypes] = React.useState<string[]>([]);
   const [moduleIds, setModuleIds] = React.useState<string[]>([]);
   const [statusIds, setStatusIds] = React.useState<string[]>([]);
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
-  const [appliedFilters, setAppliedFilters] = React.useState<TaskListFilters>(
-    {},
+  // `null` means "no explicit filters applied yet" — the default (assigned to
+  // me) is derived straight from `me` on every render instead of being
+  // copied into state via an effect, so the very first tasks fetch already
+  // carries the right assigneeIds instead of firing once without it and once
+  // more a render later once an effect catches up.
+  const [manualFilters, setManualFilters] = React.useState<TaskListFilters | null>(
+    null,
+  );
+  const appliedFilters = React.useMemo<TaskListFilters>(
+    () => manualFilters ?? (me?.id ? { assigneeIds: [me.id] } : {}),
+    [manualFilters, me],
   );
   const [appliedWorkTypes, setAppliedWorkTypes] = React.useState<string[]>([]);
   const [page, setPage] = React.useState(1);
@@ -274,13 +294,14 @@ export function TaskWorkItems({
       return [...OPTIONAL_COLUMNS];
     },
   );
-  const initializedAssignee = React.useRef(false);
+  // Cosmetic only — pre-fills the (closed) Filters sheet's Assignee field
+  // with "@Me" once `me` resolves. Doesn't touch `appliedFilters`/the tasks
+  // fetch, which derive the same default reactively above.
+  const assigneeDraftSeeded = React.useRef(Boolean(me?.id));
   React.useEffect(() => {
-    const id = me?.id;
-    if (!initializedAssignee.current && id) {
-      setAssigneeIds([id]);
-      setAppliedFilters((current) => ({ ...current, assigneeIds: [id] }));
-      initializedAssignee.current = true;
+    if (!assigneeDraftSeeded.current && me?.id) {
+      setAssigneeIds([me.id]);
+      assigneeDraftSeeded.current = true;
     }
   }, [me?.id]);
   React.useEffect(() => {
@@ -292,9 +313,17 @@ export function TaskWorkItems({
     } catch {}
   }, [columnStorageKey, visibleColumns]);
   const statusesQuery = useTicketStatuses(workspaceSlug);
+  const workTypesQuery = useWorkTypes(workspaceSlug);
+  const workTypeOptions = React.useMemo(
+    () =>
+      (workTypesQuery.data ?? [])
+        .filter((workType) => workType.isActive)
+        .map((workType) => ({ value: workType.id, label: workType.name })),
+    [workTypesQuery.data],
+  );
   function applyFilters() {
     setAppliedWorkTypes(workTypes);
-    setAppliedFilters({
+    setManualFilters({
       ...(assigneeIds.length ? { assigneeIds } : {}),
       ...(keyword.trim() ? { search: keyword.trim() } : {}),
       ...(moduleIds.length ? { moduleInstanceIds: moduleIds } : {}),
@@ -303,7 +332,18 @@ export function TaskWorkItems({
       ...(statusIds.length ? { statusIds } : {}),
     });
   }
-  const tasksQuery = useTasks(workspaceSlug, projectId, appliedFilters);
+  const taskListFilters = React.useMemo(
+    () => ({ ...appliedFilters, category: typeCategory }),
+    [appliedFilters, typeCategory],
+  );
+  const tasksQuery = useTasks(workspaceSlug, projectId, taskListFilters, {
+    // Wait for `me` so the default (assigned-to-me) filter is already known
+    // on the first request — otherwise it'd fetch once unfiltered, then
+    // again a moment later once `me` resolves. Also skip entirely while the
+    // Kanban view is active: TaskBoard runs its own independent tasks query,
+    // so this one (feeding the List view) would just be a wasted fetch.
+    enabled: view === "list" && Boolean(me?.id),
+  });
   const notifyTask = useNotifyTaskAssignee(workspaceSlug, projectId);
   const [nudgingId, setNudgingId] = React.useState<string | null>(null);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
@@ -380,24 +420,23 @@ export function TaskWorkItems({
     // status, in which case their pick wins.
     const hideRemoved = !appliedFilters.statusIds?.length;
     return [
-      ...(appliedWorkTypes.length === 0 || appliedWorkTypes.includes("task")
-        ? tasks
-            .filter(
-              (task) => !hideRemoved || task.status?.category !== "removed",
-            )
-            .filter(
-              (task) =>
-                !query ||
-                `${task.prefix ?? ""} ${task.name}`
-                  .toLowerCase()
-                  .includes(query),
-            )
-            .map((task) => ({
-              type: "Task" as const,
-              item: task,
-              date: task.updatedAt ?? task.createdAt ?? "",
-            }))
-        : []),
+      ...tasks
+        .filter(
+          (task) =>
+            appliedWorkTypes.length === 0 ||
+            appliedWorkTypes.includes(task.workItemTypeId ?? ""),
+        )
+        .filter((task) => !hideRemoved || task.status?.category !== "removed")
+        .filter(
+          (task) =>
+            !query ||
+            `${task.prefix ?? ""} ${task.name}`.toLowerCase().includes(query),
+        )
+        .map((task) => ({
+          type: "Task" as const,
+          item: task,
+          date: task.updatedAt ?? task.createdAt ?? "",
+        })),
     ].sort((left, right) => right.date.localeCompare(left.date));
   }, [appliedFilters.search, appliedFilters.statusIds, appliedWorkTypes, tasks]);
   const columnVisible = (column: OptionalColumn) =>
@@ -428,18 +467,39 @@ export function TaskWorkItems({
     setEndDate("");
     setAssigneeIds(me?.id ? [me.id] : []);
     setAppliedWorkTypes([]);
-    setAppliedFilters(me?.id ? { assigneeIds: [me.id] } : {});
+    setManualFilters(null);
   }
   return (
     <section className="flex flex-col gap-4">
       <div className="sticky top-9 z-20 -mx-4 flex flex-col gap-4 bg-background px-4  sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Work items</h2>
-            <p className="text-sm text-muted-foreground">
-              Your assigned tasks and incidents.
-            </p>
+          <div className="flex items-center gap-4">
+            <div>
+              <h2 className="text-lg font-semibold">Work items</h2>
+              <p className="text-sm text-muted-foreground">
+                Your assigned tasks and incidents.
+              </p>
+            </div>
+            <div className="inline-flex items-center gap-0.5 rounded-md border border-border p-0.5">
+              {TYPE_CATEGORY_TABS.map(({ value, label, icon: Icon }) => (
+                <Button
+                  key={value}
+                  type="button"
+                  variant={typeCategory === value ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-pressed={typeCategory === value}
+                  onClick={() => {
+                    setTypeCategory(value);
+                    setPage(1);
+                  }}
+                >
+                  <Icon className="h-4 w-4" />
+                  {label}
+                </Button>
+              ))}
+            </div>
           </div>
+
           <div className="flex items-center gap-2">
             {view === "kanban" && (
               <Button
@@ -500,16 +560,7 @@ export function TaskWorkItems({
                           placeholder="Filter by keyword"
                         />
                       </label>
-                      <label className="flex flex-col gap-1.5 text-sm font-medium">
-                        Type
-                        <MultiSelectField
-                          aria-label="Filter by work-item type"
-                          options={WORK_TYPE_OPTIONS}
-                          values={workTypes}
-                          onValuesChange={setWorkTypes}
-                          placeholder="All types"
-                        />
-                      </label>
+
                       <label className="flex flex-col gap-1.5 text-sm font-medium">
                         Assignees
                         <MultiSelectField
@@ -627,6 +678,7 @@ export function TaskWorkItems({
           projectId={projectId}
           canCreate={canCreate}
           canUpdate={canUpdate}
+          typeCategory={typeCategory}
           onCreate={(statusId, workType) => goToCreate(workType, statusId)}
           filtersOpen={kanbanFiltersOpen}
           onFiltersOpenChange={setKanbanFiltersOpen}
@@ -634,18 +686,29 @@ export function TaskWorkItems({
       ) : (
         <QueryState
           isLoading={
+            meLoading ||
             tasksQuery.isLoading ||
             modulesQuery.isLoading ||
-            statusesQuery.isLoading
+            statusesQuery.isLoading ||
+            workTypesQuery.isLoading
           }
           isError={
-            tasksQuery.isError || modulesQuery.isError || statusesQuery.isError
+            tasksQuery.isError ||
+            modulesQuery.isError ||
+            statusesQuery.isError ||
+            workTypesQuery.isError
           }
-          error={tasksQuery.error ?? modulesQuery.error ?? statusesQuery.error}
+          error={
+            tasksQuery.error ??
+            modulesQuery.error ??
+            statusesQuery.error ??
+            workTypesQuery.error
+          }
           onRetry={() => {
             tasksQuery.refetch();
             modulesQuery.refetch();
             statusesQuery.refetch();
+            workTypesQuery.refetch();
           }}
           skeleton={<TableSkeleton columns={6} rows={6} />}
         >
@@ -777,7 +840,9 @@ export function TaskWorkItems({
                                     }}
                                     aria-hidden
                                   />
-                                  <span>{item.status?.name ?? "No status"}</span>
+                                  <span>
+                                    {item.status?.name ?? "No status"}
+                                  </span>
                                 </span>
                               </TableCell>
                             )}
@@ -790,7 +855,9 @@ export function TaskWorkItems({
                             )}
                             {columnVisible("endDate") && (
                               <TableCell>
-                                {type === "Task" ? formatDate(item.dueDate) : "—"}
+                                {type === "Task"
+                                  ? formatDate(item.dueDate)
+                                  : "—"}
                               </TableCell>
                             )}
                             <TableCell className="text-right">
@@ -798,7 +865,9 @@ export function TaskWorkItems({
                                 type="button"
                                 variant="ghost"
                                 size="sm"
-                                disabled={!item.assigneeId || nudgingId === item.id}
+                                disabled={
+                                  !item.assigneeId || nudgingId === item.id
+                                }
                                 title={
                                   item.assigneeId
                                     ? "Email the assignee"

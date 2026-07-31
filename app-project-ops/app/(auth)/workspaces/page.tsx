@@ -69,11 +69,11 @@ function WorkspacesHub() {
 
   useEffect(() => {
     // `replace`, not `push` — otherwise Back lands here and forwards again.
-    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/dashboard`);
+    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/projects`);
   }, [autoOpenSlug, router]);
 
   function openWorkspace(workspace: Workspace) {
-    router.push(`/${workspace.slug}/dashboard`);
+    router.push(`/${workspace.slug}/projects`);
   }
 
   function setAsDefault(workspace: Workspace) {
@@ -113,7 +113,7 @@ function WorkspacesHub() {
         </div>
 
         <WorkspaceForm
-          onCreated={(slug) => router.push(`/${slug}/dashboard`)}
+          onCreated={(slug) => router.push(`/${slug}/projects`)}
         />
       </div>
     );

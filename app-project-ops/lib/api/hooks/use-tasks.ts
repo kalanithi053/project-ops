@@ -13,6 +13,7 @@ import type {
   TaskActivityEntry,
   TaskStatusRef,
   UpdateTaskDto,
+  WorkTypeCategory,
 } from "@/lib/api/types";
 
 /** Query key for a project's task list. */
@@ -30,6 +31,8 @@ export interface TaskListFilters {
   assigneeIds?: string[];
   startDate?: string;
   endDate?: string;
+  /** Work items with no WorkType are treated server-side as "task". */
+  category?: WorkTypeCategory;
 }
 
 /**
@@ -44,6 +47,7 @@ export function useTasks(
   workspaceSlug: string,
   projectId: string,
   filters: TaskListFilters = {},
+  options: { enabled?: boolean } = {},
 ) {
   const token = useAuthStore((state) => state.accessToken);
   const params = new URLSearchParams();
@@ -62,7 +66,8 @@ export function useTasks(
         `/projects/${projectId}/work-items${queryString ? `?${queryString}` : ""}`,
         { workspaceSlug },
       ),
-    enabled: Boolean(token && workspaceSlug && projectId),
+    enabled:
+      Boolean(token && workspaceSlug && projectId) && (options.enabled ?? true),
   });
 }
 

@@ -58,6 +58,7 @@ import type {
   TaskStatusRef,
   TicketStatus,
   WorkType,
+  WorkTypeCategory,
 } from "@/lib/api/types";
 import { taskBoardSyncKey } from "@/lib/tasks/tab-sync";
 import { toast } from "@/lib/toast/toast-store";
@@ -108,6 +109,8 @@ interface TaskBoardProps {
   projectId: string;
   canCreate: boolean;
   canUpdate: boolean;
+  /** Only tasks whose WorkType category matches are shown on the board. */
+  typeCategory: WorkTypeCategory;
   /**
    * Called after a work type is chosen from a column's "+" dropdown —
    * lets the caller navigate to the create page with both the type and
@@ -133,6 +136,7 @@ export function TaskBoard({
   projectId,
   canCreate,
   canUpdate,
+  typeCategory,
   onCreate,
   filtersOpen,
   onFiltersOpenChange,
@@ -155,7 +159,11 @@ export function TaskBoard({
     {},
   );
 
-  const tasksQuery = useTasks(workspaceSlug, projectId, appliedFilters);
+  const taskListFilters = React.useMemo(
+    () => ({ ...appliedFilters, category: typeCategory }),
+    [appliedFilters, typeCategory],
+  );
+  const tasksQuery = useTasks(workspaceSlug, projectId, taskListFilters);
 
   const refetchTasks = tasksQuery.refetch;
   const refetchModules = modulesQuery.refetch;

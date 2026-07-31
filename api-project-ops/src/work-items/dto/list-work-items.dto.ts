@@ -1,6 +1,13 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { WorkTypeCategory } from '@prisma/client';
 import { Transform } from 'class-transformer';
-import { IsDateString, IsOptional, IsString, IsUUID } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
 
 /** Normalizes a repeated query key (`?x=a&x=b`) or a single occurrence into an array. */
 function toArray({ value }: { value: unknown }): string[] {
@@ -57,4 +64,10 @@ export class ListWorkItemsQueryDto {
   @IsOptional()
   @IsDateString()
   endDate?: string;
+
+  /** Work items with no WorkType are treated as "task" (mirrors work-items.service.ts). */
+  @ApiPropertyOptional({ enum: WorkTypeCategory })
+  @IsOptional()
+  @IsEnum(WorkTypeCategory)
+  category?: WorkTypeCategory;
 }

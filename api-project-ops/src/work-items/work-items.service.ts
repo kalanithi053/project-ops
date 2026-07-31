@@ -94,6 +94,18 @@ export class WorkItemsService {
     if (filters.endDate) {
       and.push({ dueDate: { lte: new Date(filters.endDate) } });
     }
+    if (filters.category) {
+      and.push(
+        filters.category === DEFAULT_ENTITY_TYPE
+          ? {
+              OR: [
+                { workItemTypeId: null },
+                { workItemType: { category: filters.category } },
+              ],
+            }
+          : { workItemType: { category: filters.category } },
+      );
+    }
 
     return this.prisma.workItem.findMany({
       where: { projectId, ...(and.length ? { AND: and } : {}) },

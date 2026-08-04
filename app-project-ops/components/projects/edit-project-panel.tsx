@@ -5,6 +5,8 @@ import { Loader2 } from "lucide-react";
 
 import {
   RichTextEditor,
+  finalizeStagedImages,
+  hasRichTextContent,
   richTextToPlainText,
   sanitizeRichText,
 } from "@/components/shared/rich-text-editor";
@@ -18,6 +20,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import { uploadProjectAttachment } from "@/lib/api/hooks/use-project-attachments";
 import { useUpdateProject } from "@/lib/api/hooks/use-projects";
 import { todayDateInput } from "@/lib/format";
 import type { Project } from "@/lib/api/types";
@@ -48,8 +51,19 @@ export function EditProjectPanel({
     project.endDate?.slice(0, 10) ?? "",
   );
   const [error, setError] = React.useState<string | null>(null);
+  const [isUploadingImages, setIsUploadingImages] = React.useState(false);
+  // Images inserted via the editor's image button, staged locally (a blob
+  // preview only) until "Save changes" — see RichTextEditor's `onStageImage`.
+  const stagedImagesRef = React.useRef<Map<string, File>>(new Map());
+  const stagingIdCounter = React.useRef(0);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  function stageImage(file: File): string {
+    const stagingId = `staging-${stagingIdCounter.current++}`;
+    stagedImagesRef.current.set(stagingId, file);
+    return stagingId;
+  }
+
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
 
@@ -61,6 +75,9 @@ export function EditProjectPanel({
     }
 
     const sanitizedDescription = sanitizeRichText(description).trim();
+    // Finalizing only touches img tag attributes, never visible text, so the
+    // length check is valid pre-upload — no point uploading images just to
+    // reject the save afterward.
     const descriptionText = richTextToPlainText(sanitizedDescription).trim();
     if (descriptionText.length > MAX_DESCRIPTION_CHARS) {
       return setError(
@@ -68,14 +85,51 @@ export function EditProjectPanel({
       );
     }
 
+    let finalDescription = sanitizedDescription;
+    if (stagedImagesRef.current.size > 0) {
+      setIsUploadingImages(true);
+      const idMap = new Map<string, string>();
+      // Best-effort: an image that fails to upload is dropped from the
+      // description (by finalizeStagedImages) rather than holding up the rest.
+      await Promise.all(
+        Array.from(stagedImagesRef.current.entries()).map(
+          async ([stagingId, file]) => {
+            try {
+              // isInline: false — a description's image is a real project
+              // asset, so (unlike a comment's) it also shows in Attachments.
+              const attachment = await uploadProjectAttachment(
+                workspaceSlug,
+                project.id,
+                file,
+                undefined,
+                false,
+              );
+              idMap.set(stagingId, attachment.id);
+            } catch {
+              // Dropped below by finalizeStagedImages.
+            }
+          },
+        ),
+      );
+      finalDescription = finalizeStagedImages(sanitizedDescription, idMap);
+      setIsUploadingImages(false);
+    }
+
     updateProject.mutate(
       {
         name: name.trim(),
         startDate,
         endDate,
-        description: descriptionText ? sanitizedDescription : undefined,
+        description: hasRichTextContent(finalDescription)
+          ? finalDescription
+          : undefined,
       },
-      { onSuccess: () => onOpenChange(false) },
+      {
+        onSuccess: () => {
+          stagedImagesRef.current.clear();
+          onOpenChange(false);
+        },
+      },
     );
   }
 
@@ -116,7 +170,12 @@ export function EditProjectPanel({
                 onChange={setDescription}
                 placeholder="Add a description…"
                 aria-label="Description"
+                disabled={isUploadingImages}
                 imageContext={{ workspaceSlug, projectId: project.id }}
+                onStageImage={stageImage}
+                onRemoveStagedImage={(stagingId) =>
+                  stagedImagesRef.current.delete(stagingId)
+                }
               />
             </div>
 
@@ -153,9 +212,9 @@ export function EditProjectPanel({
             <Button
               type="submit"
               className="w-full"
-              disabled={updateProject.isPending}
+              disabled={updateProject.isPending || isUploadingImages}
             >
-              {updateProject.isPending ? (
+              {updateProject.isPending || isUploadingImages ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Saving…

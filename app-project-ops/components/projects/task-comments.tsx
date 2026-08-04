@@ -3,8 +3,11 @@
 import { Loader2, MessageSquare, PencilLine, Send, Trash2 } from "lucide-react";
 import * as React from "react";
 
+import { RichTextContent } from "@/components/shared/rich-text-content";
 import {
   RichTextEditor,
+  finalizeStagedImages,
+  hasRichTextContent,
   sanitizeRichText,
 } from "@/components/shared/rich-text-editor";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -14,6 +17,7 @@ import {
   PopoverAnchor,
   PopoverContent,
 } from "@/components/ui/popover";
+import { uploadProjectAttachment } from "@/lib/api/hooks/use-project-attachments";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { useMe } from "@/lib/api/hooks/use-users";
 import {
@@ -24,6 +28,42 @@ import {
 } from "@/lib/api/hooks/use-work-item-comments";
 import { formatDateTime } from "@/lib/format";
 import { getFullname } from "@/lib/utils";
+
+/**
+ * Uploads every staged image (see RichTextEditor's `onStageImage`) and
+ * splices the real attachment ids into the sanitized body — called right
+ * before posting/saving, not at insert time, so images render immediately
+ * from a local preview but only hit S3/the DB once the comment is actually
+ * saved. Comment images are inline (excluded from the Attachments list) and
+ * scoped to this work item.
+ */
+async function finalizeCommentImages(
+  workspaceSlug: string,
+  projectId: string,
+  workItemId: string,
+  sanitizedBody: string,
+  staged: Map<string, File>,
+): Promise<string> {
+  if (staged.size === 0) return sanitizedBody;
+  const idMap = new Map<string, string>();
+  await Promise.all(
+    Array.from(staged.entries()).map(async ([stagingId, file]) => {
+      try {
+        const attachment = await uploadProjectAttachment(
+          workspaceSlug,
+          projectId,
+          file,
+          workItemId,
+          true,
+        );
+        idMap.set(stagingId, attachment.id);
+      } catch {
+        // Dropped below by finalizeStagedImages.
+      }
+    }),
+  );
+  return finalizeStagedImages(sanitizedBody, idMap);
+}
 
 function initials(value: string): string {
   return value
@@ -121,6 +161,28 @@ export function TaskComments({
   const [deletingCommentId, setDeletingCommentId] = React.useState<
     string | null
   >(null);
+  const [isPosting, setIsPosting] = React.useState(false);
+  const [isSavingEdit, setIsSavingEdit] = React.useState(false);
+  // Images inserted via the editor's image button, staged locally (a blob
+  // preview only) until the comment is actually posted/saved — see
+  // RichTextEditor's `onStageImage`. The edit map is cleared whenever a
+  // different comment starts editing, so nothing leaks across comments.
+  const stagedImagesRef = React.useRef<Map<string, File>>(new Map());
+  const stagingIdCounter = React.useRef(0);
+  const editStagedImagesRef = React.useRef<Map<string, File>>(new Map());
+  const editStagingIdCounter = React.useRef(0);
+
+  function stageImage(file: File): string {
+    const stagingId = `staging-${stagingIdCounter.current++}`;
+    stagedImagesRef.current.set(stagingId, file);
+    return stagingId;
+  }
+
+  function stageEditImage(file: File): string {
+    const stagingId = `staging-edit-${editStagingIdCounter.current++}`;
+    editStagedImagesRef.current.set(stagingId, file);
+    return stagingId;
+  }
 
   const mentionableMembers = (workspaceMembers ?? [])
     .filter((member) => member.status !== "removed")
@@ -202,24 +264,39 @@ export function TaskComments({
     setEditMentionOpen(false);
   }
 
-  function submit() {
+  async function submit() {
     const sanitizedBody = sanitizeRichText(body).trim();
+    // Checks for text OR an embedded image — plain text alone is blind to
+    // an image-only comment (an <img> has no text content).
+    if (!hasRichTextContent(sanitizedBody)) {
+      return setError("Write a comment before posting.");
+    }
     const textBody = plainText(sanitizedBody);
-    if (!textBody) return setError("Write a comment before posting.");
     if (textBody.length > 4000) {
       return setError("Comments must be 4,000 characters or fewer.");
     }
 
     setError(null);
+    setIsPosting(true);
+    const finalBody = await finalizeCommentImages(
+      workspaceSlug,
+      projectId,
+      itemId,
+      sanitizedBody,
+      stagedImagesRef.current,
+    );
+    setIsPosting(false);
+
     createComment.mutate(
       {
-        body: sanitizedBody,
+        body: finalBody,
         ...(mentionedEmails.length ? { mentions: mentionedEmails } : {}),
       },
       {
         onSuccess: () => {
           setBody("");
           setMentionedEmails([]);
+          stagedImagesRef.current.clear();
         },
       },
     );
@@ -230,6 +307,9 @@ export function TaskComments({
     body: string;
     mentions: Array<{ user: { email: string } }>;
   }) {
+    // A previous editing session's not-yet-saved images shouldn't carry
+    // over to whichever comment is edited next.
+    editStagedImagesRef.current.clear();
     setEditingCommentId(comment.id);
     setEditingBody(comment.body);
     setEditingMentionedEmails(
@@ -239,15 +319,25 @@ export function TaskComments({
     setDeletingCommentId(null);
   }
 
-  function saveEdit(comment: { id: string }) {
+  async function saveEdit(comment: { id: string }) {
     const sanitizedBody = sanitizeRichText(editingBody).trim();
-    if (!plainText(sanitizedBody)) return;
+    if (!hasRichTextContent(sanitizedBody)) return;
+
+    setIsSavingEdit(true);
+    const finalBody = await finalizeCommentImages(
+      workspaceSlug,
+      projectId,
+      itemId,
+      sanitizedBody,
+      editStagedImagesRef.current,
+    );
+    setIsSavingEdit(false);
 
     updateComment.mutate(
       {
         id: comment.id,
         dto: {
-          body: sanitizedBody,
+          body: finalBody,
           mentions: editingMentionedEmails,
         },
       },
@@ -256,6 +346,7 @@ export function TaskComments({
           setEditingCommentId(null);
           setEditingMentionedEmails([]);
           setEditMentionOpen(false);
+          editStagedImagesRef.current.clear();
         },
       },
     );
@@ -295,8 +386,13 @@ export function TaskComments({
                   onChange={changeBody}
                   placeholder="Add a comment…"
                   aria-label="Comment"
-                  disabled={createComment.isPending}
+                  disabled={createComment.isPending || isPosting}
                   className="[&_[role=textbox]]:min-h-24"
+                  imageContext={{ workspaceSlug, projectId }}
+                  onStageImage={stageImage}
+                  onRemoveStagedImage={(stagingId) =>
+                    stagedImagesRef.current.delete(stagingId)
+                  }
                   onAtSign={(event) => {
                     event.preventDefault();
                     setMentionOpen(true);
@@ -340,10 +436,10 @@ export function TaskComments({
             <Button
               type="button"
               size="sm"
-              disabled={createComment.isPending || !body.trim()}
+              disabled={createComment.isPending || isPosting || !body.trim()}
               onClick={submit}
             >
-              {createComment.isPending ? (
+              {createComment.isPending || isPosting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
                 <Send className="h-4 w-4" />
@@ -442,8 +538,13 @@ export function TaskComments({
                               onChange={changeEditingBody}
                               placeholder="Edit comment…"
                               aria-label="Edit comment"
-                              disabled={updateComment.isPending}
+                              disabled={updateComment.isPending || isSavingEdit}
                               className="[&_[role=textbox]]:min-h-24"
+                              imageContext={{ workspaceSlug, projectId }}
+                              onStageImage={stageEditImage}
+                              onRemoveStagedImage={(stagingId) =>
+                                editStagedImagesRef.current.delete(stagingId)
+                              }
                               onAtSign={(event) => {
                                 event.preventDefault();
                                 setEditMentionOpen(true);
@@ -487,11 +588,12 @@ export function TaskComments({
                           type="button"
                           variant="ghost"
                           size="sm"
-                          disabled={updateComment.isPending}
+                          disabled={updateComment.isPending || isSavingEdit}
                           onClick={() => {
                             setEditingCommentId(null);
                             setEditingMentionedEmails([]);
                             setEditMentionOpen(false);
+                            editStagedImagesRef.current.clear();
                           }}
                         >
                           Cancel
@@ -500,11 +602,13 @@ export function TaskComments({
                           type="button"
                           size="sm"
                           disabled={
-                            updateComment.isPending || !plainText(editingBody)
+                            updateComment.isPending ||
+                            isSavingEdit ||
+                            !hasRichTextContent(editingBody)
                           }
                           onClick={() => saveEdit(comment)}
                         >
-                          {updateComment.isPending && (
+                          {(updateComment.isPending || isSavingEdit) && (
                             <Loader2 className="h-4 w-4 animate-spin" />
                           )}
                           Save comment
@@ -545,14 +649,12 @@ export function TaskComments({
                       </span>
                     </div>
                   ) : (
-                    <>
-                      <div
-                        className="mt-1 whitespace-pre-wrap text-sm leading-5 [&_[data-mention-email]]:font-semibold [&_[data-mention-email]]:text-primary [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
-                        dangerouslySetInnerHTML={{
-                          __html: sanitizeRichText(comment.body),
-                        }}
-                      />
-                    </>
+                    <RichTextContent
+                      html={comment.body}
+                      workspaceSlug={workspaceSlug}
+                      projectId={projectId}
+                      className="mt-1 whitespace-pre-wrap [&_[data-mention-email]]:font-semibold [&_[data-mention-email]]:text-primary"
+                    />
                   )}
                 </div>
               </li>

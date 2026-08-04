@@ -6,6 +6,10 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import {
+  AttachmentsService,
+  extractAttachmentIds,
+} from '../attachments/attachments.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
@@ -68,6 +72,7 @@ export class WorkItemsService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly mail: MailService,
+    private readonly attachments: AttachmentsService,
   ) {}
 
   async list(
@@ -301,7 +306,12 @@ export class WorkItemsService {
           workItemTypeId: dto.workItemTypeId ?? undefined,
           detail:
             dto.description !== undefined
-              ? { update: { description: dto.description } }
+              ? {
+                  upsert: {
+                    create: { description: dto.description },
+                    update: { description: dto.description },
+                  },
+                }
               : undefined,
           moduleInstanceId: dto.moduleInstanceId ?? undefined,
           startDate: dto.startDate ? new Date(dto.startDate) : undefined,
@@ -336,6 +346,19 @@ export class WorkItemsService {
     });
 
     const result = this.withDescription(updated);
+
+    // An image the user removed from the description (kept in the DB row
+    // and S3 as an inline attachment) is otherwise orphaned forever — clean
+    // up whatever attachment ids dropped out between the old and new text.
+    if (dto.description !== undefined) {
+      const oldIds = extractAttachmentIds(workItem.description);
+      const newIds = extractAttachmentIds(dto.description);
+      const droppedIds = Array.from(oldIds).filter((id) => !newIds.has(id));
+      if (droppedIds.length > 0) {
+        await this.attachments.deleteByIds(workspaceId, droppedIds);
+      }
+    }
+
     if (assigneeChanged && result.assignee) {
       await this.notifyReassignment(project, result, userId, entityType);
     }

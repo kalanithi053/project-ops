@@ -6,6 +6,7 @@ import {
 import { Test, TestingModule } from '@nestjs/testing';
 import { CommentsService } from './comments.service';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -30,6 +31,7 @@ describe('CommentsService', () => {
   };
   let activityLog: { log: jest.Mock };
   let mail: { sendCommentMentionEmail: jest.Mock; appUrl: jest.Mock };
+  let attachments: { deleteByIds: jest.Mock };
 
   const AUTHOR = {
     id: 'user-author',
@@ -71,6 +73,7 @@ describe('CommentsService', () => {
       sendCommentMentionEmail: jest.fn().mockResolvedValue(undefined),
       appUrl: jest.fn((path: string) => `https://app.acme.com${path}`),
     };
+    attachments = { deleteByIds: jest.fn().mockResolvedValue(undefined) };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -78,6 +81,7 @@ describe('CommentsService', () => {
         { provide: PrismaService, useValue: prisma },
         { provide: ActivityLogService, useValue: activityLog },
         { provide: MailService, useValue: mail },
+        { provide: AttachmentsService, useValue: attachments },
       ],
     }).compile();
 

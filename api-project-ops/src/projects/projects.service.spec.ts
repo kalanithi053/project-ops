@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { ProjectsService } from './projects.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -64,10 +65,13 @@ describe('ProjectsService', () => {
     // tx.<model> calls inside the service land on the same jest.fn()s.
     prisma.$transaction.mockImplementation((cb: any) => cb(prisma));
 
+    const attachments = { deleteByIds: jest.fn().mockResolvedValue(undefined) };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ProjectsService,
         { provide: PrismaService, useValue: prisma },
+        { provide: AttachmentsService, useValue: attachments },
       ],
     }).compile();
 

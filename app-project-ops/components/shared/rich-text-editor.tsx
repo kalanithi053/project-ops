@@ -7,7 +7,6 @@ import {
   Italic,
   ListChecks,
   ListOrdered,
-  Loader2,
   Underline,
 } from "lucide-react";
 
@@ -16,8 +15,8 @@ import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast/toast-store";
 import {
   MAX_ATTACHMENT_BYTES,
+  deleteProjectAttachment,
   formatBytes,
-  uploadProjectAttachment,
   useResolveAttachmentImages,
 } from "@/lib/api/hooks/use-project-attachments";
 
@@ -52,12 +51,12 @@ export function sanitizeRichText(value: string): string {
 
   // An <img> only has legitimate meaning here when it references an
   // uploaded attachment (data-attachment-id) or a not-yet-uploaded image
-  // staged during project creation (data-staging-id, see
-  // `finalizeStagedImages`) — otherwise it's a bare externally-sourced image
-  // (e.g. a pasted <img src="https://evil.example/track.gif">), which would
-  // fire on every render as a tracking pixel. Drop those outright rather
-  // than merely stripping attributes, on every rich-text surface (task
-  // descriptions/comments included), not just project descriptions.
+  // staged this session (data-staging-id, see `finalizeStagedImages`) —
+  // otherwise it's a bare externally-sourced image (e.g. a pasted
+  // <img src="https://evil.example/track.gif">), which would fire on every
+  // render as a tracking pixel. Drop those outright rather than merely
+  // stripping attributes, on every rich-text surface (descriptions and
+  // comments alike).
   documentValue.body.querySelectorAll("img").forEach((element) => {
     if (
       !element.getAttribute("data-attachment-id") &&
@@ -99,12 +98,12 @@ export function sanitizeRichText(value: string): string {
 }
 
 /**
- * Replaces staged image placeholders (`data-staging-id`, inserted before a
- * project exists to upload against — see the `onStageImage` prop below)
- * with their real `data-attachment-id` per `idMap`, once the files have
- * actually been uploaded. The blob `src` is dropped too, since it's only
- * valid for this browser tab/session and gets re-resolved from the
- * attachment id on next render anyway.
+ * Replaces staged image placeholders (`data-staging-id` — see the
+ * `onStageImage` prop below) with their real `data-attachment-id` per
+ * `idMap`, once the caller has actually uploaded the files (at its own
+ * post/save time). The blob `src` is dropped too, since it's only valid for
+ * this browser tab/session and gets re-resolved from the attachment id on
+ * next render anyway.
  *
  * Any staged image absent from `idMap` — its upload failed, or this is
  * being used to strip every staged image before any upload has happened —
@@ -131,6 +130,17 @@ export function finalizeStagedImages(
   return documentValue.body.innerHTML;
 }
 
+/** Every `<img>` value for the given attribute (`data-attachment-id` or `data-staging-id`) in an HTML string. */
+function extractImageIds(html: string, attribute: string): Set<string> {
+  const documentValue = new DOMParser().parseFromString(html, "text/html");
+  const ids = new Set<string>();
+  documentValue.body.querySelectorAll(`img[${attribute}]`).forEach((element) => {
+    const id = element.getAttribute(attribute);
+    if (id) ids.add(id);
+  });
+  return ids;
+}
+
 /** Plain-text extract of rich text HTML — for length checks and compact previews. */
 export function richTextToPlainText(value: string): string {
   // Block boundaries (paragraphs, list items) carry no whitespace of their
@@ -143,6 +153,15 @@ export function richTextToPlainText(value: string): string {
   return text.replace(/\s+/g, " ").trim();
 }
 
+/**
+ * Whether rich text HTML has anything worth saving — real text, or at least
+ * one embedded image (`richTextToPlainText` alone is blind to an
+ * image-only description/comment, since an `<img>` has no text content).
+ */
+export function hasRichTextContent(value: string): boolean {
+  return Boolean(richTextToPlainText(value)) || /<img[\s>]/i.test(value);
+}
+
 interface RichTextEditorProps {
   id: string;
   value: string;
@@ -153,22 +172,30 @@ interface RichTextEditorProps {
   className?: string;
   onAtSign?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   /**
-   * Enables the image toolbar button and clipboard image paste, uploading
-   * immediately and resolving any existing `data-attachment-id` images to
-   * viewable blob URLs. Use this when a project already exists to attach
-   * the image to.
+   * Needed whenever the value may contain a *previously saved* image
+   * (`data-attachment-id`, from an earlier post/save) — resolves it to a
+   * viewable blob URL, and lets deleting it from the text immediately clean
+   * up its attachment (S3 + row) rather than waiting for the caller's next
+   * save. Does not affect newly *inserted* images — see `onStageImage`.
    */
   imageContext?: { workspaceSlug: string; projectId: string };
   /**
-   * Alternative to `imageContext` for surfaces where no project id exists
-   * yet to upload against (the New Project form, before creation). Called
-   * with the picked/pasted file; returns a caller-chosen staging id that's
-   * embedded as `data-staging-id` so the image can be finalized with
-   * `finalizeStagedImages` once the file is actually uploaded post-creation.
-   * Provide at most one of `imageContext`/`onStageImage` — `imageContext`
-   * wins if both are somehow given.
+   * Enables the image toolbar button and clipboard image paste. A picked or
+   * pasted file is never uploaded here — it's rendered immediately from a
+   * local blob preview, tagged `data-staging-id`, and handed to this
+   * callback (which returns a caller-chosen staging id embedded in that
+   * tag). The caller uploads the real file — and splices the real
+   * `data-attachment-id` in with `finalizeStagedImages` — at its own
+   * post/save time, not before. Pair with `onRemoveStagedImage`.
    */
   onStageImage?: (file: File) => string;
+  /**
+   * Called when a staged image (see `onStageImage`) is deleted from the
+   * text before the caller ever uploaded it — lets the caller drop it from
+   * whatever it's tracking so it isn't wastefully uploaded (and left
+   * orphaned) at the next save.
+   */
+  onRemoveStagedImage?: (stagingId: string) => void;
 }
 
 /** Escapes a string for safe embedding inside a double-quoted HTML attribute. */
@@ -194,6 +221,7 @@ export const RichTextEditor = React.forwardRef<
     onAtSign,
     imageContext,
     onStageImage,
+    onRemoveStagedImage,
     ...aria
   },
   forwardedRef,
@@ -202,8 +230,7 @@ export const RichTextEditor = React.forwardRef<
   const imageInputRef = React.useRef<HTMLInputElement>(null);
   const latestValue = React.useRef(value);
   const initialized = React.useRef(false);
-  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
-  const imagesEnabled = Boolean(imageContext || onStageImage);
+  const imagesEnabled = Boolean(onStageImage);
 
   React.useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
 
@@ -227,6 +254,37 @@ export const RichTextEditor = React.forwardRef<
 
   function emitValue() {
     const next = editorRef.current?.innerHTML ?? "";
+    const previous = latestValue.current;
+
+    // Fires for every user-driven content change (typing, backspace/delete,
+    // cut, or pasting over a selection) since this only runs from the
+    // native `input` event and the other explicit user actions below — never
+    // from the imperative resync effect above, which updates
+    // `latestValue.current` without going through here. So a dropped id here
+    // always means the user actually removed that image from the text, not
+    // a re-render replacing the same content.
+    if (imageContext) {
+      const droppedAttachmentIds = Array.from(
+        extractImageIds(previous, "data-attachment-id"),
+      ).filter((id) => !extractImageIds(next, "data-attachment-id").has(id));
+      for (const attachmentId of droppedAttachmentIds) {
+        deleteProjectAttachment(
+          imageContext.workspaceSlug,
+          imageContext.projectId,
+          attachmentId,
+        ).catch(() => {
+          // Best-effort — a dangling S3 object costs pennies; it shouldn't
+          // block or alarm the user over a background cleanup hiccup.
+        });
+      }
+    }
+    if (onRemoveStagedImage) {
+      const droppedStagingIds = Array.from(
+        extractImageIds(previous, "data-staging-id"),
+      ).filter((id) => !extractImageIds(next, "data-staging-id").has(id));
+      droppedStagingIds.forEach(onRemoveStagedImage);
+    }
+
     latestValue.current = next;
     onChange(next);
   }
@@ -237,8 +295,8 @@ export const RichTextEditor = React.forwardRef<
     emitValue();
   }
 
-  async function handleImageFile(file: File) {
-    if (!imagesEnabled) return;
+  function handleImageFile(file: File) {
+    if (!onStageImage) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
       toast.error(
         "Image too large",
@@ -247,42 +305,18 @@ export const RichTextEditor = React.forwardRef<
       return;
     }
 
+    // Renders immediately from a local blob preview — no network call. The
+    // real file is only uploaded once the caller posts/saves; see
+    // `onStageImage`'s doc comment above.
+    const stagingId = onStageImage(file);
     const previewUrl = URL.createObjectURL(file);
-
-    // No project id exists yet to upload against (New Project form) — stage
-    // the file locally and embed a placeholder the caller finalizes with
-    // `finalizeStagedImages` once the project (and a real attachment) exists.
-    if (!imageContext) {
-      const stagingId = onStageImage!(file);
-      editorRef.current?.focus();
-      document.execCommand(
-        "insertHTML",
-        false,
-        `<img data-staging-id="${stagingId}" alt="${escapeHtmlAttr(file.name)}" src="${previewUrl}">`,
-      );
-      emitValue();
-      return;
-    }
-
-    setIsUploadingImage(true);
-    try {
-      const attachment = await uploadProjectAttachment(
-        imageContext.workspaceSlug,
-        imageContext.projectId,
-        file,
-      );
-      editorRef.current?.focus();
-      document.execCommand(
-        "insertHTML",
-        false,
-        `<img data-attachment-id="${attachment.id}" data-resolved="true" alt="${escapeHtmlAttr(file.name)}" src="${previewUrl}">`,
-      );
-      emitValue();
-    } catch {
-      // apiFetch already surfaces an error toast.
-    } finally {
-      setIsUploadingImage(false);
-    }
+    editorRef.current?.focus();
+    document.execCommand(
+      "insertHTML",
+      false,
+      `<img data-staging-id="${stagingId}" alt="${escapeHtmlAttr(file.name)}" src="${previewUrl}">`,
+    );
+    emitValue();
   }
 
   return (
@@ -361,15 +395,11 @@ export const RichTextEditor = React.forwardRef<
               size="icon"
               className="h-7 w-7"
               aria-label="Insert image"
-              disabled={disabled || isUploadingImage}
+              disabled={disabled}
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => imageInputRef.current?.click()}
             >
-              {isUploadingImage ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <ImageIcon className="h-3.5 w-3.5" />
-              )}
+              <ImageIcon className="h-3.5 w-3.5" />
             </Button>
             <input
               ref={imageInputRef}
@@ -378,7 +408,7 @@ export const RichTextEditor = React.forwardRef<
               className="hidden"
               onChange={(event) => {
                 const file = event.target.files?.[0];
-                if (file) void handleImageFile(file);
+                if (file) handleImageFile(file);
                 event.target.value = "";
               }}
             />
@@ -409,7 +439,7 @@ export const RichTextEditor = React.forwardRef<
           if (imageItem) {
             event.preventDefault();
             const file = imageItem.getAsFile();
-            if (file) void handleImageFile(file);
+            if (file) handleImageFile(file);
             return;
           }
           event.preventDefault();

@@ -18,20 +18,48 @@ import {
 
 export { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, formatBytes, isAllowedAttachmentFile };
 
-function projectAttachmentsKey(workspaceSlug: string, projectId: string) {
-  return ["project-attachments", workspaceSlug, projectId] as const;
+/**
+ * Every hook below optionally takes a `workItemId` to scope to that one work
+ * item's own attachments (its own list, own query key) instead of the
+ * project generally — e.g. a task's Attachments tab, or images embedded in
+ * one of its comments. Omit it for project-level attachments (unchanged
+ * behavior/URLs from before work-item scoping existed).
+ */
+function projectAttachmentsKey(
+  workspaceSlug: string,
+  projectId: string,
+  workItemId?: string,
+) {
+  return [
+    "project-attachments",
+    workspaceSlug,
+    projectId,
+    workItemId ?? null,
+  ] as const;
 }
 
-/** GET /projects/:projectId/attachments */
+function attachmentsPath(
+  projectId: string,
+  workItemId?: string,
+  isInline?: boolean,
+): string {
+  const base = workItemId
+    ? `/projects/${projectId}/work-items/${workItemId}/attachments`
+    : `/projects/${projectId}/attachments`;
+  return isInline ? `${base}?inline=true` : base;
+}
+
+/** GET /projects/:projectId/attachments, or a work item's own when scoped. */
 export function useProjectAttachments(
   workspaceSlug: string,
   projectId: string,
+  workItemId?: string,
 ) {
   const token = useAuthStore((state) => state.accessToken);
   return useQuery({
-    queryKey: projectAttachmentsKey(workspaceSlug, projectId),
+    queryKey: projectAttachmentsKey(workspaceSlug, projectId, workItemId),
     queryFn: () =>
-      apiFetch<ProjectAttachment[]>(`/projects/${projectId}/attachments`, {
+      apiFetch<ProjectAttachment[]>(attachmentsPath(projectId, workItemId), {
         workspaceSlug,
       }),
     enabled: Boolean(token && workspaceSlug && projectId),
@@ -43,26 +71,29 @@ function uploadFile(
   workspaceSlug: string,
   projectId: string,
   file: File,
+  workItemId?: string,
+  isInline?: boolean,
 ): Promise<ProjectAttachment> {
   const body = new FormData();
   body.append("file", file);
-  return apiFetch<ProjectAttachment>(`/projects/${projectId}/attachments`, {
-    method: "POST",
-    body,
-    workspaceSlug,
-  });
+  return apiFetch<ProjectAttachment>(
+    attachmentsPath(projectId, workItemId, isInline),
+    { method: "POST", body, workspaceSlug },
+  );
 }
 
 export function useUploadProjectAttachment(
   workspaceSlug: string,
   projectId: string,
+  workItemId?: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (file: File) => uploadFile(workspaceSlug, projectId, file),
+    mutationFn: (file: File) =>
+      uploadFile(workspaceSlug, projectId, file, workItemId),
     onSuccess: (attachment) => {
       queryClient.invalidateQueries({
-        queryKey: projectAttachmentsKey(workspaceSlug, projectId),
+        queryKey: projectAttachmentsKey(workspaceSlug, projectId, workItemId),
       });
       toast.success("File attached", attachment?.fileName);
     },
@@ -73,19 +104,26 @@ export function useUploadProjectAttachment(
  * One-off upload outside the mutation/component lifecycle — for staging
  * files in the "New project" form and uploading them right after the
  * project is created (no project id exists yet while the form is open, so
- * this can't be a normal per-project `useMutation`).
+ * this can't be a normal per-project `useMutation`), and for images inserted
+ * into a description/comment's rich text (via `workItemId` to scope a
+ * comment's image to that work item, and `isInline: true` so the upload
+ * doesn't show up in any Attachments list — it's part of the text, not a
+ * document the user manages there).
  */
 export function uploadProjectAttachment(
   workspaceSlug: string,
   projectId: string,
   file: File,
+  workItemId?: string,
+  isInline?: boolean,
 ): Promise<ProjectAttachment> {
-  return uploadFile(workspaceSlug, projectId, file);
+  return uploadFile(workspaceSlug, projectId, file, workItemId, isInline);
 }
 
 export function useDeleteProjectAttachment(
   workspaceSlug: string,
   projectId: string,
+  workItemId?: string,
 ) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -96,10 +134,30 @@ export function useDeleteProjectAttachment(
       ),
     onSuccess: () => {
       queryClient.invalidateQueries({
-        queryKey: projectAttachmentsKey(workspaceSlug, projectId),
+        queryKey: projectAttachmentsKey(workspaceSlug, projectId, workItemId),
       });
       toast.success("File removed");
     },
+  });
+}
+
+/**
+ * One-off delete outside the mutation/component lifecycle — used by
+ * RichTextEditor to clean up an inline image's attachment the instant it's
+ * deleted from the text (rather than waiting for the surrounding
+ * description/comment to be saved). Silent (no toast either way): this is a
+ * background cleanup of an implementation detail, not a user-facing action
+ * in its own right — the editor already reflects the removal immediately.
+ */
+export function deleteProjectAttachment(
+  workspaceSlug: string,
+  projectId: string,
+  attachmentId: string,
+): Promise<{ id: string; deleted: boolean }> {
+  return apiFetch(`/projects/${projectId}/attachments/${attachmentId}`, {
+    method: "DELETE",
+    workspaceSlug,
+    notify: false,
   });
 }
 

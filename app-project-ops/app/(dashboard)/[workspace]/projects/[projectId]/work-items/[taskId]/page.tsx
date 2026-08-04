@@ -46,6 +46,8 @@ export default function EditTaskPage() {
           task={taskQuery.data}
           canSave={can(PERMISSIONS.WORKITEM_UPDATE)}
           canComment={can(PERMISSIONS.COMMENT_CREATE)}
+          canCreateAttachment={can(PERMISSIONS.ATTACHMENT_CREATE)}
+          canDeleteAttachment={can(PERMISSIONS.ATTACHMENT_DELETE)}
           onDone={cancel}
           onSaved={saved}
         />

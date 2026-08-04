@@ -473,10 +473,15 @@ function NewProjectPanel({
             Array.from(stagedImagesRef.current.entries()).map(
               async ([stagingId, file]) => {
                 try {
+                  // isInline: false — a description's image is a real
+                  // project asset, so (unlike a comment's) it also shows in
+                  // Attachments.
                   const attachment = await uploadProjectAttachment(
                     workspaceSlug,
                     project.id,
                     file,
+                    undefined,
+                    false,
                   );
                   idMap.set(stagingId, attachment.id);
                 } catch {
@@ -579,6 +584,9 @@ function NewProjectPanel({
               placeholder="Optional summary"
               aria-label="Description"
               onStageImage={stageImage}
+              onRemoveStagedImage={(stagingId) =>
+                stagedImagesRef.current.delete(stagingId)
+              }
             />
           </div>
 

@@ -297,6 +297,15 @@ model Attachment {
   id          String   @id @default(uuid())
   workspaceId String   @map("workspace_id")
   projectId   String   @map("project_id")
+  // When set, this attachment belongs to a specific work item (a task
+  // comment/detail's file) instead of being a general project-level document.
+  workItemId  String?  @map("work_item_id")
+  // True for an image embedded inline in a description/comment via the rich
+  // text editor's image button — as opposed to a file deliberately uploaded
+  // through an Attachments list. Inline images are excluded from every
+  // Attachments listing (they're not "a document", they're part of the
+  // text) and aren't logged to the activity feed on upload/removal.
+  isInline    Boolean  @default(false) @map("is_inline")
   fileName    String   @map("file_name")
   mimeType    String   @map("mime_type")
   sizeBytes   Int      @map("size_bytes")
@@ -306,10 +315,12 @@ model Attachment {
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  workItem  WorkItem? @relation(fields: [workItemId], references: [id], onDelete: Cascade)
   uploader  User      @relation(fields: [uploadedBy], references: [id])
 
   @@index([workspaceId])
   @@index([projectId])
+  @@index([workItemId])
   @@map("attachment")
 }
 
@@ -444,6 +455,7 @@ model WorkItem {
   comments       Comment[]
   timeLogs       TimeLog[]
   detail         WorkItemDetail?
+  attachments    Attachment[]
 
   @@index([projectId])
   @@index([moduleInstanceId])

@@ -4,6 +4,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import {
+  AttachmentsService,
+  extractAttachmentIds,
+} from '../attachments/attachments.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
@@ -11,7 +15,10 @@ import { POSITION_GAP } from '../common/constants/workspace-defaults';
 
 @Injectable()
 export class ProjectsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly attachments: AttachmentsService,
+  ) {}
 
   /**
    * Creates a project and, atomically:
@@ -244,8 +251,8 @@ export class ProjectsService {
   }
 
   async update(workspaceId: string, projectId: string, dto: UpdateProjectDto) {
-    await this.assertProject(workspaceId, projectId);
-    return this.prisma.project.update({
+    const existing = await this.assertProject(workspaceId, projectId);
+    const updated = await this.prisma.project.update({
       where: { id: projectId },
       data: {
         name: dto.name ?? undefined,
@@ -254,6 +261,20 @@ export class ProjectsService {
         endDate: dto.endDate ? new Date(dto.endDate) : undefined,
       },
     });
+
+    // An image the user removed from the description (kept in the DB row
+    // and S3 as an inline attachment) is otherwise orphaned forever — clean
+    // up whatever attachment ids dropped out between the old and new text.
+    if (dto.description !== undefined) {
+      const oldIds = extractAttachmentIds(existing.description);
+      const newIds = extractAttachmentIds(dto.description);
+      const droppedIds = Array.from(oldIds).filter((id) => !newIds.has(id));
+      if (droppedIds.length > 0) {
+        await this.attachments.deleteByIds(workspaceId, droppedIds);
+      }
+    }
+
+    return updated;
   }
 
   async remove(workspaceId: string, projectId: string) {

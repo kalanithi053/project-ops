@@ -35,6 +35,8 @@ export default function NewTaskPage() {
       defaultWorkItemTypeId={searchParams.get("workItemTypeId") ?? undefined}
       canSave={can(PERMISSIONS.WORKITEM_CREATE)}
       canComment={can(PERMISSIONS.COMMENT_CREATE)}
+      canCreateAttachment={can(PERMISSIONS.ATTACHMENT_CREATE)}
+      canDeleteAttachment={can(PERMISSIONS.ATTACHMENT_DELETE)}
       onDone={cancel}
       onSaved={saved}
     />

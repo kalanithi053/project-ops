@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import { AttachmentsService } from '../attachments/attachments.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { WorkItemsService } from './work-items.service';
@@ -55,6 +56,8 @@ describe('WorkItemsService', () => {
     sendWorkItemNotificationEmail: jest.fn(),
     appUrl: jest.fn((path: string) => `https://app.test${path}`),
   };
+
+  const mockAttachments = { deleteByIds: jest.fn() };
 
   const project = {
     id: projectId,
@@ -111,6 +114,7 @@ describe('WorkItemsService', () => {
     );
     mockMail.sendWorkItemNotificationEmail.mockResolvedValue(undefined);
     mockActivityLog.log.mockResolvedValue({ id: 'log-1' });
+    mockAttachments.deleteByIds.mockResolvedValue(undefined);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -118,6 +122,7 @@ describe('WorkItemsService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: ActivityLogService, useValue: mockActivityLog },
         { provide: MailService, useValue: mockMail },
+        { provide: AttachmentsService, useValue: mockAttachments },
       ],
     }).compile();
 
@@ -592,6 +597,84 @@ describe('WorkItemsService', () => {
 
       expect(mockActivityLog.log).not.toHaveBeenCalled();
       expect(mockMail.sendWorkItemNotificationEmail).not.toHaveBeenCalled();
+    });
+
+    it('cleans up an image dropped from the description', async () => {
+      const existing = makeWorkItem({
+        detail: {
+          description:
+            '<p>Before</p><img data-attachment-id="att-1"><img data-attachment-id="att-2">',
+        },
+      });
+      mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+      const updated = makeWorkItem({
+        detail: { description: '<p>After</p><img data-attachment-id="att-1">' },
+      });
+      mockPrismaService.workItem.update.mockResolvedValue(updated);
+
+      await service.update(workspaceId, projectId, workItemId, userId, {
+        description: '<p>After</p><img data-attachment-id="att-1">',
+      });
+
+      expect(mockAttachments.deleteByIds).toHaveBeenCalledWith(workspaceId, [
+        'att-2',
+      ]);
+    });
+
+    it('does not clean up an image still referenced after the edit', async () => {
+      const existing = makeWorkItem({
+        detail: { description: '<img data-attachment-id="att-1">' },
+      });
+      mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+      mockPrismaService.workItem.update.mockResolvedValue(existing);
+
+      await service.update(workspaceId, projectId, workItemId, userId, {
+        description: '<p>New text</p><img data-attachment-id="att-1">',
+      });
+
+      expect(mockAttachments.deleteByIds).not.toHaveBeenCalled();
+    });
+
+    it('does not touch attachments when description is left out of the patch', async () => {
+      const existing = makeWorkItem({
+        name: 'Old Name',
+        detail: { description: '<img data-attachment-id="att-1">' },
+      });
+      mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+      mockPrismaService.workItem.update.mockResolvedValue(
+        makeWorkItem({ name: 'New Name' }),
+      );
+
+      await service.update(workspaceId, projectId, workItemId, userId, {
+        name: 'New Name',
+      });
+
+      expect(mockAttachments.deleteByIds).not.toHaveBeenCalled();
+    });
+
+    it('upserts the detail row when a work item has none yet (e.g. a seeded task)', async () => {
+      const existing = makeWorkItem({ detail: null });
+      mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+      mockPrismaService.workItem.update.mockResolvedValue(
+        makeWorkItem({ detail: { description: '<p>New</p>' } }),
+      );
+
+      await service.update(workspaceId, projectId, workItemId, userId, {
+        description: '<p>New</p>',
+      });
+
+      expect(mockPrismaService.workItem.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            detail: {
+              upsert: {
+                create: { description: '<p>New</p>' },
+                update: { description: '<p>New</p>' },
+              },
+            },
+          }),
+        }),
+      );
     });
 
     it('notifies the new assignee of the reassignment and skips double-notifying them in the update email', async () => {

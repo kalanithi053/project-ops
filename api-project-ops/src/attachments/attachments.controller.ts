@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Query,
   Res,
   StreamableFile,
   UploadedFile,
@@ -35,11 +36,11 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 @ApiTags('attachments')
 @ApiBearerAuth()
 @UseGuards(WorkspaceScopeGuard, PermissionsGuard)
-@Controller('projects/:projectId/attachments')
+@Controller()
 export class AttachmentsController {
   constructor(private readonly attachments: AttachmentsService) {}
 
-  @Get()
+  @Get('projects/:projectId/attachments')
   @RequirePermission(PERMISSIONS.ATTACHMENT_READ)
   @ApiOperation({ summary: 'List a project’s attachments' })
   list(
@@ -49,7 +50,7 @@ export class AttachmentsController {
     return this.attachments.list(workspaceId, projectId);
   }
 
-  @Post()
+  @Post('projects/:projectId/attachments')
   @RequirePermission(PERMISSIONS.ATTACHMENT_CREATE)
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Upload a file to a project' })
@@ -59,13 +60,57 @@ export class AttachmentsController {
   create(
     @CurrentWorkspace() ws: WorkspaceContext,
     @Param('projectId') projectId: string,
+    @Query('inline') inline: string | undefined,
     @UploadedFile() file?: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No file provided');
-    return this.attachments.create(ws.workspaceId, projectId, ws.userId, file);
+    return this.attachments.create(
+      ws.workspaceId,
+      projectId,
+      ws.userId,
+      file,
+      undefined,
+      inline === 'true',
+    );
   }
 
-  @Get(':id/download')
+  @Get('projects/:projectId/work-items/:workItemId/attachments')
+  @RequirePermission(PERMISSIONS.ATTACHMENT_READ)
+  @ApiOperation({ summary: 'List a work item’s attachments' })
+  listForWorkItem(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('projectId') projectId: string,
+    @Param('workItemId') workItemId: string,
+  ) {
+    return this.attachments.list(workspaceId, projectId, workItemId);
+  }
+
+  @Post('projects/:projectId/work-items/:workItemId/attachments')
+  @RequirePermission(PERMISSIONS.ATTACHMENT_CREATE)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a file to a work item' })
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: MAX_ATTACHMENT_BYTES } }),
+  )
+  createForWorkItem(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+    @Param('workItemId') workItemId: string,
+    @Query('inline') inline: string | undefined,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No file provided');
+    return this.attachments.create(
+      ws.workspaceId,
+      projectId,
+      ws.userId,
+      file,
+      workItemId,
+      inline === 'true',
+    );
+  }
+
+  @Get('projects/:projectId/attachments/:id/download')
   @RequirePermission(PERMISSIONS.ATTACHMENT_READ)
   @ApiOperation({ summary: 'Download an attachment' })
   async download(
@@ -86,7 +131,7 @@ export class AttachmentsController {
     return new StreamableFile(stream);
   }
 
-  @Delete(':id')
+  @Delete('projects/:projectId/attachments/:id')
   @RequirePermission(PERMISSIONS.ATTACHMENT_DELETE)
   @ApiOperation({ summary: 'Delete an attachment' })
   remove(

@@ -12,6 +12,7 @@ import {
 import * as React from "react";
 
 import { CopyWorkItemLink } from "@/components/projects/copy-work-item-link";
+import { ProjectAttachments } from "@/components/projects/project-attachments";
 import { TaskActivity } from "@/components/projects/task-activity";
 import { TaskComments } from "@/components/projects/task-comments";
 import { TimeLogPanel } from "@/components/projects/time-log-panel";
@@ -19,6 +20,8 @@ import { TimeLogTimerButton } from "@/components/projects/time-log-timer-button"
 import { SettingsField } from "@/components/settings/settings-section";
 import {
   RichTextEditor,
+  finalizeStagedImages,
+  hasRichTextContent,
   sanitizeRichText,
 } from "@/components/shared/rich-text-editor";
 import {
@@ -37,6 +40,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { usePriorities } from "@/lib/api/hooks/use-priorities";
 import { useProjectMembers } from "@/lib/api/hooks/use-project-members";
+import { uploadProjectAttachment } from "@/lib/api/hooks/use-project-attachments";
 import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useCreateTask, useUpdateTask } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
@@ -70,6 +74,8 @@ interface TaskEditorProps {
   defaultWorkItemTypeId?: string;
   canSave: boolean;
   canComment: boolean;
+  canCreateAttachment: boolean;
+  canDeleteAttachment: boolean;
   onDone: () => void;
   /** Fired after a successful create/update with the saved work item's id. */
   onSaved: (workItemId: string) => void;
@@ -91,6 +97,8 @@ export function TaskEditor({
   defaultWorkItemTypeId,
   canSave,
   canComment,
+  canCreateAttachment,
+  canDeleteAttachment,
   onDone,
   onSaved,
 }: TaskEditorProps) {
@@ -112,10 +120,22 @@ export function TaskEditor({
   const projectEnd = toDateInput(project?.endDate);
 
   const isEdit = Boolean(task);
-  const pending = create.isPending || update.isPending;
 
   const [name, setName] = React.useState(task?.name ?? "");
   const [description, setDescription] = React.useState(task?.description ?? "");
+  const [isUploadingImages, setIsUploadingImages] = React.useState(false);
+  const pending = create.isPending || update.isPending || isUploadingImages;
+  // Images inserted via the description editor's image button, staged
+  // locally (a blob preview only) until "Save changes" — see
+  // RichTextEditor's `onStageImage`.
+  const stagedImagesRef = React.useRef<Map<string, File>>(new Map());
+  const stagingIdCounter = React.useRef(0);
+
+  function stageImage(file: File): string {
+    const stagingId = `staging-${stagingIdCounter.current++}`;
+    stagedImagesRef.current.set(stagingId, file);
+    return stagingId;
+  }
   const [moduleInstanceId, setModuleInstanceId] = React.useState<
     string | undefined
   >(task?.moduleInstanceId ?? undefined);
@@ -158,7 +178,7 @@ export function TaskEditor({
   const [dueDate, setDueDate] = React.useState(toDateInput(task?.dueDate));
   const [error, setError] = React.useState<string | null>(null);
   const [activeTab, setActiveTab] = React.useState<
-    "details" | "activity" | "timeLogs"
+    "details" | "activity" | "timeLogs" | "attachments"
   >("details");
   const canLogTime = Boolean(task && me?.id && me.id === task.assigneeId);
 
@@ -244,7 +264,7 @@ export function TaskEditor({
     startDate !== snapshot.startDate ||
     dueDate !== snapshot.dueDate;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     setError(null);
 
     const trimmed = name.trim();
@@ -278,6 +298,9 @@ export function TaskEditor({
       return setError("Completed hours must be zero or greater.");
     }
     const sanitizedDescription = sanitizeRichText(description).trim();
+    // Finalizing only touches img tag attributes, never visible text, so
+    // this length check is valid pre-upload — no point uploading images
+    // just to reject the save afterward.
     const descriptionText = new DOMParser()
       .parseFromString(sanitizedDescription, "text/html")
       .body.textContent?.trim();
@@ -285,9 +308,41 @@ export function TaskEditor({
       return setError("Description must be 4,000 characters or fewer.");
     }
 
+    let finalDescription = sanitizedDescription;
+    if (task && stagedImagesRef.current.size > 0) {
+      setIsUploadingImages(true);
+      const idMap = new Map<string, string>();
+      // Best-effort: an image that fails to upload is dropped from the
+      // description (by finalizeStagedImages) rather than holding up the rest.
+      await Promise.all(
+        Array.from(stagedImagesRef.current.entries()).map(
+          async ([stagingId, file]) => {
+            try {
+              // isInline: false — a description's image is a real work item
+              // asset, so (unlike a comment's) it also shows in Attachments.
+              const attachment = await uploadProjectAttachment(
+                workspaceSlug,
+                projectId,
+                file,
+                task.id,
+                false,
+              );
+              idMap.set(stagingId, attachment.id);
+            } catch {
+              // Dropped below by finalizeStagedImages.
+            }
+          },
+        ),
+      );
+      finalDescription = finalizeStagedImages(sanitizedDescription, idMap);
+      setIsUploadingImages(false);
+    }
+
     const dto: CreateTaskDto = {
       name: trimmed,
-      ...(descriptionText ? { description: sanitizedDescription } : {}),
+      ...(hasRichTextContent(finalDescription)
+        ? { description: finalDescription }
+        : {}),
       ...(moduleInstanceId ? { moduleInstanceId } : {}),
       ...(workItemTypeId ? { workItemTypeId } : {}),
       ...(statusId ? { statusId } : {}),
@@ -303,7 +358,12 @@ export function TaskEditor({
     if (task) {
       update.mutate(
         { id: task.id, dto },
-        { onSuccess: (updated) => onSaved(updated.id) },
+        {
+          onSuccess: (updated) => {
+            stagedImagesRef.current.clear();
+            onSaved(updated.id);
+          },
+        },
       );
     } else {
       create.mutate(dto, { onSuccess: (created) => onSaved(created.id) });
@@ -314,7 +374,7 @@ export function TaskEditor({
     <Card className="mx-auto w-full max-w-6xl">
       <form onSubmit={handleSubmit} noValidate>
         <CardHeader
-          className="sticky z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm"
+          className="sticky top-0 z-30 rounded-t-lg border-b border-border bg-card p-0 shadow-sm"
           style={{ gap: 0 }}
         >
           <div
@@ -592,6 +652,21 @@ export function TaskEditor({
                 Time Logs
               </button>
             )}
+            {task && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === "attachments"}
+                onClick={() => setActiveTab("attachments")}
+                className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
+                  activeTab === "attachments"
+                    ? "border-foreground text-foreground"
+                    : "border-transparent text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Attachments
+              </button>
+            )}
           </div>
         </CardHeader>
 
@@ -614,7 +689,17 @@ export function TaskEditor({
                         onChange={setDescription}
                         placeholder="Add a description…"
                         aria-label="Description"
-                        disabled={!canSave}
+                        disabled={!canSave || isUploadingImages}
+                        imageContext={
+                          task ? { workspaceSlug, projectId } : undefined
+                        }
+                        onStageImage={task ? stageImage : undefined}
+                        onRemoveStagedImage={
+                          task
+                            ? (stagingId) =>
+                                stagedImagesRef.current.delete(stagingId)
+                            : undefined
+                        }
                       />
                     </SettingsField>
                   </fieldset>
@@ -738,6 +823,14 @@ export function TaskEditor({
               projectId={projectId}
               workItemId={task.id}
               canLog={canLogTime}
+            />
+          ) : activeTab === "attachments" && task ? (
+            <ProjectAttachments
+              workspaceSlug={workspaceSlug}
+              projectId={projectId}
+              workItemId={task.id}
+              canCreate={canCreateAttachment}
+              canDelete={canDeleteAttachment}
             />
           ) : null}
         </CardContent>

@@ -140,11 +140,14 @@ function AttachmentPreviewDialog({
 export function ProjectAttachments({
   workspaceSlug,
   projectId,
+  workItemId,
   canCreate,
   canDelete,
 }: {
   workspaceSlug: string;
   projectId: string;
+  /** Scopes to one work item's own attachments instead of the whole project's. */
+  workItemId?: string;
   canCreate: boolean;
   canDelete: boolean;
 }) {
@@ -154,9 +157,9 @@ export function ProjectAttachments({
     isError,
     error,
     refetch,
-  } = useProjectAttachments(workspaceSlug, projectId);
-  const upload = useUploadProjectAttachment(workspaceSlug, projectId);
-  const remove = useDeleteProjectAttachment(workspaceSlug, projectId);
+  } = useProjectAttachments(workspaceSlug, projectId, workItemId);
+  const upload = useUploadProjectAttachment(workspaceSlug, projectId, workItemId);
+  const remove = useDeleteProjectAttachment(workspaceSlug, projectId, workItemId);
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = React.useState(false);
@@ -205,7 +208,9 @@ export function ProjectAttachments({
       <div>
         <h2 className="text-lg font-semibold">Attachments</h2>
         <p className="text-sm text-muted-foreground">
-          Files shared across this project.
+          {workItemId
+            ? "Files attached to this work item."
+            : "Files shared across this project."}
         </p>
       </div>
 
@@ -278,8 +283,8 @@ export function ProjectAttachments({
               title="No attachments yet"
               description={
                 canCreate
-                  ? "Drop a file above to attach it to this project."
-                  : "No files have been attached to this project."
+                  ? `Drop a file above to attach it to this ${workItemId ? "work item" : "project"}.`
+                  : `No files have been attached to this ${workItemId ? "work item" : "project"}.`
               }
             />
           ) : (

@@ -6,6 +6,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ActivityLogService } from '../activity-log/activity-log.service';
+import {
+  AttachmentsService,
+  extractAttachmentIds,
+} from '../attachments/attachments.service';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCommentDto } from './dto/create-comment.dto';
@@ -36,6 +40,7 @@ export class CommentsService {
     private readonly prisma: PrismaService,
     private readonly activityLog: ActivityLogService,
     private readonly mail: MailService,
+    private readonly attachments: AttachmentsService,
   ) {}
 
   list(workspaceId: string) {
@@ -133,6 +138,8 @@ export class CommentsService {
       return saved;
     });
 
+    await this.cleanupDroppedAttachments(workspaceId, comment.body, dto.body);
+
     await this.notifyMentions(
       workspaceId,
       {
@@ -163,6 +170,8 @@ export class CommentsService {
         tx,
       );
     });
+
+    await this.cleanupDroppedAttachments(workspaceId, comment.body, '');
 
     return { id: commentId, deleted: true };
   }
@@ -305,6 +314,8 @@ export class CommentsService {
       return saved;
     });
 
+    await this.cleanupDroppedAttachments(workspaceId, comment.body, dto.body);
+
     await this.notifyMentions(
       workspaceId,
       {
@@ -355,6 +366,8 @@ export class CommentsService {
       );
     });
 
+    await this.cleanupDroppedAttachments(workspaceId, comment.body, '');
+
     return { id: commentId, deleted: true };
   }
 
@@ -366,6 +379,7 @@ export class CommentsService {
       select: {
         id: true,
         authorId: true,
+        body: true,
         mentions: { select: { userId: true } },
       },
     });
@@ -402,6 +416,7 @@ export class CommentsService {
       select: {
         id: true,
         authorId: true,
+        body: true,
         mentions: { select: { userId: true } },
       },
     });
@@ -412,6 +427,25 @@ export class CommentsService {
   private assertAuthor(authorId: string, userId: string) {
     if (authorId !== userId) {
       throw new ForbiddenException('Only the comment author can change it');
+    }
+  }
+
+  /**
+   * Deletes attachments (S3 object + row) referenced in `oldBody` but not
+   * `newBody` — an image the user removed from a comment while editing it
+   * is otherwise orphaned forever. Pass `newBody: ''` on comment deletion so
+   * every attachment the comment referenced is treated as dropped.
+   */
+  private async cleanupDroppedAttachments(
+    workspaceId: string,
+    oldBody: string,
+    newBody: string,
+  ) {
+    const oldIds = extractAttachmentIds(oldBody);
+    const newIds = extractAttachmentIds(newBody);
+    const droppedIds = Array.from(oldIds).filter((id) => !newIds.has(id));
+    if (droppedIds.length > 0) {
+      await this.attachments.deleteByIds(workspaceId, droppedIds);
     }
   }
 

@@ -4,13 +4,17 @@ import { Test } from '@nestjs/testing';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { S3Service } from '../aws-s3/s3.service';
-import { AttachmentsService } from './attachments.service';
+import {
+  AttachmentsService,
+  extractAttachmentIds,
+} from './attachments.service';
 
 describe('AttachmentsService', () => {
   let service: AttachmentsService;
 
   const workspaceId = 'ws-1';
   const projectId = 'proj-1';
+  const workItemId = 'wi-1';
   const userId = 'user-1';
   const attachmentId = 'att-1';
 
@@ -22,13 +26,17 @@ describe('AttachmentsService', () => {
     workspace: { name: 'Amwhiz' },
   };
 
+  const workItem = { id: workItemId, projectId, prefix: 'DFTQKO' };
+
   const mockPrismaService = {
     project: { findFirst: jest.fn() },
+    workItem: { findFirst: jest.fn() },
     attachment: {
       findMany: jest.fn(),
       findFirst: jest.fn(),
       create: jest.fn(),
       delete: jest.fn(),
+      deleteMany: jest.fn(),
     },
     $transaction: jest.fn(),
   };
@@ -89,7 +97,7 @@ describe('AttachmentsService', () => {
   });
 
   describe('list', () => {
-    it('returns attachments ordered newest first', async () => {
+    it('returns project-level attachments ordered newest first', async () => {
       mockPrismaService.project.findFirst.mockResolvedValue(project);
       const attachments = [makeAttachment()];
       mockPrismaService.attachment.findMany.mockResolvedValue(attachments);
@@ -98,7 +106,7 @@ describe('AttachmentsService', () => {
 
       expect(mockPrismaService.attachment.findMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { projectId },
+          where: { projectId, workItemId: null, isInline: false },
           orderBy: { createdAt: 'desc' },
         }),
       );
@@ -111,6 +119,34 @@ describe('AttachmentsService', () => {
       await expect(service.list(workspaceId, projectId)).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it("returns only a work item's own attachments when scoped", async () => {
+      mockPrismaService.workItem.findFirst.mockResolvedValue(workItem);
+      const attachments = [makeAttachment({ workItemId })];
+      mockPrismaService.attachment.findMany.mockResolvedValue(attachments);
+
+      const result = await service.list(workspaceId, projectId, workItemId);
+
+      expect(mockPrismaService.workItem.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: workItemId, projectId, project: { workspaceId } },
+        }),
+      );
+      expect(mockPrismaService.attachment.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { projectId, workItemId, isInline: false },
+        }),
+      );
+      expect(result).toEqual(attachments);
+    });
+
+    it('throws NotFoundException when the work item does not exist', async () => {
+      mockPrismaService.workItem.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.list(workspaceId, projectId, workItemId),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -206,6 +242,81 @@ describe('AttachmentsService', () => {
         service.create(workspaceId, projectId, userId, makeFile({ mimetype })),
       ).resolves.toBeDefined();
     });
+
+    it('attaches to a work item when workItemId is given, logging against it', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findFirst.mockResolvedValue(workItem);
+      const created = makeAttachment({ workItemId });
+      mockPrismaService.attachment.create.mockResolvedValue(created);
+      const file = makeFile();
+
+      const result = await service.create(
+        workspaceId,
+        projectId,
+        userId,
+        file,
+        workItemId,
+      );
+
+      expect(mockPrismaService.workItem.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: workItemId, projectId, project: { workspaceId } },
+        }),
+      );
+      expect(mockS3.upload).toHaveBeenCalledWith(
+        expect.stringContaining(`${workItemId}#${workItem.prefix}`),
+        file.buffer,
+        file.mimetype,
+      );
+      expect(mockPrismaService.attachment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ workItemId }),
+        }),
+      );
+      expect(mockActivityLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'attachment',
+          entityId: workItemId,
+          action: 'attachment_added',
+        }),
+        mockPrismaService,
+      );
+      expect(result).toEqual(created);
+    });
+
+    it('throws NotFoundException when the work item does not exist', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(workspaceId, projectId, userId, makeFile(), workItemId),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockS3.upload).not.toHaveBeenCalled();
+    });
+
+    it('marks an inline image and skips the activity log for it', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      const created = makeAttachment({ isInline: true });
+      mockPrismaService.attachment.create.mockResolvedValue(created);
+      const file = makeFile();
+
+      const result = await service.create(
+        workspaceId,
+        projectId,
+        userId,
+        file,
+        undefined,
+        true,
+      );
+
+      expect(mockPrismaService.attachment.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ isInline: true }),
+        }),
+      );
+      expect(mockActivityLog.log).not.toHaveBeenCalled();
+      expect(result).toEqual(created);
+    });
   });
 
   describe('download', () => {
@@ -261,6 +372,24 @@ describe('AttachmentsService', () => {
       expect(result).toEqual({ id: attachmentId, deleted: true });
     });
 
+    it('logs against the work item when the attachment belongs to one', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      const attachment = makeAttachment({ workItemId });
+      mockPrismaService.attachment.findFirst.mockResolvedValue(attachment);
+      mockS3.delete.mockResolvedValue(undefined);
+
+      await service.remove(workspaceId, projectId, attachmentId, userId);
+
+      expect(mockActivityLog.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          entityType: 'attachment',
+          entityId: workItemId,
+          action: 'attachment_deleted',
+        }),
+        mockPrismaService,
+      );
+    });
+
     it('still deletes the row when the S3 delete fails', async () => {
       mockPrismaService.project.findFirst.mockResolvedValue(project);
       const attachment = makeAttachment();
@@ -279,5 +408,68 @@ describe('AttachmentsService', () => {
       });
       expect(result).toEqual({ id: attachmentId, deleted: true });
     });
+  });
+
+  describe('deleteByIds', () => {
+    it('deletes the S3 objects and rows for the given ids', async () => {
+      const attachmentsToDelete = [
+        makeAttachment({ id: 'att-1', s3Key: 'key-1' }),
+        makeAttachment({ id: 'att-2', s3Key: 'key-2' }),
+      ];
+      mockPrismaService.attachment.findMany.mockResolvedValue(
+        attachmentsToDelete,
+      );
+      mockS3.delete.mockResolvedValue(undefined);
+
+      await service.deleteByIds(workspaceId, ['att-1', 'att-2']);
+
+      expect(mockPrismaService.attachment.findMany).toHaveBeenCalledWith({
+        where: { id: { in: ['att-1', 'att-2'] }, workspaceId },
+      });
+      expect(mockS3.delete).toHaveBeenCalledWith('key-1');
+      expect(mockS3.delete).toHaveBeenCalledWith('key-2');
+      expect(mockPrismaService.attachment.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['att-1', 'att-2'] } },
+      });
+    });
+
+    it('still deletes the rows when an S3 delete fails', async () => {
+      const attachmentToDelete = makeAttachment({ id: 'att-1' });
+      mockPrismaService.attachment.findMany.mockResolvedValue([
+        attachmentToDelete,
+      ]);
+      mockS3.delete.mockRejectedValue(new Error('network error'));
+
+      await service.deleteByIds(workspaceId, ['att-1']);
+
+      expect(mockPrismaService.attachment.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['att-1'] } },
+      });
+    });
+
+    it('does nothing for an empty id list', async () => {
+      await service.deleteByIds(workspaceId, []);
+
+      expect(mockPrismaService.attachment.findMany).not.toHaveBeenCalled();
+      expect(mockPrismaService.attachment.deleteMany).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('extractAttachmentIds', () => {
+  it('finds every data-attachment-id in the HTML, deduplicated', () => {
+    const html =
+      '<p>Before</p><img data-attachment-id="a1" alt="one">' +
+      '<img data-attachment-id="a2" alt="two"><img data-attachment-id="a1" alt="dup">';
+
+    expect(extractAttachmentIds(html)).toEqual(new Set(['a1', 'a2']));
+  });
+
+  it('returns an empty set for content with no embedded images', () => {
+    expect(extractAttachmentIds('<p>Just text</p>')).toEqual(new Set());
+  });
+
+  it.each([null, undefined, ''])('returns an empty set for %p', (value) => {
+    expect(extractAttachmentIds(value)).toEqual(new Set());
   });
 });

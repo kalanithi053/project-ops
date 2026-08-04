@@ -5,6 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { randomUUID } from 'crypto';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { S3Service } from '../aws-s3/s3.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -60,9 +61,9 @@ export class AttachmentsService {
     // later renamed or shares a name with another.
     const key = [
       this.configService.get('NODE_ENV'),
-      sanitizePathSegment(project.workspace.name),
-      sanitizePathSegment(project.name),
-      sanitizeFileName(file.originalname),
+      `${workspaceId}#(${sanitizePathSegment(project.workspace.name)})`,
+      `${projectId}#(${sanitizePathSegment(project.name)})`,
+      `${randomUUID()}#(${sanitizeFileName(file.originalname)})`,
     ].join('/');
     await this.s3.upload(key, file.buffer, file.mimetype);
 

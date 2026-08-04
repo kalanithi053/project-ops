@@ -244,8 +244,7 @@ export function TaskEditor({
     startDate !== snapshot.startDate ||
     dueDate !== snapshot.dueDate;
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleSubmit() {
     setError(null);
 
     const trimmed = name.trim();
@@ -373,78 +372,44 @@ export function TaskEditor({
                 showModuleField ? "sm:grid-cols-3" : "sm:grid-cols-2",
               )}
             >
-              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
+              <div className="flex min-w-0 flex-col gap-1 rounded-md  px-3 py-2">
                 <span className="text-xs font-medium text-muted-foreground">
                   Assignee
                 </span>
-              <DropdownMenu>
-                <DropdownMenuTrigger
-                  disabled={!canSave || assigneeOptions.length === 0}
-                  className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
-                  aria-label="Change assignee"
-                >
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback>
-                      {assigneeIds ? initials(assigneeLabel) : "—"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="truncate font-medium">{assigneeLabel}</span>
-                  {canSave && assigneeOptions.length > 0 && (
-                    <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                  )}
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="min-w-56">
-                  {assigneeOptions.map((option) => (
-                    <DropdownMenuItem
-                      key={option.value}
-                      onSelect={() => setAssigneeIds(option.value)}
-                      className="justify-between"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback>
-                            {initials(option.label)}
-                          </AvatarFallback>
-                        </Avatar>
-                        {option.label}
-                      </span>
-                      {option.value === assigneeIds && (
-                        <Check className="h-4 w-4" />
-                      )}
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
-            {showModuleField && (
-              <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-                <span className="text-xs font-medium text-muted-foreground">
-                  Module
-                </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    disabled={isEdit || !canSave || moduleOptions.length === 0}
-                    className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Change module"
+                    disabled={!canSave || assigneeOptions.length === 0}
+                    className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                    aria-label="Change assignee"
                   >
-                    <FolderKanban className="h-4 w-4 shrink-0" />
-                    <span className="truncate">
-                      {selectedModule?.label ?? "Select module"}
+                    <Avatar className="h-7 w-7">
+                      <AvatarFallback>
+                        {assigneeIds ? initials(assigneeLabel) : "—"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="truncate font-medium">
+                      {assigneeLabel}
                     </span>
-                    {!isEdit && canSave && moduleOptions.length > 0 && (
-                      <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                    {canSave && assigneeOptions.length > 0 && (
+                      <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="start" className="min-w-56">
-                    {moduleOptions.map((option) => (
+                    {assigneeOptions.map((option) => (
                       <DropdownMenuItem
                         key={option.value}
-                        onSelect={() => setModuleInstanceId(option.value)}
+                        onSelect={() => setAssigneeIds(option.value)}
                         className="justify-between"
                       >
-                        {option.label}
-                        {option.value === moduleInstanceId && (
+                        <span className="inline-flex items-center gap-2">
+                          <Avatar className="h-6 w-6">
+                            <AvatarFallback>
+                              {initials(option.label)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {option.label}
+                        </span>
+                        {option.value === assigneeIds && (
                           <Check className="h-4 w-4" />
                         )}
                       </DropdownMenuItem>
@@ -452,56 +417,94 @@ export function TaskEditor({
                   </DropdownMenuContent>
                 </DropdownMenu>
               </div>
-            )}
 
-            <div className="flex min-w-0 flex-col gap-1 rounded-md bg-background/70 px-3 py-2">
-              <span className="text-xs font-medium text-muted-foreground">
-                Status
-              </span>
-              <div className="flex h-8 items-center gap-2">
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    disabled={!canSave || statusOptions.length === 0}
-                    className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Change status"
-                  >
-                    <span className="truncate">
-                      {selectedStatus?.name ?? "Select status"}
-                    </span>
-                    {canSave && statusOptions.length > 0 && (
-                      <ChevronDown className="h-3 w-3 shrink-0" />
-                    )}
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="start" className="min-w-48">
-                    {(statuses ?? [])
-                      .slice()
-                      .sort((a, b) => a.order - b.order)
-                      .map((status) => (
+              {showModuleField && (
+                <div className="flex min-w-0 flex-col gap-1 rounded-md px-3 py-2">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Module
+                  </span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={
+                        isEdit || !canSave || moduleOptions.length === 0
+                      }
+                      className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Change module"
+                    >
+                      <FolderKanban className="h-4 w-4 shrink-0" />
+                      <span className="truncate">
+                        {selectedModule?.label ?? "Select module"}
+                      </span>
+                      {!isEdit && canSave && moduleOptions.length > 0 && (
+                        <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-56">
+                      {moduleOptions.map((option) => (
                         <DropdownMenuItem
-                          key={status.id}
-                          onSelect={() => setStatusId(status.id)}
+                          key={option.value}
+                          onSelect={() => setModuleInstanceId(option.value)}
                           className="justify-between"
                         >
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="h-2.5 w-2.5 rounded-full"
-                              style={{
-                                backgroundColor:
-                                  status.color ?? "var(--status-info)",
-                              }}
-                              aria-hidden
-                            />
-                            {status.name}
-                          </span>
-                          {status.id === statusId && (
+                          {option.label}
+                          {option.value === moduleInstanceId && (
                             <Check className="h-4 w-4" />
                           )}
                         </DropdownMenuItem>
                       ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              )}
+
+              <div className="flex min-w-0 flex-col gap-1 rounded-md  px-3 py-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Status
+                </span>
+                <div className="flex h-8 items-center gap-2">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger
+                      disabled={!canSave || statusOptions.length === 0}
+                      className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
+                      aria-label="Change status"
+                    >
+                      <span className="truncate">
+                        {selectedStatus?.name ?? "Select status"}
+                      </span>
+                      {canSave && statusOptions.length > 0 && (
+                        <ChevronDown className="h-3 w-3 shrink-0" />
+                      )}
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start" className="min-w-48">
+                      {(statuses ?? [])
+                        .slice()
+                        .sort((a, b) => a.order - b.order)
+                        .map((status) => (
+                          <DropdownMenuItem
+                            key={status.id}
+                            onSelect={() => setStatusId(status.id)}
+                            className="justify-between"
+                          >
+                            <span className="inline-flex items-center gap-2">
+                              <span
+                                className="h-2.5 w-2.5 rounded-full"
+                                style={{
+                                  backgroundColor:
+                                    status.color ?? "var(--status-info)",
+                                }}
+                                aria-hidden
+                              />
+                              {status.name}
+                            </span>
+                            {status.id === statusId && (
+                              <Check className="h-4 w-4" />
+                            )}
+                          </DropdownMenuItem>
+                        ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </div>
-            </div>
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
@@ -523,7 +526,8 @@ export function TaskEditor({
               )}
               {canSave && (
                 <Button
-                  type="submit"
+                  type="button"
+                  onClick={() => handleSubmit()}
                   disabled={pending || !name.trim() || (isEdit && !isDirty)}
                 >
                   {pending ? (

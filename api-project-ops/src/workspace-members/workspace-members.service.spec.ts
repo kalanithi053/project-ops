@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
-import { ThemeMode } from '@prisma/client';
+import { ThemeColor, ThemeMode } from '@prisma/client';
 import { WorkspaceMembersService } from './workspace-members.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
@@ -416,6 +416,7 @@ describe('WorkspaceMembersService', () => {
         status: 'active',
         isDefault: true,
         theme: 'dark',
+        themeColor: 'blue',
       };
       prisma.workspaceMember.findUniqueOrThrow.mockResolvedValue(own);
 
@@ -429,6 +430,7 @@ describe('WorkspaceMembersService', () => {
           status: true,
           isDefault: true,
           theme: true,
+          themeColor: true,
         },
       });
       expect(result).toEqual(own);
@@ -437,15 +439,19 @@ describe('WorkspaceMembersService', () => {
 
   describe('updateTheme', () => {
     it("updates the caller's own theme preference", async () => {
-      const updated = { id: 'member-1', theme: 'dark' };
+      const updated = { id: 'member-1', theme: 'dark', themeColor: 'green' };
       prisma.workspaceMember.update.mockResolvedValue(updated);
 
-      const result = await service.updateTheme('member-1', ThemeMode.dark);
+      const result = await service.updateTheme(
+        'member-1',
+        ThemeMode.dark,
+        ThemeColor.green,
+      );
 
       expect(prisma.workspaceMember.update).toHaveBeenCalledWith({
         where: { id: 'member-1' },
-        data: { theme: 'dark' },
-        select: { id: true, theme: true },
+        data: { theme: 'dark', themeColor: 'green' },
+        select: { id: true, theme: true, themeColor: true },
       });
       expect(result).toEqual(updated);
     });

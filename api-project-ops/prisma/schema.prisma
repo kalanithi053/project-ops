@@ -56,23 +56,23 @@ enum WorkTypeCategory {
 // ---------------------------------------------------------------------------
 
 model User {
-  id                     String    @id @default(uuid())
+  id                             String    @id @default(uuid())
   // Login identifier. Required + unique — replaces the old username field.
-  email                  String    @unique
-  firstName              String?   @map("first_name")
-  lastName               String?   @map("last_name")
+  email                          String    @unique
+  firstName                      String?   @map("first_name")
+  lastName                       String?   @map("last_name")
   // Fixed OTP code for this user (defaults to the dev static code). When set,
   // OtpService issues this value instead of a random one — override per user
   // to give a tester/demo account a predictable login code.
-  staticOtp              String?   @default("123456") @map("static_otp")
-  isActive               Boolean   @default(true) @map("is_active")
-  isVerified             Boolean   @default(true) @map("is_verified")
-  createdAt              DateTime  @default(now()) @map("created_at")
-  updatedAt              DateTime  @updatedAt @map("updated_at")
+  staticOtp                      String?   @default("123456") @map("static_otp")
+  isActive                       Boolean   @default(true) @map("is_active")
+  isVerified                     Boolean   @default(true) @map("is_verified")
+  createdAt                      DateTime  @default(now()) @map("created_at")
+  updatedAt                      DateTime  @updatedAt @map("updated_at")
   // Set once the user finishes or skips the onboarding product tour;
   // null means it hasn't been shown/completed yet.
-  productTourCompletedAt DateTime? @map("product_tour_completed_at")
-  isTourDone             Boolean   @default(false) @map("is_tour_done")
+  productTourCompletedAt         DateTime? @map("product_tour_completed_at")
+  isTourDone                     Boolean   @default(false) @map("is_tour_done")
   // Same pattern, for the second (project-overview) tour.
   projectOverviewTourCompletedAt DateTime? @map("project_overview_tour_completed_at")
   isProjectOverviewTourDone      Boolean   @default(false) @map("is_project_overview_tour_done")
@@ -88,6 +88,7 @@ model User {
   qaAssignedWorkItems WorkItem[]        @relation("WorkItemQaAssignee")
   createdWorkItems    WorkItem[]        @relation("WorkItemCreator")
   timeLogs            TimeLog[]
+  attachments         Attachment[]
 
   @@map("user")
 }
@@ -118,7 +119,7 @@ model Workspace {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  owner          User              @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  owner          User                 @relation("WorkspaceOwner", fields: [ownerId], references: [id])
   members        WorkspaceMember[]
   roles          UserRole[]
   permissions    UserPermission[]
@@ -132,6 +133,7 @@ model Workspace {
   comments       Comment[]
   activityLogs   ActivityLog[]
   timeLogs       TimeLog[]
+  attachments    Attachment[]
   preference     WorkspacePreference?
 
   @@index([ownerId])
@@ -148,6 +150,7 @@ model WorkspaceMember {
   // The member's own display-theme preference for this workspace. Self-service
   // only — any active member may read/set their own, unrestricted by role.
   theme       ThemeMode        @default(system)
+  themeColor  ThemeColor       @default(blue) @map("theme_color")
   joinedAt    DateTime         @default(now()) @map("joined_at")
 
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -166,6 +169,19 @@ enum ThemeMode {
   system
 
   @@map("theme_mode")
+}
+
+enum ThemeColor {
+  blue
+  green
+  purple
+  red
+  orange
+  pink
+  gray
+  yellow
+
+  @@map("theme_color")
 }
 
 // ---------------------------------------------------------------------------
@@ -264,11 +280,37 @@ model Project {
   moduleInstances ModuleInstance[]
   workItems       WorkItem[]
   timeLogs        TimeLog[]
+  attachments     Attachment[]
 
   @@index([workspaceId])
   @@index([ownerId])
   @@index([projectTypeId])
   @@map("project")
+}
+
+/**
+ * A file uploaded to a project (stored in S3 — see AttachmentsModule/S3Service).
+ * `s3Key` is the object key, never exposed to the client; downloads are
+ * streamed back through the API rather than a signed S3 URL.
+ */
+model Attachment {
+  id          String   @id @default(uuid())
+  workspaceId String   @map("workspace_id")
+  projectId   String   @map("project_id")
+  fileName    String   @map("file_name")
+  mimeType    String   @map("mime_type")
+  sizeBytes   Int      @map("size_bytes")
+  s3Key       String   @map("s3_key")
+  uploadedBy  String   @map("uploaded_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  project   Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploader  User      @relation(fields: [uploadedBy], references: [id])
+
+  @@index([workspaceId])
+  @@index([projectId])
+  @@map("attachment")
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +411,6 @@ model WorkItem {
   workItemTypeId   String?   @map("work_item_type_id")
   name             String
   prefix           String?
-  description      String?
   startDate        DateTime? @map("start_date")
   dueDate          DateTime? @map("due_date")
   statusId         String?   @map("status_id")
@@ -379,13 +420,15 @@ model WorkItem {
   createdBy        String    @map("created_by")
   estimateHours    Float?    @map("estimate_hours")
   completedHours   Float?    @map("completed_hours")
-  /** Flat ordering across the whole project (not per column) — see the Kanban
+  /**
+   * Flat ordering across the whole project (not per column) — see the Kanban
    * board's drag-and-drop reordering. A gap-based (fractional-indexing)
    * value: inserting between two rows only ever assigns the moved row a
    * value between its new neighbors, so a drag never needs to renumber
    * every other row in the column — see task-board.tsx's handleDragEnd.
    * Defaults to 0 for pre-existing rows; `createdAt` breaks ties so their
-   * visual order is unaffected. */
+   * visual order is unaffected.
+   */
   position         Float     @default(0)
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @updatedAt @map("updated_at")
@@ -400,6 +443,7 @@ model WorkItem {
   creator        User            @relation("WorkItemCreator", fields: [createdBy], references: [id])
   comments       Comment[]
   timeLogs       TimeLog[]
+  detail         WorkItemDetail?
 
   @@index([projectId])
   @@index([moduleInstanceId])
@@ -410,6 +454,22 @@ model WorkItem {
   @@index([qaAssigneeId])
   @@index([projectId, position])
   @@map("work_item")
+}
+
+/**
+ * A WorkItem's freeform description, split into its own 1:1 table (vertical
+ * partitioning) — it's the one large, optional column on WorkItem, read only
+ * by the single-item detail view. Keeping it out of `work_item` means every
+ * List/Kanban fetch (which never renders it) no longer pulls it off disk.
+ */
+model WorkItemDetail {
+  workItemId  String   @id @map("work_item_id")
+  description String?
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  workItem WorkItem @relation(fields: [workItemId], references: [id], onDelete: Cascade)
+
+  @@map("work_item_detail")
 }
 
 // ---------------------------------------------------------------------------
@@ -516,8 +576,18 @@ model TicketStatus {
 // Activity log (generic audit trail; entityType/entityId identify the subject)
 // ---------------------------------------------------------------------------
 
+/**
+ * Horizontally partitioned (RANGE on createdAt, monthly) — see the
+ * partition_activity_log migration. Pure insert-only audit trail with
+ * unbounded growth, so Postgres can prune/scan by month and old partitions
+ * can be archived or dropped independently. Postgres requires the partition
+ * key in every unique constraint, so `id` alone can no longer be `@id` —
+ * `(id, createdAt)` is the composite primary key instead. Nothing in this
+ * codebase updates or deletes an ActivityLog row (it's append-only), so this
+ * has no ripple on `id`-keyed lookups elsewhere.
+ */
 model ActivityLog {
-  id          String   @id @default(uuid())
+  id          String   @default(uuid())
   workspaceId String   @map("workspace_id")
   projectId   String?  @map("project_id")
   // What kind of thing this entry is about, e.g. 'comment'.
@@ -533,6 +603,7 @@ model ActivityLog {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   actor     User      @relation("ActivityLogActor", fields: [userId], references: [id])
 
+  @@id([id, createdAt])
   @@index([workspaceId])
   @@index([entityType, entityId])
   @@map("activity_log")
@@ -556,8 +627,18 @@ enum TimeLogSource {
   @@map("time_log_source")
 }
 
+/**
+ * Horizontally partitioned (RANGE on `date`, monthly) — see the
+ * partition_time_log migration. Append-heavy with an explicit date column
+ * already used for report/export date-range scans. Same PK caveat as
+ * ActivityLog: Postgres requires the partition key in every unique
+ * constraint, so `(id, date)` is the composite primary key instead of a bare
+ * `id`. Unlike ActivityLog, this table IS mutated (edit/delete an entry,
+ * stop a running timer) — those call sites look the row up by `id_date`
+ * instead of `id` alone; see stopTimer/update/remove below.
+ */
 model TimeLog {
-  id              String             @id @default(uuid())
+  id              String             @default(uuid())
   workspaceId     String             @map("workspace_id")
   projectId       String             @map("project_id")
   workItemId      String             @map("work_item_id")
@@ -578,6 +659,7 @@ model TimeLog {
   workItem  WorkItem  @relation(fields: [workItemId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@id([id, date])
   @@index([workspaceId])
   @@index([projectId])
   @@index([workItemId])

@@ -10,6 +10,7 @@ import type {
   Project,
   ProjectDetail,
   ProjectModuleInstance,
+  UpdateProjectDto,
 } from "@/lib/api/types";
 
 /** GET /projects — projects in the given workspace. */
@@ -70,6 +71,26 @@ export function useCreateProject(workspaceSlug: string) {
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
       toast.success("Project created", project?.name);
+    },
+  });
+}
+
+/** PATCH /projects/:id — edit name/description/dates on an existing project. */
+export function useUpdateProject(workspaceSlug: string, projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (dto: UpdateProjectDto) =>
+      apiFetch<Project>(`/projects/${projectId}`, {
+        method: "PATCH",
+        body: dto,
+        workspaceSlug,
+      }),
+    onSuccess: (project) => {
+      queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
+      queryClient.invalidateQueries({
+        queryKey: ["project", workspaceSlug, projectId],
+      });
+      toast.success("Project updated", project?.name);
     },
   });
 }

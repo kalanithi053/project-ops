@@ -101,7 +101,7 @@ export function ProjectActivity({
           key: `${task.id}-u`,
           at: updated,
           kind: "task-updated",
-          label: `${task.prefix ?? task.name} updated`,
+          label: `${task.name} updated`,
           detail: moduleName,
         });
       } else if (created) {
@@ -109,7 +109,7 @@ export function ProjectActivity({
           key: `${task.id}-c`,
           at: created,
           kind: "task-created",
-          label: `${task.prefix ?? task.name} created`,
+          label: `${task.name} created`,
           detail: moduleName,
         });
       }

@@ -1,10 +1,27 @@
 "use client";
 
 import * as React from "react";
-import { Bold, Italic, ListChecks, ListOrdered, Underline } from "lucide-react";
+import {
+  Bold,
+  Image as ImageIcon,
+  Italic,
+  ListChecks,
+  ListOrdered,
+  Loader2,
+  Underline,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { toast } from "@/lib/toast/toast-store";
+import {
+  MAX_ATTACHMENT_BYTES,
+  formatBytes,
+  uploadProjectAttachment,
+  useResolveAttachmentImages,
+} from "@/lib/api/hooks/use-project-attachments";
+
+const IMAGE_ATTRIBUTES = new Set(["src", "alt", "data-attachment-id"]);
 
 export function sanitizeRichText(value: string): string {
   const documentValue = new DOMParser().parseFromString(value, "text/html");
@@ -14,6 +31,7 @@ export function sanitizeRichText(value: string): string {
     "DIV",
     "EM",
     "I",
+    "IMG",
     "LI",
     "OL",
     "P",
@@ -27,6 +45,16 @@ export function sanitizeRichText(value: string): string {
     .querySelectorAll("script, style, iframe, object, embed")
     .forEach((element) => element.remove());
 
+  // An <img> only has legitimate meaning here when it references an
+  // uploaded attachment — otherwise it's a bare externally-sourced image
+  // (e.g. a pasted <img src="https://evil.example/track.gif">), which would
+  // fire on every render as a tracking pixel. Drop those outright rather
+  // than merely stripping attributes, on every rich-text surface (task
+  // descriptions/comments included), not just project descriptions.
+  documentValue.body.querySelectorAll("img").forEach((element) => {
+    if (!element.getAttribute("data-attachment-id")) element.remove();
+  });
+
   documentValue.body.querySelectorAll("*").forEach((element) => {
     if (!allowedElements.has(element.tagName)) {
       element.replaceWith(...Array.from(element.childNodes));
@@ -34,9 +62,21 @@ export function sanitizeRichText(value: string): string {
     }
 
     Array.from(element.attributes).forEach((attribute) => {
+      const keep =
+        (element.tagName === "SPAN" &&
+          attribute.name === "data-mention-email") ||
+        (element.tagName === "IMG" && IMAGE_ATTRIBUTES.has(attribute.name));
+      if (!keep) {
+        element.removeAttribute(attribute.name);
+        return;
+      }
+      // <img src> only ever holds a same-session blob: preview URL (it's
+      // re-resolved from data-attachment-id on every fresh load anyway) —
+      // guard against a stray javascript: scheme regardless.
       if (
-        element.tagName !== "SPAN" ||
-        attribute.name !== "data-mention-email"
+        element.tagName === "IMG" &&
+        attribute.name === "src" &&
+        /^\s*javascript:/i.test(attribute.value)
       ) {
         element.removeAttribute(attribute.name);
       }
@@ -44,6 +84,18 @@ export function sanitizeRichText(value: string): string {
   });
 
   return documentValue.body.innerHTML;
+}
+
+/** Plain-text extract of rich text HTML — for length checks and compact previews. */
+export function richTextToPlainText(value: string): string {
+  // Block boundaries (paragraphs, list items) carry no whitespace of their
+  // own in the DOM, so a raw .textContent runs adjacent blocks together —
+  // insert a space at each closing tag before extracting text.
+  const withBreaks = value.replace(/<\/(p|div|li|ul|ol)>/gi, "$& ");
+  const text =
+    new DOMParser().parseFromString(withBreaks, "text/html").body
+      .textContent ?? "";
+  return text.replace(/\s+/g, " ").trim();
 }
 
 interface RichTextEditorProps {
@@ -55,18 +107,46 @@ interface RichTextEditorProps {
   disabled?: boolean;
   className?: string;
   onAtSign?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  /**
+   * Enables the image toolbar button (upload) and clipboard image paste, and
+   * resolves any existing `data-attachment-id` images to viewable blob URLs.
+   * Omit to keep the editor text-only — e.g. the New Project form, where no
+   * project exists yet to attach an image to.
+   */
+  imageContext?: { workspaceSlug: string; projectId: string };
+}
+
+/** Escapes a string for safe embedding inside a double-quoted HTML attribute. */
+function escapeHtmlAttr(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 export const RichTextEditor = React.forwardRef<
   HTMLDivElement,
   RichTextEditorProps
 >(function RichTextEditor(
-  { id, value, onChange, placeholder, disabled, className, onAtSign, ...aria },
+  {
+    id,
+    value,
+    onChange,
+    placeholder,
+    disabled,
+    className,
+    onAtSign,
+    imageContext,
+    ...aria
+  },
   forwardedRef,
 ) {
   const editorRef = React.useRef<HTMLDivElement>(null);
+  const imageInputRef = React.useRef<HTMLInputElement>(null);
   const latestValue = React.useRef(value);
   const initialized = React.useRef(false);
+  const [isUploadingImage, setIsUploadingImage] = React.useState(false);
 
   React.useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
 
@@ -81,6 +161,13 @@ export const RichTextEditor = React.forwardRef<
     }
   }, [value]);
 
+  useResolveAttachmentImages(
+    editorRef,
+    imageContext?.workspaceSlug ?? "",
+    imageContext?.projectId ?? "",
+    [value],
+  );
+
   function emitValue() {
     const next = editorRef.current?.innerHTML ?? "";
     latestValue.current = next;
@@ -91,6 +178,37 @@ export const RichTextEditor = React.forwardRef<
     editorRef.current?.focus();
     document.execCommand(command);
     emitValue();
+  }
+
+  async function handleImageFile(file: File) {
+    if (!imageContext) return;
+    if (file.size > MAX_ATTACHMENT_BYTES) {
+      toast.error(
+        "Image too large",
+        `${file.name} is ${formatBytes(file.size)} — the limit is ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+      );
+      return;
+    }
+    setIsUploadingImage(true);
+    try {
+      const attachment = await uploadProjectAttachment(
+        imageContext.workspaceSlug,
+        imageContext.projectId,
+        file,
+      );
+      const previewUrl = URL.createObjectURL(file);
+      editorRef.current?.focus();
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<img data-attachment-id="${attachment.id}" data-resolved="true" alt="${escapeHtmlAttr(file.name)}" src="${previewUrl}">`,
+      );
+      emitValue();
+    } catch {
+      // apiFetch already surfaces an error toast.
+    } finally {
+      setIsUploadingImage(false);
+    }
   }
 
   return (
@@ -160,6 +278,38 @@ export const RichTextEditor = React.forwardRef<
         >
           <ListOrdered className="h-3.5 w-3.5" />
         </Button>
+        {imageContext && (
+          <>
+            <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              aria-label="Insert image"
+              disabled={disabled || isUploadingImage}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => imageInputRef.current?.click()}
+            >
+              {isUploadingImage ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <ImageIcon className="h-3.5 w-3.5" />
+              )}
+            </Button>
+            <input
+              ref={imageInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void handleImageFile(file);
+                event.target.value = "";
+              }}
+            />
+          </>
+        )}
       </div>
       <div
         id={id}
@@ -171,12 +321,23 @@ export const RichTextEditor = React.forwardRef<
         contentEditable={!disabled}
         suppressContentEditableWarning
         data-placeholder={placeholder}
-        className="min-h-40 px-3 py-2 text-sm leading-6 outline-none empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] [&_[data-mention-email]]:font-semibold [&_[data-mention-email]]:text-primary [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
+        className="min-h-40 px-3 py-2 text-sm leading-6 outline-none empty:before:pointer-events-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)] [&_[data-mention-email]]:font-semibold [&_[data-mention-email]]:text-primary [&_img]:my-1 [&_img]:max-w-full [&_img]:rounded-md [&_ol]:list-decimal [&_ol]:pl-6 [&_ul]:list-disc [&_ul]:pl-6"
         onInput={emitValue}
         onKeyDown={(event) => {
           if (event.key === "@" && !disabled) onAtSign?.(event);
         }}
         onPaste={(event) => {
+          const imageItem = imageContext
+            ? Array.from(event.clipboardData.items).find((item) =>
+                item.type.startsWith("image/"),
+              )
+            : undefined;
+          if (imageItem) {
+            event.preventDefault();
+            const file = imageItem.getAsFile();
+            if (file) void handleImageFile(file);
+            return;
+          }
           event.preventDefault();
           document.execCommand(
             "insertText",

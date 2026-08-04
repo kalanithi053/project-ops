@@ -224,9 +224,11 @@ describe('TimeLogsService', () => {
 
     it('stops the running timer, computes durationMinutes, and logs activity', async () => {
       const startTime = new Date(Date.now() - 5 * 60_000);
+      const date = new Date('2026-07-30');
       mockPrismaService.workItem.findFirst.mockResolvedValue(assignedWorkItem);
       mockPrismaService.timeLog.findFirst.mockResolvedValue({
         id: 'log-1',
+        date,
         startTime,
         notes: null,
       });
@@ -241,7 +243,7 @@ describe('TimeLogsService', () => {
       );
 
       const call = txTimeLog.update.mock.calls[0][0];
-      expect(call.where).toEqual({ id: 'log-1' });
+      expect(call.where).toEqual({ id_date: { id: 'log-1', date } });
       expect(call.data.durationMinutes).toBeGreaterThanOrEqual(4);
       expect(call.data.endTime).toBeInstanceOf(Date);
       expect(call.data.notes).toBe('Wrapped up the migration');
@@ -343,9 +345,11 @@ describe('TimeLogsService', () => {
 
   describe('update / remove', () => {
     it('recomputes durationMinutes when start/end change', async () => {
+      const date = new Date('2026-07-30');
       mockPrismaService.timeLog.findFirst.mockResolvedValue({
         id: 'log-1',
         userId,
+        date,
         startTime: new Date('2026-07-30T09:00:00.000Z'),
         endTime: new Date('2026-07-30T09:30:00.000Z'),
         durationMinutes: 30,
@@ -358,6 +362,7 @@ describe('TimeLogsService', () => {
 
       expect(mockPrismaService.timeLog.update).toHaveBeenCalledWith(
         expect.objectContaining({
+          where: { id_date: { id: 'log-1', date } },
           data: expect.objectContaining({ durationMinutes: 60 }),
         }),
       );
@@ -373,16 +378,18 @@ describe('TimeLogsService', () => {
     });
 
     it("deletes only the caller's own entry", async () => {
+      const date = new Date('2026-07-30');
       mockPrismaService.timeLog.findFirst.mockResolvedValue({
         id: 'log-1',
         userId,
+        date,
       });
       mockPrismaService.timeLog.delete.mockResolvedValue({ id: 'log-1' });
 
       const result = await service.remove('log-1', userId);
 
       expect(mockPrismaService.timeLog.delete).toHaveBeenCalledWith({
-        where: { id: 'log-1' },
+        where: { id_date: { id: 'log-1', date } },
       });
       expect(result).toEqual({ id: 'log-1', deleted: true });
     });

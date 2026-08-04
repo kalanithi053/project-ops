@@ -190,8 +190,14 @@ export class ActivityLogService {
         return `${actorName} updated a comment`;
       case 'comment_deleted':
         return `${actorName} deleted a comment`;
+      case 'attachment_added':
+        return `${actorName} attached a file: "${(meta.fileName as string) ?? ''}"`;
+      case 'attachment_deleted':
+        return `${actorName} removed a file: "${(meta.fileName as string) ?? ''}"`;
       case 'time_logged': {
-        const duration = this.formatMinutes((meta.durationMinutes as number) ?? 0);
+        const duration = this.formatMinutes(
+          (meta.durationMinutes as number) ?? 0,
+        );
         const note =
           typeof meta.notes === 'string' && meta.notes
             ? ` — "${meta.notes}"`

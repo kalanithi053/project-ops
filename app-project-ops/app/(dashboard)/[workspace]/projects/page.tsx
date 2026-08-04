@@ -3,10 +3,24 @@
 import * as React from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { Eye, FolderKanban, ListChecks, Loader2, Plus } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  FolderKanban,
+  ListChecks,
+  Loader2,
+  Plus,
+  Upload,
+  X,
+} from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/shared/page-header";
+import {
+  RichTextEditor,
+  richTextToPlainText,
+  sanitizeRichText,
+} from "@/components/shared/rich-text-editor";
 import { StatsGrid } from "@/components/shared/stats-grid";
 import { DataTable } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
@@ -31,8 +45,14 @@ import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
 import { usePlans } from "@/lib/api/hooks/use-plans";
 import { useMe } from "@/lib/api/hooks/use-users";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import {
+  MAX_ATTACHMENT_BYTES,
+  formatBytes,
+  uploadProjectAttachment,
+} from "@/lib/api/hooks/use-project-attachments";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { formatDate, todayDateInput } from "@/lib/format";
+import { toast } from "@/lib/toast/toast-store";
 import type {
   CreateProjectDto,
   Me,
@@ -147,7 +167,7 @@ export default function ProjectsPage() {
             </Link>
             {p.description ? (
               <span className="truncate text-xs text-muted-foreground">
-                {p.description}
+                {richTextToPlainText(p.description)}
               </span>
             ) : null}
           </div>
@@ -308,6 +328,32 @@ function NewProjectPanel({
   const [projectTypeId, setProjectTypeId] = React.useState<string>();
   const [planIds, setPlanIds] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
+  // Staged locally — there's no project id to upload against until the
+  // create call below succeeds, so files are held here and uploaded
+  // immediately afterward, before navigating into the new project.
+  const [files, setFiles] = React.useState<File[]>([]);
+  const [isUploadingFiles, setIsUploadingFiles] = React.useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  function addFiles(list: FileList | null) {
+    if (!list?.length) return;
+    const accepted: File[] = [];
+    for (const file of Array.from(list)) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        toast.error(
+          "File too large",
+          `${file.name} is ${formatBytes(file.size)} — the limit is ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+        );
+        continue;
+      }
+      accepted.push(file);
+    }
+    setFiles((current) => [...current, ...accepted]);
+  }
+
+  function removeFile(index: number) {
+    setFiles((current) => current.filter((_, i) => i !== index));
+  }
 
   const typeOptions: SelectOption[] = (typeData ?? []).map((type) => ({
     label: type.name,
@@ -349,12 +395,15 @@ function NewProjectPanel({
       return setError("End date can't be before the start date.");
     }
 
+    const sanitizedDescription = sanitizeRichText(description).trim();
+    const descriptionText = richTextToPlainText(sanitizedDescription).trim();
+
     const dto: CreateProjectDto = {
       name: name.trim(),
       projectTypeId,
       startDate,
       endDate,
-      description: description.trim() || undefined,
+      description: descriptionText ? sanitizedDescription : undefined,
       // Always an array — the backend validates with @IsArray, so a bare
       // string is rejected outright.
       planId: requiresPlan ? planIds : undefined,
@@ -364,7 +413,20 @@ function NewProjectPanel({
     // and drops the user straight into the new project's overview — which is
     // also where the project-overview tour offers itself for the first time.
     createProject.mutate(dto, {
-      onSuccess: (project) => {
+      onSuccess: async (project) => {
+        if (project?.id && files.length > 0) {
+          setIsUploadingFiles(true);
+          // Best-effort: apiFetch already toasts on a failed upload, so a
+          // rejected file just doesn't hold up the rest or the navigation.
+          await Promise.all(
+            files.map((file) =>
+              uploadProjectAttachment(workspaceSlug, project.id, file).catch(
+                () => undefined,
+              ),
+            ),
+          );
+          setIsUploadingFiles(false);
+        }
         onDone();
         if (project?.id) router.push(`/${workspaceSlug}/projects/${project.id}`);
       },
@@ -437,11 +499,12 @@ function NewProjectPanel({
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="project-description">Description</Label>
-            <Input
+            <RichTextEditor
               id="project-description"
-              placeholder="Optional summary"
               value={description}
-              onChange={(event) => setDescription(event.target.value)}
+              onChange={setDescription}
+              placeholder="Optional summary"
+              aria-label="Description"
             />
           </div>
 
@@ -468,6 +531,61 @@ function NewProjectPanel({
             </div>
           </div>
 
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-attachments">Attachments</Label>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex cursor-pointer flex-col items-center gap-1 rounded-md border border-dashed border-border px-3 py-4 text-center transition-colors hover:border-foreground/30 hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <Upload className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm">Click to attach files</span>
+              <span className="text-xs text-muted-foreground">
+                Up to {formatBytes(MAX_ATTACHMENT_BYTES)} per file —
+                uploaded once the project is created
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              id="project-attachments"
+              type="file"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+            {files.length > 0 && (
+              <ul className="flex flex-col gap-1.5">
+                {files.map((file, index) => (
+                  <li
+                    key={`${file.name}-${index}`}
+                    className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
+                  >
+                    <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <span className="min-w-0 flex-1 truncate text-sm">
+                      {file.name}
+                    </span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      {formatBytes(file.size)}
+                    </span>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-6 w-6 shrink-0"
+                      aria-label={`Remove ${file.name}`}
+                      onClick={() => removeFile(index)}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           {error ? (
             <p role="alert" className="text-sm text-destructive">
               {error}
@@ -479,12 +597,17 @@ function NewProjectPanel({
           <Button
             type="submit"
             className="w-full"
-            disabled={createProject.isPending}
+            disabled={createProject.isPending || isUploadingFiles}
           >
             {createProject.isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Creating…
+              </>
+            ) : isUploadingFiles ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Uploading files…
               </>
             ) : (
               "Create project"

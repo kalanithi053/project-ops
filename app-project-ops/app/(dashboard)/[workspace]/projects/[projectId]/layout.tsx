@@ -7,10 +7,11 @@ import { PageContainer } from "@/components/layout/page-container";
 import { cn } from "@/lib/utils";
 
 const TABS = [
-  { segment: "", label: "Dashboard" },
   { segment: "work-items", label: "Work items" },
   { segment: "time-logs", label: "Time Logs" },
   { segment: "users", label: "Users" },
+  { segment: "dashboard", label: "Dashboard" },
+  { segment: "attachments", label: "Attachments" },
   // { segment: "files", label: "Files" },
 ];
 
@@ -30,7 +31,6 @@ export default function ProjectLayout({
     projectId: string;
   }>();
   const pathname = usePathname();
-
   const base = `/${workspace}/projects/${projectId}`;
   const isTaskEditor =
     pathname.startsWith(`${base}/work-items/`) ||
@@ -49,7 +49,10 @@ export default function ProjectLayout({
       >
         {TABS.map((tab) => {
           const href = tab.segment ? `${base}/${tab.segment}` : base;
-          const isActive = pathname === href;
+          const isActive =
+            pathname === base &&
+            tab.segment === "work-items" ? true:
+            pathname === href;
           return (
             <Link
               key={tab.label}

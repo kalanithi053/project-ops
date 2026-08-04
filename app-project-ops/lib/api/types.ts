@@ -193,6 +193,18 @@ export interface CreateProjectDto {
   planId?: string[];
 }
 
+/**
+ * PATCH /projects/:id — the backend only actually applies these four fields
+ * (see projects.service.ts's update()); projectTypeId/planId can't be
+ * changed after creation, so there's no edit surface for them.
+ */
+export interface UpdateProjectDto {
+  name?: string;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
+}
+
 export interface InviteMemberDto {
   email: string;
   roleId?: string;
@@ -522,6 +534,23 @@ export interface TaskAttachment {
   uploader?: { id: string; username: string };
   /** Present only on the project-wide rollup. */
   task?: { id: string; name: string; prefix?: string | null };
+}
+
+/** A file uploaded to a project (GET/POST /projects/:projectId/attachments). */
+export interface ProjectAttachment {
+  id: string;
+  projectId: string;
+  /** Original upload name — what the UI shows and downloads as. */
+  fileName: string;
+  mimeType: string;
+  sizeBytes: number;
+  createdAt: string;
+  uploader?: {
+    id: string;
+    email: string;
+    firstName?: string | null;
+    lastName?: string | null;
+  };
 }
 
 export interface Task {

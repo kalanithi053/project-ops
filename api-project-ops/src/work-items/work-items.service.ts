@@ -50,6 +50,16 @@ const WORK_ITEM_INCLUDE = {
   creator: { select: { id: true, email: true } },
 } as const;
 
+// `description` lives in its own 1:1 `work_item_detail` table (vertical
+// partitioning — see the WorkItemDetail model) since it's the one large,
+// optional column and only ever read by the single-item detail view. `list()`
+// uses the plain WORK_ITEM_INCLUDE above so a board/list fetch never pulls it;
+// this one joins it in for endpoints that operate on a single work item.
+const WORK_ITEM_DETAIL_INCLUDE = {
+  ...WORK_ITEM_INCLUDE,
+  detail: { select: { description: true } },
+} as const;
+
 @Injectable()
 export class WorkItemsService {
   private readonly logger = new Logger(WorkItemsService.name);
@@ -99,16 +109,7 @@ export class WorkItemsService {
       and.push({ dueDate: { lte: new Date(filters.endDate) } });
     }
     if (filters.category) {
-      and.push(
-        filters.category === DEFAULT_ENTITY_TYPE
-          ? {
-              OR: [
-                { workItemTypeId: null },
-                { workItemType: { category: filters.category } },
-              ],
-            }
-          : { workItemType: { category: filters.category } },
-      );
+      and.push({ workItemType: { category: filters.category } });
     }
 
     return this.prisma.workItem.findMany({
@@ -211,7 +212,7 @@ export class WorkItemsService {
           workItemTypeId: dto.workItemTypeId ?? null,
           name: dto.name,
           prefix: dto.prefix ?? generateRandomId(),
-          description: dto.description ?? null,
+          detail: { create: { description: dto.description ?? null } },
           startDate: dto.startDate
             ? new Date(dto.startDate)
             : project.startDate
@@ -231,7 +232,7 @@ export class WorkItemsService {
           completedHours: dto.completedHours ?? null,
           position: nextPosition,
         },
-        include: WORK_ITEM_INCLUDE,
+        include: WORK_ITEM_DETAIL_INCLUDE,
       });
 
       await this.activityLog.log(
@@ -255,8 +256,9 @@ export class WorkItemsService {
       return created;
     });
 
-    await this.notifyWorkItemEvent(project, created, 'created', entityType);
-    return created;
+    const result = this.withDescription(created);
+    await this.notifyWorkItemEvent(project, result, 'created', entityType);
+    return result;
   }
 
   async update(
@@ -297,7 +299,10 @@ export class WorkItemsService {
           name: dto.name ?? undefined,
           prefix: dto.prefix ?? undefined,
           workItemTypeId: dto.workItemTypeId ?? undefined,
-          description: dto.description ?? undefined,
+          detail:
+            dto.description !== undefined
+              ? { update: { description: dto.description } }
+              : undefined,
           moduleInstanceId: dto.moduleInstanceId ?? undefined,
           startDate: dto.startDate ? new Date(dto.startDate) : undefined,
           dueDate: dto.dueDate ? new Date(dto.dueDate) : undefined,
@@ -309,7 +314,7 @@ export class WorkItemsService {
           completedHours: dto.completedHours ?? undefined,
           position: dto.position ?? undefined,
         },
-        include: WORK_ITEM_INCLUDE,
+        include: WORK_ITEM_DETAIL_INCLUDE,
       });
 
       if (Object.keys(changes).length > 0) {
@@ -330,25 +335,26 @@ export class WorkItemsService {
       return updated;
     });
 
-    if (assigneeChanged && updated.assignee) {
-      await this.notifyReassignment(project, updated, userId, entityType);
+    const result = this.withDescription(updated);
+    if (assigneeChanged && result.assignee) {
+      await this.notifyReassignment(project, result, userId, entityType);
     }
     if (Object.keys(changes).length > 0) {
       const statusChanged = Boolean(changes.statusId);
       await this.notifyWorkItemEvent(
         project,
-        updated,
+        result,
         statusChanged ? 'status_changed' : 'updated',
         entityType,
         {
           skipAssignee: assigneeChanged,
           ...(statusChanged
-            ? { fromStatus: workItem.status, toStatus: updated.status }
+            ? { fromStatus: workItem.status, toStatus: result.status }
             : {}),
         },
       );
     }
-    return updated;
+    return result;
   }
 
   async remove(workspaceId: string, projectId: string, id: string) {
@@ -616,9 +622,21 @@ export class WorkItemsService {
     await this.assertProject(workspaceId, projectId);
     const workItem = await this.prisma.workItem.findFirst({
       where: { id, projectId },
-      include: WORK_ITEM_INCLUDE,
+      include: WORK_ITEM_DETAIL_INCLUDE,
     });
     if (!workItem) throw new NotFoundException('Work item not found');
-    return workItem;
+    return this.withDescription(workItem);
+  }
+
+  /**
+   * Flattens the joined `detail.description` back onto the top level —
+   * matching the API's pre-partition shape — and drops the nested `detail`
+   * key from the response.
+   */
+  private withDescription<
+    T extends { detail?: { description: string | null } | null },
+  >(workItem: T): Omit<T, 'detail'> & { description: string | null } {
+    const { detail, ...rest } = workItem;
+    return { ...rest, description: detail?.description ?? null };
   }
 }

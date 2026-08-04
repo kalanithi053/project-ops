@@ -674,7 +674,7 @@ function BoardColumn({
         <div
           ref={setNodeRef}
           className={cn(
-            "flex min-h-24 max-h-[calc(100vh-22rem)] flex-col gap-2 overflow-y-auto rounded-md p-1 transition-colors",
+            "flex h-[calc(100vh-16rem)] flex-col gap-2 overflow-y-auto rounded-md p-1 transition-colors",
             isOver && column.droppable && "bg-accent/60 ring-1 ring-ring/40",
           )}
         >

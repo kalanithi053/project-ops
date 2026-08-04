@@ -229,7 +229,10 @@ export class TimeLogsService {
 
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.timeLog.update({
-        where: { id: running.id },
+        // `date` (the partition key) is folded into the compound unique key
+        // since Postgres requires it in every unique constraint — see
+        // TimeLog's @@id in schema.prisma.
+        where: { id_date: { id: running.id, date: running.date } },
         data: { endTime, durationMinutes, notes: finalNotes },
         include: TIME_LOG_INCLUDE,
       });
@@ -346,7 +349,7 @@ export class TimeLogsService {
     }
 
     return this.prisma.timeLog.update({
-      where: { id },
+      where: { id_date: { id: entry.id, date: entry.date } },
       data: {
         date: dto.date ? new Date(dto.date) : undefined,
         startTime,
@@ -361,8 +364,10 @@ export class TimeLogsService {
 
   /** Deletes an entry — only the entry's own logger may delete it. */
   async remove(id: string, userId: string) {
-    await this.getOwned(id, userId);
-    await this.prisma.timeLog.delete({ where: { id } });
+    const entry = await this.getOwned(id, userId);
+    await this.prisma.timeLog.delete({
+      where: { id_date: { id: entry.id, date: entry.date } },
+    });
     return { id, deleted: true };
   }
 

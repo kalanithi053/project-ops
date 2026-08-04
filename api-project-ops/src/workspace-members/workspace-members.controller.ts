@@ -63,7 +63,7 @@ export class WorkspaceMembersController {
     @CurrentWorkspace('membershipId') membershipId: string,
     @Body() dto: UpdateMyThemeDto,
   ) {
-    return this.members.updateTheme(membershipId, dto.theme);
+    return this.members.updateTheme(membershipId, dto.theme, dto.themeColor);
   }
 
   @Patch(':memberId')

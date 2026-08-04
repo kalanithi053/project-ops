@@ -23,6 +23,7 @@ import { AccessModule } from './access/access.module';
 import { CommentsModule } from './comments/comments.module';
 import { ReportsModule } from './reports/reports.module';
 import { TimeLogsModule } from './time-logs/time-logs.module';
+import { AttachmentsModule } from './attachments/attachments.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -50,6 +51,7 @@ import { AppService } from './app.service';
     CommentsModule,
     ReportsModule,
     TimeLogsModule,
+    AttachmentsModule,
   ],
   controllers: [AppController],
   providers: [

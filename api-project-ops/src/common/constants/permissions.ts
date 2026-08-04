@@ -30,6 +30,10 @@ export const PERMISSIONS = {
 
   TIMELOG_READ: 'timelog.read',
   TIMELOG_MANAGE: 'timelog.manage',
+
+  ATTACHMENT_CREATE: 'attachment.create',
+  ATTACHMENT_READ: 'attachment.read',
+  ATTACHMENT_DELETE: 'attachment.delete',
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -81,6 +85,12 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
     code: PERMISSIONS.TIMELOG_MANAGE,
     description: 'Log time (manual or timer) and edit/delete your own entries',
   },
+  { code: PERMISSIONS.ATTACHMENT_CREATE, description: 'Upload project files' },
+  {
+    code: PERMISSIONS.ATTACHMENT_READ,
+    description: 'View and download project files',
+  },
+  { code: PERMISSIONS.ATTACHMENT_DELETE, description: 'Delete project files' },
 ] as const;
 
 export const ALL_PERMISSION_CODES: PermissionCode[] = PERMISSION_CATALOG.map(
@@ -128,6 +138,9 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.PERMISSION_READ,
       PERMISSIONS.TIMELOG_READ,
       PERMISSIONS.TIMELOG_MANAGE,
+      PERMISSIONS.ATTACHMENT_CREATE,
+      PERMISSIONS.ATTACHMENT_READ,
+      PERMISSIONS.ATTACHMENT_DELETE,
     ],
   },
   {
@@ -143,6 +156,9 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.COMMENT_CREATE,
       PERMISSIONS.TIMELOG_READ,
       PERMISSIONS.TIMELOG_MANAGE,
+      PERMISSIONS.ATTACHMENT_CREATE,
+      PERMISSIONS.ATTACHMENT_READ,
+      PERMISSIONS.ATTACHMENT_DELETE,
     ],
   },
   {
@@ -153,6 +169,7 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.PROJECT_READ,
       PERMISSIONS.WORKITEM_READ,
       PERMISSIONS.TIMELOG_READ,
+      PERMISSIONS.ATTACHMENT_READ,
     ],
   },
   {
@@ -164,6 +181,7 @@ export const DEFAULT_ROLES: Array<{
       PERMISSIONS.PROJECT_READ,
       PERMISSIONS.WORKITEM_READ,
       PERMISSIONS.COMMENT_CREATE,
+      PERMISSIONS.ATTACHMENT_READ,
     ],
   },
 ];

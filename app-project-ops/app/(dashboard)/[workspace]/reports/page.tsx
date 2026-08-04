@@ -5,6 +5,7 @@ import { BarChart3, FolderKanban, Users } from "lucide-react";
 
 import { PageContainer } from "@/components/layout/page-container";
 import { PageHeader } from "@/components/shared/page-header";
+import { richTextToPlainText } from "@/components/shared/rich-text-editor";
 import { StatsGrid } from "@/components/shared/stats-grid";
 import { ModulePanels } from "@/components/shared/module-panels";
 import { QueryState } from "@/components/shared/query-state";
@@ -81,7 +82,10 @@ export default function ReportsPage() {
       items: projects.slice(0, 6).map((project) => ({
         icon: FolderKanban,
         primary: project.name,
-        secondary: project.description || project.projectType?.name || "",
+        secondary:
+          (project.description && richTextToPlainText(project.description)) ||
+          project.projectType?.name ||
+          "",
         meta: project.endDate ? `due ${formatDate(project.endDate)}` : undefined,
       })),
     },

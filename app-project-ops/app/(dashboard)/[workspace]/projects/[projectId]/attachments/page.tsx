@@ -2,11 +2,11 @@
 
 import { useParams } from "next/navigation";
 
-import { TaskWorkItems } from "@/components/projects/task-work-items";
+import { ProjectAttachments } from "@/components/projects/project-attachments";
 import { useProjectPermissions } from "@/lib/api/hooks/use-project-members";
 import { PERMISSIONS } from "@/lib/api/permissions";
 
-export default function ProjectWorkItemsPage() {
+export default function ProjectAttachmentsPage() {
   const { workspace, projectId } = useParams<{
     workspace: string;
     projectId: string;
@@ -14,11 +14,11 @@ export default function ProjectWorkItemsPage() {
   const { can } = useProjectPermissions(workspace, projectId);
 
   return (
-    <TaskWorkItems
+    <ProjectAttachments
       workspaceSlug={workspace}
       projectId={projectId}
-      canCreate={can(PERMISSIONS.WORKITEM_CREATE)}
-      canUpdate={can(PERMISSIONS.WORKITEM_UPDATE)}
+      canCreate={can(PERMISSIONS.ATTACHMENT_CREATE)}
+      canDelete={can(PERMISSIONS.ATTACHMENT_DELETE)}
     />
   );
 }

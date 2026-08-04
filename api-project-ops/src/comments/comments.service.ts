@@ -23,20 +23,6 @@ const COMMENT_INCLUDE = {
 const DEFAULT_ENTITY_TYPE = 'task';
 
 /**
- * Strips markup (including mention spans and their data-mention-email
- * attribute) down to visible text, so the activity log never surfaces raw
- * HTML or a tagged user's email address.
- */
-function plainTextPreview(body: string, maxLength = 200): string {
-  const text = body
-    .replace(/<[^>]*>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-  return text.slice(0, maxLength);
-}
-
-/**
  * Comments — either standalone workspace comments, or comments on a specific
  * work item. Other users can be tagged by email (`mentions`); each tagged
  * email must belong to a member of the workspace and is stored as a
@@ -86,7 +72,6 @@ export class CommentsService {
           entityId: created.id,
           action: 'comment_added',
           userId: authorId,
-          metadata: { preview: plainTextPreview(dto.body) },
         },
         tx,
       );
@@ -141,7 +126,6 @@ export class CommentsService {
           entityId: commentId,
           action: 'comment_updated',
           userId,
-          metadata: { preview: plainTextPreview(dto.body) },
         },
         tx,
       );
@@ -240,7 +224,6 @@ export class CommentsService {
           userId: authorId,
           metadata: {
             commentId: created.id,
-            preview: plainTextPreview(dto.body),
           },
         },
         tx,
@@ -314,7 +297,7 @@ export class CommentsService {
           entityId: workItemId,
           action: 'comment_updated',
           userId,
-          metadata: { commentId, preview: plainTextPreview(dto.body) },
+          metadata: { commentId },
         },
         tx,
       );

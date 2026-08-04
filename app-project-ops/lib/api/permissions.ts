@@ -26,6 +26,9 @@ export const PERMISSIONS = {
   WORKSPACE_MANAGE: "workspace.manage",
   TIMELOG_READ: "timelog.read",
   TIMELOG_MANAGE: "timelog.manage",
+  ATTACHMENT_CREATE: "attachment.create",
+  ATTACHMENT_READ: "attachment.read",
+  ATTACHMENT_DELETE: "attachment.delete",
 } as const;
 
 export type PermissionCode = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

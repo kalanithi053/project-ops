@@ -44,9 +44,13 @@ export class CreateProjectDto {
   @IsUUID('4', { each: true })
   planId?: string[];
 
-  @ApiProperty({ required: false })
+  @ApiProperty({
+    required: false,
+    description:
+      'Rich text (sanitized HTML) — may include images referencing project attachments.',
+  })
   @IsOptional()
   @IsString()
-  @MaxLength(2000)
+  @MaxLength(20000)
   description?: string;
 }

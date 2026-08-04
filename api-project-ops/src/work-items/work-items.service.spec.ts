@@ -74,7 +74,7 @@ describe('WorkItemsService', () => {
       workItemTypeId: null,
       name: 'Test Item',
       prefix: null,
-      description: null,
+      detail: { description: null },
       startDate: null,
       dueDate: null,
       statusId: null,
@@ -94,6 +94,14 @@ describe('WorkItemsService', () => {
       creator: { id: userId, email: 'creator@test.com' },
       ...overrides,
     };
+  }
+
+  /** Mirrors WorkItemsService's own withDescription, for building expected results. */
+  function flattenDetail<T extends { detail?: { description: string | null } }>(
+    item: T,
+  ): Omit<T, 'detail'> & { description: string | null } {
+    const { detail, ...rest } = item;
+    return { ...rest, description: detail?.description ?? null };
   }
 
   beforeEach(async () => {
@@ -288,7 +296,7 @@ describe('WorkItemsService', () => {
 
       const result = await service.findOne(workspaceId, projectId, workItemId);
 
-      expect(result).toEqual(item);
+      expect(result).toEqual(flattenDetail(item));
     });
 
     it('throws NotFoundException when the work item does not exist', async () => {
@@ -355,7 +363,7 @@ describe('WorkItemsService', () => {
         project.owner.email,
         expect.objectContaining({ action: 'created', entityType: 'task' }),
       );
-      expect(result).toEqual(created);
+      expect(result).toEqual(flattenDetail(created));
     });
 
     it('resolves the activity entityType from the referenced work type category', async () => {
@@ -454,7 +462,11 @@ describe('WorkItemsService', () => {
       });
 
       expect(mockPrismaService.moduleInstance.findFirst).not.toHaveBeenCalled();
-      expect(result).toEqual({ id: 'wi-bug', moduleInstanceId: null });
+      expect(result).toEqual({
+        id: 'wi-bug',
+        moduleInstanceId: null,
+        description: null,
+      });
     });
 
     it('throws BadRequestException when a task item omits moduleInstanceId', async () => {
@@ -566,7 +578,7 @@ describe('WorkItemsService', () => {
         project.owner.email,
         expect.objectContaining({ action: 'updated' }),
       );
-      expect(result).toEqual(updated);
+      expect(result).toEqual(flattenDetail(updated));
     });
 
     it('does nothing when the patch does not actually change any tracked field', async () => {

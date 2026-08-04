@@ -118,8 +118,10 @@ export function formatDateTime(value?: string | null, fallback = "—"): string 
   if (Number.isNaN(date.getTime())) return formatDate(value, fallback);
 
   const dateFormat = useThemeStore.getState().dateFormat;
-  const hours = String(dateFormat === "utc" ? date.getUTCHours() : date.getHours()).padStart(2, "0");
+  const hours24 = dateFormat === "utc" ? date.getUTCHours() : date.getHours();
   const minutes = String(dateFormat === "utc" ? date.getUTCMinutes() : date.getMinutes()).padStart(2, "0");
-  return `${formatDate(value, fallback)} · ${hours}:${minutes} ${dateFormat === "utc" ? "UTC" : "Local"}`;
+  const period = hours24 >= 12 ? "PM" : "AM";
+  const hours12 = hours24 % 12 || 12;
+  return `${formatDate(value, fallback)} · ${hours12}:${minutes} ${period} ${dateFormat === "utc" ? "UTC" : "Local"}`;
 }
 import { useThemeStore } from "@/lib/store/theme-store";

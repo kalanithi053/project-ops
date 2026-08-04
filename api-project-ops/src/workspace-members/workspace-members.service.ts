@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ThemeMode } from '@prisma/client';
+import { ThemeColor, ThemeMode } from '@prisma/client';
 import { MailService } from '../mail/mail.service';
 import { PrismaService } from '../prisma/prisma.service';
 import { InviteWorkspaceMemberDto } from './dto/invite-workspace-member.dto';
@@ -133,6 +133,7 @@ export class WorkspaceMembersService {
         status: true,
         isDefault: true,
         theme: true,
+        themeColor: true,
       },
     });
   }
@@ -142,11 +143,15 @@ export class WorkspaceMembersService {
    * Self-service — unrestricted by role, since it only ever touches the
    * caller's own row.
    */
-  async updateTheme(membershipId: string, theme: ThemeMode) {
+  async updateTheme(
+    membershipId: string,
+    theme: ThemeMode,
+    themeColor: ThemeColor,
+  ) {
     return this.prisma.workspaceMember.update({
       where: { id: membershipId },
-      data: { theme },
-      select: { id: true, theme: true },
+      data: { theme, themeColor },
+      select: { id: true, theme: true, themeColor: true },
     });
   }
 

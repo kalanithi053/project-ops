@@ -17,6 +17,38 @@ export function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** Mirrors the backend's allowlist (attachments.service.ts) — rejected client-side first. */
+export const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/csv",
+]);
+
+/** For the file input's `accept` attribute — narrows the OS file picker to the same allowlist. */
+export const ATTACHMENT_ACCEPT =
+  "image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv";
+
+/**
+ * Some OSes/browsers report an empty or generic `mimetype` for csv/office
+ * files, so a bare `ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type)` check would
+ * reject valid files — fall back to the file extension in that case.
+ */
+export function isAllowedAttachmentFile(file: File): boolean {
+  if (ALLOWED_ATTACHMENT_MIME_TYPES.has(file.type)) return true;
+  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+  return [".pdf", ".doc", ".docx", ".xls", ".xlsx", ".csv"].includes(
+    extension,
+  );
+}
+
 function taskAttachmentsKey(
   workspaceSlug: string,
   projectId: string,

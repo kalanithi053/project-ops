@@ -1,8 +1,5 @@
 "use client";
 
-import * as React from "react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
 import {
   Eye,
   FileText,
@@ -13,16 +10,27 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import Link from "next/link";
+import { useParams, useRouter } from "next/navigation";
+import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { DataTable } from "@/components/shared/data-table";
+import { MultiSelectField } from "@/components/shared/multi-select-field";
 import { PageHeader } from "@/components/shared/page-header";
+import { QueryState } from "@/components/shared/query-state";
 import {
   RichTextEditor,
+  finalizeStagedImages,
   richTextToPlainText,
   sanitizeRichText,
 } from "@/components/shared/rich-text-editor";
+import {
+  SelectField,
+  type SelectOption,
+} from "@/components/shared/select-field";
+import { TableSkeleton } from "@/components/shared/skeletons";
 import { StatsGrid } from "@/components/shared/stats-grid";
-import { DataTable } from "@/components/shared/data-table";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,24 +43,24 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { SelectField, type SelectOption } from "@/components/shared/select-field";
-import { MultiSelectField } from "@/components/shared/multi-select-field";
-import { QueryState } from "@/components/shared/query-state";
-import { TableSkeleton } from "@/components/shared/skeletons";
-import { useCreateProject, useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
-import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
-import { usePlans } from "@/lib/api/hooks/use-plans";
-import { useMe } from "@/lib/api/hooks/use-users";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import { usePlans } from "@/lib/api/hooks/use-plans";
 import {
+  ATTACHMENT_ACCEPT,
   MAX_ATTACHMENT_BYTES,
   formatBytes,
+  isAllowedAttachmentFile,
   uploadProjectAttachment,
 } from "@/lib/api/hooks/use-project-attachments";
+import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
+import {
+  updateProject,
+  useCreateProject,
+  useProjects,
+} from "@/lib/api/hooks/use-projects";
+import { useMe } from "@/lib/api/hooks/use-users";
 import { PERMISSIONS } from "@/lib/api/permissions";
-import { formatDate, todayDateInput } from "@/lib/format";
-import { toast } from "@/lib/toast/toast-store";
 import type {
   CreateProjectDto,
   Me,
@@ -60,6 +68,8 @@ import type {
   ProjectType,
   WorkspaceMember,
 } from "@/lib/api/types";
+import { formatDate, todayDateInput } from "@/lib/format";
+import { toast } from "@/lib/toast/toast-store";
 import type { ColumnDef, RowAction, Tone } from "@/types/module";
 
 /** Small rotating palette so distinct (dynamic) project types read apart. */
@@ -78,10 +88,7 @@ function daysBetween(start?: string, end?: string): number | null {
   return Math.max(0, Math.round(ms / 86_400_000));
 }
 
-function fullName(person: {
-  firstName?: string;
-  lastName?: string;
-}): string {
+function fullName(person: { firstName?: string; lastName?: string }): string {
   return [person.firstName, person.lastName].filter(Boolean).join(" ").trim();
 }
 
@@ -165,11 +172,6 @@ export default function ProjectsPage() {
             >
               {p.name}
             </Link>
-            {p.description ? (
-              <span className="truncate text-xs text-muted-foreground">
-                {richTextToPlainText(p.description)}
-              </span>
-            ) : null}
           </div>
         ),
       },
@@ -195,7 +197,9 @@ export default function ProjectsPage() {
         sortable: true,
         sortAccessor: (p) => p.startDate ?? "",
         cell: (p) => (
-          <span className="text-muted-foreground">{formatDate(p.startDate)}</span>
+          <span className="text-muted-foreground">
+            {formatDate(p.startDate)}
+          </span>
         ),
       },
       {
@@ -271,7 +275,10 @@ export default function ProjectsPage() {
         {can(PERMISSIONS.PROJECT_CREATE) && (
           <Sheet open={open} onOpenChange={setOpen}>
             <SheetTrigger asChild>
-              <Button className="w-full sm:w-auto" data-tour="new-project-button">
+              <Button
+                className="w-full sm:w-auto"
+                data-tour="new-project-button"
+              >
                 <Plus className="h-4 w-4" />
                 New project
               </Button>
@@ -334,6 +341,13 @@ function NewProjectPanel({
   const [files, setFiles] = React.useState<File[]>([]);
   const [isUploadingFiles, setIsUploadingFiles] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // Images embedded in the description via the editor's image button/paste —
+  // same "no project id yet" problem, tracked separately by staging id so
+  // `finalizeStagedImages` can splice the real attachment ids back in after
+  // upload. A ref (not state): populated imperatively by the editor and only
+  // ever read at submit time, so it doesn't need to drive a re-render.
+  const stagedImagesRef = React.useRef<Map<string, File>>(new Map());
+  const stagingIdCounter = React.useRef(0);
 
   function addFiles(list: FileList | null) {
     if (!list?.length) return;
@@ -343,6 +357,13 @@ function NewProjectPanel({
         toast.error(
           "File too large",
           `${file.name} is ${formatBytes(file.size)} — the limit is ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+        );
+        continue;
+      }
+      if (!isAllowedAttachmentFile(file)) {
+        toast.error(
+          "Unsupported file type",
+          `${file.name} — allowed: images, PDF, Word, Excel, CSV.`,
         );
         continue;
       }
@@ -380,6 +401,12 @@ function NewProjectPanel({
     setPlanIds([]);
   }
 
+  function stageImage(file: File): string {
+    const stagingId = `staging-${stagingIdCounter.current++}`;
+    stagedImagesRef.current.set(stagingId, file);
+    return stagingId;
+  }
+
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -396,14 +423,22 @@ function NewProjectPanel({
     }
 
     const sanitizedDescription = sanitizeRichText(description).trim();
-    const descriptionText = richTextToPlainText(sanitizedDescription).trim();
+    // Staged images (see `stageImage`/`onStageImage` below) have no
+    // attachment id yet — the project doesn't exist to upload against until
+    // the create call below succeeds — so they're stripped from what's sent
+    // now and spliced back in with real ids once uploaded, in onSuccess.
+    const hasStagedImages = stagedImagesRef.current.size > 0;
+    const initialDescription = hasStagedImages
+      ? finalizeStagedImages(sanitizedDescription, new Map())
+      : sanitizedDescription;
+    const descriptionText = richTextToPlainText(initialDescription).trim();
 
     const dto: CreateProjectDto = {
       name: name.trim(),
       projectTypeId,
       startDate,
       endDate,
-      description: descriptionText ? sanitizedDescription : undefined,
+      description: descriptionText ? initialDescription : undefined,
       // Always an array — the backend validates with @IsArray, so a bare
       // string is rejected outright.
       planId: requiresPlan ? planIds : undefined,
@@ -427,8 +462,45 @@ function NewProjectPanel({
           );
           setIsUploadingFiles(false);
         }
+
+        if (project?.id && hasStagedImages) {
+          setIsUploadingFiles(true);
+          const idMap = new Map<string, string>();
+          // Best-effort, same as the attachments above — an image that
+          // fails to upload is dropped from the description (by
+          // finalizeStagedImages) rather than holding up the rest.
+          await Promise.all(
+            Array.from(stagedImagesRef.current.entries()).map(
+              async ([stagingId, file]) => {
+                try {
+                  const attachment = await uploadProjectAttachment(
+                    workspaceSlug,
+                    project.id,
+                    file,
+                  );
+                  idMap.set(stagingId, attachment.id);
+                } catch {
+                  // Dropped below by finalizeStagedImages.
+                }
+              },
+            ),
+          );
+          setIsUploadingFiles(false);
+
+          const finalDescription = finalizeStagedImages(
+            sanitizedDescription,
+            idMap,
+          );
+          if (finalDescription !== initialDescription) {
+            await updateProject(workspaceSlug, project.id, {
+              description: finalDescription,
+            }).catch(() => undefined);
+          }
+        }
+
         onDone();
-        if (project?.id) router.push(`/${workspaceSlug}/projects/${project.id}`);
+        if (project?.id)
+          router.push(`/${workspaceSlug}/projects/${project.id}`);
       },
     });
   }
@@ -499,12 +571,14 @@ function NewProjectPanel({
 
           <div className="flex flex-col gap-2">
             <Label htmlFor="project-description">Description</Label>
+
             <RichTextEditor
               id="project-description"
               value={description}
               onChange={setDescription}
               placeholder="Optional summary"
               aria-label="Description"
+              onStageImage={stageImage}
             />
           </div>
 
@@ -541,8 +615,9 @@ function NewProjectPanel({
               <Upload className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm">Click to attach files</span>
               <span className="text-xs text-muted-foreground">
-                Up to {formatBytes(MAX_ATTACHMENT_BYTES)} per file —
-                uploaded once the project is created
+                Images, PDF, Word, Excel, or CSV — up to{" "}
+                {formatBytes(MAX_ATTACHMENT_BYTES)} per file, uploaded once
+                the project is created
               </span>
             </button>
             <input
@@ -550,6 +625,7 @@ function NewProjectPanel({
               id="project-attachments"
               type="file"
               multiple
+              accept={ATTACHMENT_ACCEPT}
               className="hidden"
               onChange={(event) => {
                 addFiles(event.target.files);

@@ -17,9 +17,11 @@ import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { toast } from "@/lib/toast/toast-store";
 import {
+  ATTACHMENT_ACCEPT,
   MAX_ATTACHMENT_BYTES,
   downloadProjectAttachment,
   formatBytes,
+  isAllowedAttachmentFile,
   isPreviewableImage,
   useAttachmentPreviewUrl,
   useDeleteProjectAttachment,
@@ -167,12 +169,19 @@ export function ProjectAttachments({
   function submitFiles(files: FileList | null) {
     if (!files?.length) return;
     for (const file of Array.from(files)) {
-      // Checked here as well as server-side so an oversized file fails
+      // Checked here as well as server-side so a rejected file fails
       // instantly instead of after a long upload.
       if (file.size > MAX_ATTACHMENT_BYTES) {
         toast.error(
           "File too large",
           `${file.name} is ${formatBytes(file.size)} — the limit is ${formatBytes(MAX_ATTACHMENT_BYTES)}.`,
+        );
+        continue;
+      }
+      if (!isAllowedAttachmentFile(file)) {
+        toast.error(
+          "Unsupported file type",
+          `${file.name} — allowed: images, PDF, Word, Excel, CSV.`,
         );
         continue;
       }
@@ -243,7 +252,8 @@ export function ProjectAttachments({
                     : "Drop a file or click to browse"}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Up to {formatBytes(MAX_ATTACHMENT_BYTES)} per file
+                  Images, PDF, Word, Excel, or CSV — up to{" "}
+                  {formatBytes(MAX_ATTACHMENT_BYTES)} per file
                 </span>
               </button>
 
@@ -251,6 +261,7 @@ export function ProjectAttachments({
                 ref={inputRef}
                 type="file"
                 multiple
+                accept={ATTACHMENT_ACCEPT}
                 className="hidden"
                 onChange={(event) => {
                   submitFiles(event.target.files);

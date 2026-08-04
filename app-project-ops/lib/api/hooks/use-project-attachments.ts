@@ -9,9 +9,14 @@ import { toast } from "@/lib/toast/toast-store";
 import type { ProjectAttachment } from "@/lib/api/types";
 // Generic, non-task-specific helpers shared with the task-level attachments
 // feature — the byte limit mirrors the backend's multer config exactly.
-import { MAX_ATTACHMENT_BYTES, formatBytes } from "@/lib/api/hooks/use-attachments";
+import {
+  ATTACHMENT_ACCEPT,
+  MAX_ATTACHMENT_BYTES,
+  formatBytes,
+  isAllowedAttachmentFile,
+} from "@/lib/api/hooks/use-attachments";
 
-export { MAX_ATTACHMENT_BYTES, formatBytes };
+export { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, formatBytes, isAllowedAttachmentFile };
 
 function projectAttachmentsKey(workspaceSlug: string, projectId: string) {
   return ["project-attachments", workspaceSlug, projectId] as const;

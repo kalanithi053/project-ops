@@ -21,7 +21,12 @@ import {
   useResolveAttachmentImages,
 } from "@/lib/api/hooks/use-project-attachments";
 
-const IMAGE_ATTRIBUTES = new Set(["src", "alt", "data-attachment-id"]);
+const IMAGE_ATTRIBUTES = new Set([
+  "src",
+  "alt",
+  "data-attachment-id",
+  "data-staging-id",
+]);
 
 export function sanitizeRichText(value: string): string {
   const documentValue = new DOMParser().parseFromString(value, "text/html");
@@ -46,13 +51,20 @@ export function sanitizeRichText(value: string): string {
     .forEach((element) => element.remove());
 
   // An <img> only has legitimate meaning here when it references an
-  // uploaded attachment — otherwise it's a bare externally-sourced image
+  // uploaded attachment (data-attachment-id) or a not-yet-uploaded image
+  // staged during project creation (data-staging-id, see
+  // `finalizeStagedImages`) — otherwise it's a bare externally-sourced image
   // (e.g. a pasted <img src="https://evil.example/track.gif">), which would
   // fire on every render as a tracking pixel. Drop those outright rather
   // than merely stripping attributes, on every rich-text surface (task
   // descriptions/comments included), not just project descriptions.
   documentValue.body.querySelectorAll("img").forEach((element) => {
-    if (!element.getAttribute("data-attachment-id")) element.remove();
+    if (
+      !element.getAttribute("data-attachment-id") &&
+      !element.getAttribute("data-staging-id")
+    ) {
+      element.remove();
+    }
   });
 
   documentValue.body.querySelectorAll("*").forEach((element) => {
@@ -86,6 +98,39 @@ export function sanitizeRichText(value: string): string {
   return documentValue.body.innerHTML;
 }
 
+/**
+ * Replaces staged image placeholders (`data-staging-id`, inserted before a
+ * project exists to upload against — see the `onStageImage` prop below)
+ * with their real `data-attachment-id` per `idMap`, once the files have
+ * actually been uploaded. The blob `src` is dropped too, since it's only
+ * valid for this browser tab/session and gets re-resolved from the
+ * attachment id on next render anyway.
+ *
+ * Any staged image absent from `idMap` — its upload failed, or this is
+ * being used to strip every staged image before any upload has happened —
+ * is removed outright rather than left as a dead reference.
+ */
+export function finalizeStagedImages(
+  value: string,
+  idMap: Map<string, string>,
+): string {
+  const documentValue = new DOMParser().parseFromString(value, "text/html");
+  documentValue.body
+    .querySelectorAll<HTMLImageElement>("img[data-staging-id]")
+    .forEach((element) => {
+      const stagingId = element.getAttribute("data-staging-id");
+      const attachmentId = stagingId ? idMap.get(stagingId) : undefined;
+      if (attachmentId) {
+        element.setAttribute("data-attachment-id", attachmentId);
+        element.removeAttribute("data-staging-id");
+        element.removeAttribute("src");
+      } else {
+        element.remove();
+      }
+    });
+  return documentValue.body.innerHTML;
+}
+
 /** Plain-text extract of rich text HTML — for length checks and compact previews. */
 export function richTextToPlainText(value: string): string {
   // Block boundaries (paragraphs, list items) carry no whitespace of their
@@ -108,12 +153,22 @@ interface RichTextEditorProps {
   className?: string;
   onAtSign?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
   /**
-   * Enables the image toolbar button (upload) and clipboard image paste, and
-   * resolves any existing `data-attachment-id` images to viewable blob URLs.
-   * Omit to keep the editor text-only — e.g. the New Project form, where no
-   * project exists yet to attach an image to.
+   * Enables the image toolbar button and clipboard image paste, uploading
+   * immediately and resolving any existing `data-attachment-id` images to
+   * viewable blob URLs. Use this when a project already exists to attach
+   * the image to.
    */
   imageContext?: { workspaceSlug: string; projectId: string };
+  /**
+   * Alternative to `imageContext` for surfaces where no project id exists
+   * yet to upload against (the New Project form, before creation). Called
+   * with the picked/pasted file; returns a caller-chosen staging id that's
+   * embedded as `data-staging-id` so the image can be finalized with
+   * `finalizeStagedImages` once the file is actually uploaded post-creation.
+   * Provide at most one of `imageContext`/`onStageImage` — `imageContext`
+   * wins if both are somehow given.
+   */
+  onStageImage?: (file: File) => string;
 }
 
 /** Escapes a string for safe embedding inside a double-quoted HTML attribute. */
@@ -138,6 +193,7 @@ export const RichTextEditor = React.forwardRef<
     className,
     onAtSign,
     imageContext,
+    onStageImage,
     ...aria
   },
   forwardedRef,
@@ -147,6 +203,7 @@ export const RichTextEditor = React.forwardRef<
   const latestValue = React.useRef(value);
   const initialized = React.useRef(false);
   const [isUploadingImage, setIsUploadingImage] = React.useState(false);
+  const imagesEnabled = Boolean(imageContext || onStageImage);
 
   React.useImperativeHandle(forwardedRef, () => editorRef.current as HTMLDivElement);
 
@@ -181,7 +238,7 @@ export const RichTextEditor = React.forwardRef<
   }
 
   async function handleImageFile(file: File) {
-    if (!imageContext) return;
+    if (!imagesEnabled) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
       toast.error(
         "Image too large",
@@ -189,6 +246,24 @@ export const RichTextEditor = React.forwardRef<
       );
       return;
     }
+
+    const previewUrl = URL.createObjectURL(file);
+
+    // No project id exists yet to upload against (New Project form) — stage
+    // the file locally and embed a placeholder the caller finalizes with
+    // `finalizeStagedImages` once the project (and a real attachment) exists.
+    if (!imageContext) {
+      const stagingId = onStageImage!(file);
+      editorRef.current?.focus();
+      document.execCommand(
+        "insertHTML",
+        false,
+        `<img data-staging-id="${stagingId}" alt="${escapeHtmlAttr(file.name)}" src="${previewUrl}">`,
+      );
+      emitValue();
+      return;
+    }
+
     setIsUploadingImage(true);
     try {
       const attachment = await uploadProjectAttachment(
@@ -196,7 +271,6 @@ export const RichTextEditor = React.forwardRef<
         imageContext.projectId,
         file,
       );
-      const previewUrl = URL.createObjectURL(file);
       editorRef.current?.focus();
       document.execCommand(
         "insertHTML",
@@ -278,7 +352,7 @@ export const RichTextEditor = React.forwardRef<
         >
           <ListOrdered className="h-3.5 w-3.5" />
         </Button>
-        {imageContext && (
+        {imagesEnabled && (
           <>
             <span className="mx-1 h-5 w-px bg-border" aria-hidden />
             <Button
@@ -327,7 +401,7 @@ export const RichTextEditor = React.forwardRef<
           if (event.key === "@" && !disabled) onAtSign?.(event);
         }}
         onPaste={(event) => {
-          const imageItem = imageContext
+          const imageItem = imagesEnabled
             ? Array.from(event.clipboardData.items).find((item) =>
                 item.type.startsWith("image/"),
               )

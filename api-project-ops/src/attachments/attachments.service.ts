@@ -16,16 +16,34 @@ const ATTACHMENT_INCLUDE = {
   },
 } as const;
 
-/** S3 object keys only ever need to be safe path segments — not shown to users. */
 function sanitizeFileName(name: string): string {
   return name.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-/** Same idea as `sanitizeFileName`, but for a folder segment — hyphenated instead of underscored. */
-function sanitizePathSegment(name: string): string {
-  return name.trim().replace(/[^a-zA-Z0-9._-]+/g, '-');
-}
+/** Mirrored on the frontend (use-attachments.ts) for the file picker's `accept` + client-side check. */
+export const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+  'image/svg+xml',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.ms-excel',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'text/csv',
+]);
 
+export const sanitizePathSegment = (value: string): string => {
+  return value
+    .replace(/\s*-\s*/g, ' ')
+    .replace(/[^a-zA-Z0-9\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .replace(/ /g, '_')
+    .trim()
+    .toUpperCase();
+};
 @Injectable()
 export class AttachmentsService {
   private readonly logger = new Logger(AttachmentsService.name);
@@ -54,6 +72,11 @@ export class AttachmentsService {
   ) {
     const project = await this.assertProject(workspaceId, projectId);
     if (!file) throw new BadRequestException('No file provided');
+    if (!ALLOWED_ATTACHMENT_MIME_TYPES.has(file.mimetype)) {
+      throw new BadRequestException(
+        `Unsupported file type: ${file.mimetype}. Allowed: images, PDF, Word, Excel, CSV.`,
+      );
+    }
 
     // Human-readable prefix (workspace name / project name+id / attachments)
     // so the bucket can be browsed directly in the AWS console — the id
@@ -61,9 +84,9 @@ export class AttachmentsService {
     // later renamed or shares a name with another.
     const key = [
       this.configService.get('NODE_ENV'),
-      `${workspaceId}#(${sanitizePathSegment(project.workspace.name)})`,
-      `${projectId}#(${sanitizePathSegment(project.name)})`,
-      `${randomUUID()}#(${sanitizeFileName(file.originalname)})`,
+      `${workspaceId}#${sanitizePathSegment(project.workspace.name)}`,
+      `${projectId}#${sanitizePathSegment(project.name)}`,
+      `${randomUUID()}#${sanitizeFileName(file.originalname)}`,
     ].join('/');
     await this.s3.upload(key, file.buffer, file.mimetype);
 

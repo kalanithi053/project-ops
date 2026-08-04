@@ -75,16 +75,30 @@ export function useCreateProject(workspaceSlug: string) {
   });
 }
 
+/**
+ * PATCH /projects/:id, outside the mutation/component lifecycle — for
+ * finalizing a New Project form's staged description images (see
+ * `finalizeStagedImages`) right after the project is created, when there's
+ * no stable `projectId` yet to build a normal per-project `useUpdateProject`.
+ */
+export function updateProject(
+  workspaceSlug: string,
+  projectId: string,
+  dto: UpdateProjectDto,
+): Promise<Project> {
+  return apiFetch<Project>(`/projects/${projectId}`, {
+    method: "PATCH",
+    body: dto,
+    workspaceSlug,
+  });
+}
+
 /** PATCH /projects/:id — edit name/description/dates on an existing project. */
 export function useUpdateProject(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (dto: UpdateProjectDto) =>
-      apiFetch<Project>(`/projects/${projectId}`, {
-        method: "PATCH",
-        body: dto,
-        workspaceSlug,
-      }),
+      updateProject(workspaceSlug, projectId, dto),
     onSuccess: (project) => {
       queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
       queryClient.invalidateQueries({

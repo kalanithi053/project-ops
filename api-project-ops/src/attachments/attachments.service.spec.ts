@@ -1,4 +1,5 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -33,6 +34,8 @@ describe('AttachmentsService', () => {
   };
 
   const mockActivityLog = { log: jest.fn() };
+
+  const mockConfigService = { get: jest.fn().mockReturnValue('test') };
 
   const mockS3 = {
     upload: jest.fn(),
@@ -78,6 +81,7 @@ describe('AttachmentsService', () => {
         { provide: PrismaService, useValue: mockPrismaService },
         { provide: S3Service, useValue: mockS3 },
         { provide: ActivityLogService, useValue: mockActivityLog },
+        { provide: ConfigService, useValue: mockConfigService },
       ],
     }).compile();
 
@@ -121,7 +125,7 @@ describe('AttachmentsService', () => {
 
       expect(mockS3.upload).toHaveBeenCalledWith(
         expect.stringContaining(
-          `Amwhiz/SaaSify---July-2026-${projectId}/attachments/`,
+          `${workspaceId}#AMWHIZ/${projectId}#SAASIFY_JULY_2026/`,
         ),
         file.buffer,
         file.mimetype,
@@ -168,6 +172,39 @@ describe('AttachmentsService', () => {
         service.create(workspaceId, projectId, userId, makeFile()),
       ).rejects.toThrow(NotFoundException);
       expect(mockS3.upload).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException for a disallowed file type', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      const file = makeFile({ mimetype: 'application/x-msdownload' });
+
+      await expect(
+        service.create(workspaceId, projectId, userId, file),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockS3.upload).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      'image/png',
+      'image/jpeg',
+      'image/gif',
+      'image/webp',
+      'image/svg+xml',
+      'application/pdf',
+      'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv',
+    ])('allows %s uploads', async (mimetype) => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.attachment.create.mockResolvedValue(
+        makeAttachment({ mimeType: mimetype }),
+      );
+
+      await expect(
+        service.create(workspaceId, projectId, userId, makeFile({ mimetype })),
+      ).resolves.toBeDefined();
     });
   });
 

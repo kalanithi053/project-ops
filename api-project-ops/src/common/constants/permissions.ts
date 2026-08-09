@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   WORKTYPE_MANAGE: 'worktype.manage',
   PROJECTTYPE_MANAGE: 'projecttype.manage',
   PLAN_MANAGE: 'plan.manage',
+  HUB_MANAGE: 'hub.manage',
   PERMISSION_READ: 'permission.read',
   WORKSPACE_MANAGE: 'workspace.manage',
 
@@ -72,6 +73,7 @@ export const PERMISSION_CATALOG: PermissionDefinition[] = [
   { code: PERMISSIONS.WORKTYPE_MANAGE, description: 'Manage work types' },
   { code: PERMISSIONS.PROJECTTYPE_MANAGE, description: 'Manage project types' },
   { code: PERMISSIONS.PLAN_MANAGE, description: 'Manage the workspace plan' },
+  { code: PERMISSIONS.HUB_MANAGE, description: 'Manage HubSpot hubs' },
   {
     code: PERMISSIONS.PERMISSION_READ,
     description: 'View the permission catalog',

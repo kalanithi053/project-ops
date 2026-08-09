@@ -14,6 +14,14 @@ export class CreatePlanDto {
   @IsUUID()
   projectTypeId: string;
 
+  @ApiProperty({
+    required: false,
+    description: 'Scopes this plan as a tier of the given Hub',
+  })
+  @IsOptional()
+  @IsUUID()
+  hubId?: string;
+
   @ApiProperty({ example: 'Starter' })
   @IsString()
   @MinLength(2)

@@ -63,6 +63,12 @@ export const SETTINGS_NAV: SettingsNavItem[] = [
     managePermission: "plan.manage",
     ownerOnly: true,
   },
+  {
+    segment: "hubs",
+    label: "Hubs",
+    managePermission: "hub.manage",
+    ownerOnly: true,
+  },
 ];
 
 /**

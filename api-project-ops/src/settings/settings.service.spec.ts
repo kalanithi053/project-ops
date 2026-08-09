@@ -25,6 +25,9 @@ describe('SettingsService', () => {
     projectType: {
       findMany: jest.fn(),
     },
+    hub: {
+      findMany: jest.fn(),
+    },
     userRole: {
       findMany: jest.fn(),
     },
@@ -59,6 +62,7 @@ describe('SettingsService', () => {
       plans: [{ id: 'plan-2', name: 'Pro', isActive: true }],
     },
   ];
+  const hubs = [{ id: 'hub-1', name: 'Marketing Hub', isActive: true }];
   const roles = [
     {
       id: 'role-1',
@@ -96,6 +100,7 @@ describe('SettingsService', () => {
       mockPrismaService.ticketStatus.findMany.mockResolvedValue(ticketStatuses);
       mockPrismaService.priority.findMany.mockResolvedValue(priorities);
       mockPrismaService.projectType.findMany.mockResolvedValue(projectTypes);
+      mockPrismaService.hub.findMany.mockResolvedValue(hubs);
       mockPrismaService.userRole.findMany.mockResolvedValue(roles);
       mockPrismaService.userPermission.findMany.mockResolvedValue(permissions);
       mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);
@@ -120,6 +125,7 @@ describe('SettingsService', () => {
         ticketStatuses,
         priorities,
         projectTypes,
+        hubs,
         roles: [
           {
             id: 'role-1',
@@ -147,6 +153,7 @@ describe('SettingsService', () => {
       mockPrismaService.ticketStatus.findMany.mockResolvedValue([]);
       mockPrismaService.priority.findMany.mockResolvedValue([]);
       mockPrismaService.projectType.findMany.mockResolvedValue([]);
+      mockPrismaService.hub.findMany.mockResolvedValue([]);
       mockPrismaService.userRole.findMany.mockResolvedValue([]);
       mockPrismaService.userPermission.findMany.mockResolvedValue([]);
       mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);
@@ -162,6 +169,7 @@ describe('SettingsService', () => {
       mockPrismaService.ticketStatus.findMany.mockResolvedValue([]);
       mockPrismaService.priority.findMany.mockResolvedValue([]);
       mockPrismaService.projectType.findMany.mockResolvedValue([]);
+      mockPrismaService.hub.findMany.mockResolvedValue([]);
       mockPrismaService.userRole.findMany.mockResolvedValue([]);
       mockPrismaService.userPermission.findMany.mockResolvedValue([]);
       mockPrismaService.workspacePreference.findUnique.mockResolvedValue(null);

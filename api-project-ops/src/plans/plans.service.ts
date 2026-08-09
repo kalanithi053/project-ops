@@ -9,6 +9,7 @@ import { DEFAULT_MODULES } from '../common/constants/workspace-defaults';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { UpdatePlanDetailsDto } from './dto/update-plan-details.dto';
 
 @Injectable()
 export class PlansService {
@@ -36,6 +37,17 @@ export class PlansService {
       );
     }
 
+    if (dto.hubId) {
+      const hub = await this.prisma.hub.findFirst({
+        where: { id: dto.hubId, workspaceId, projectTypeId: dto.projectTypeId },
+      });
+      if (!hub) {
+        throw new BadRequestException(
+          'Hub not found in this workspace for this project type',
+        );
+      }
+    }
+
     return this.prisma.$transaction(async (tx) => {
       if (dto.isActive) {
         await tx.plan.updateMany({
@@ -47,6 +59,7 @@ export class PlansService {
         data: {
           workspaceId,
           projectTypeId: projectType.id,
+          hubId: dto.hubId ?? undefined,
           name: dto.name,
           features: (dto.features ?? {}) as Prisma.InputJsonValue,
           isActive: dto.isActive ?? true,
@@ -110,6 +123,10 @@ export class PlansService {
       throw new BadRequestException('project Type Id is required');
     return this.prisma.plan.findMany({
       where: { workspaceId, projectTypeId },
+      // `hub` is populated only for Hub-scoped tiers (e.g. "Enterprise" under
+      // Sales Hub) — the client uses it to group/label and to filter plans
+      // down to the currently-selected Hubs.
+      include: { hub: { select: { id: true, name: true } } },
       orderBy: { name: 'asc' },
     });
   }
@@ -131,6 +148,62 @@ export class PlansService {
         where: { id: planId },
         data: { isActive: true },
       });
+    });
+  }
+
+  /**
+   * Renames a plan, edits its feature flags, or reassigns/clears its Hub.
+   * Unlike `updateActivePlan`, this targets a specific plan by id rather than
+   * the workspace's single active plan.
+   */
+  async updatePlanDetails(
+    workspaceId: string,
+    planId: string,
+    dto: UpdatePlanDetailsDto,
+  ) {
+    const plan = await this.prisma.plan.findFirst({
+      where: { id: planId, workspaceId },
+    });
+    if (!plan) {
+      throw new NotFoundException('Plan not found in this workspace.');
+    }
+
+    if (dto.name && dto.name !== plan.name) {
+      const existing = await this.prisma.plan.findFirst({
+        where: { projectTypeId: plan.projectTypeId, name: dto.name },
+      });
+      if (existing) {
+        throw new ConflictException(
+          `A plan named "${dto.name}" already exists for this project type.`,
+        );
+      }
+    }
+
+    if (dto.hubId) {
+      const hub = await this.prisma.hub.findFirst({
+        where: {
+          id: dto.hubId,
+          workspaceId,
+          projectTypeId: plan.projectTypeId,
+        },
+      });
+      if (!hub) {
+        throw new BadRequestException(
+          'Hub not found in this workspace for this project type',
+        );
+      }
+    }
+
+    return this.prisma.plan.update({
+      where: { id: planId },
+      data: {
+        name: dto.name ?? undefined,
+        features:
+          dto.features !== undefined
+            ? (dto.features as Prisma.InputJsonValue)
+            : undefined,
+        hubId: dto.hubId !== undefined ? dto.hubId : undefined,
+      },
     });
   }
 

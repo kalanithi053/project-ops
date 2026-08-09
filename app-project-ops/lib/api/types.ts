@@ -38,6 +38,25 @@ export interface ProjectTypeRef {
   [key: string]: unknown;
 }
 
+/**
+ * Commercial engagement model — distinct from `ProjectType` (HubSpot vs
+ * Development). Drives which format the Estimation field takes: hours for
+ * time_and_material, a target/renewal date for the other two.
+ */
+export type ProjectEngagementType =
+  | "fixed_budget"
+  | "time_and_material"
+  | "retainer";
+
+/** Nested Sales Rep / Project Manager reference embedded in a Project. */
+export interface ProjectPersonRef {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  [key: string]: unknown;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -45,10 +64,21 @@ export interface Project {
   projectType?: ProjectTypeRef | null;
   /** Plans the project was provisioned from. A scalar list, not one id. */
   planId?: string[];
+  /** HubSpot Hubs this engagement covers. Only meaningful for HubSpot projects. */
+  hubId?: string[];
   description?: string;
   startDate?: string;
   endDate?: string;
   ownerId?: string;
+  salesRepId?: string | null;
+  salesRep?: ProjectPersonRef | null;
+  projectManagerId?: string | null;
+  projectManager?: ProjectPersonRef | null;
+  engagementType?: ProjectEngagementType | null;
+  /** Estimated hours — populated only when engagementType is time_and_material. */
+  estimatedHours?: number | null;
+  /** Estimated/renewal date — populated only for fixed_budget/retainer. */
+  estimatedDate?: string | null;
   /** Present on GET /projects (list) — `{ tasks, members }`. */
   _count?: { tasks?: number; members?: number };
   [key: string]: unknown;
@@ -122,12 +152,36 @@ export interface UpdateWorkspaceMemberDto {
   status?: MembershipStatus;
 }
 
+/** Nested Hub reference embedded in a Hub-scoped Plan. */
+export interface PlanHubRef {
+  id: string;
+  name: string;
+  [key: string]: unknown;
+}
+
 export interface Plan {
   id: string;
   name: string;
   /** Plans belong to exactly one project type. */
   projectTypeId?: string;
+  /** Set when this plan is a tier of a specific Hub (e.g. "Enterprise" under Sales Hub). */
+  hubId?: string | null;
+  hub?: PlanHubRef | null;
   features?: Record<string, unknown>;
+  isActive?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * A HubSpot Hub (Marketing/Sales/Service/Content/Operations/Commerce Hub).
+ * Only meaningful under a plan-adding ProjectType (HubSpot). Each Hub's tiers
+ * are ordinary hub-scoped `Plan` rows — see `Plan.hubId`.
+ */
+export interface Hub {
+  id: string;
+  name: string;
+  projectTypeId?: string;
+  color?: string | null;
   isActive?: boolean;
   [key: string]: unknown;
 }
@@ -191,6 +245,19 @@ export interface CreateProjectDto {
    * default modules and a seed task per module.
    */
   planId?: string[];
+  /**
+   * HubSpot Hubs this engagement covers — only relevant when the project
+   * type is plan-adding (HubSpot). Every selected plan that belongs to a Hub
+   * must have that Hub included here.
+   */
+  hubId?: string[];
+  salesRepId?: string;
+  projectManagerId?: string;
+  engagementType?: ProjectEngagementType;
+  /** Only valid when engagementType is time_and_material. */
+  estimatedHours?: number;
+  /** Only valid when engagementType is fixed_budget or retainer. */
+  estimatedDate?: string;
 }
 
 /**
@@ -344,6 +411,7 @@ export interface WorkspaceSettings {
   ticketStatuses: TicketStatus[];
   priorities: Priority[];
   projectTypes: ProjectType[];
+  hubs: Hub[];
   roles: Role[];
   permissions: Permission[];
   preferences: WorkspacePreferences;
@@ -475,15 +543,31 @@ export interface CreatePlanDto {
   name: string;
   features?: Record<string, unknown>;
   isActive?: boolean;
+  /** Scopes the plan as a tier of this Hub instead of a generic plan. */
+  hubId?: string;
 }
 
+/** POST /hubs — creating a Hub seeds its 3 tiers (HUB_TIERS) as empty plans. */
+export interface CreateHubDto {
+  projectTypeId: string;
+  name: string;
+  color?: string;
+  isActive?: boolean;
+}
+
+/** PATCH /hubs/:hubId — projectTypeId is immutable after creation. */
+export type UpdateHubDto = Partial<Omit<CreateHubDto, "projectTypeId">>;
+
 /**
- * PATCH /plans/:planId — renames a plan or updates its feature flags.
- * Activation is a separate endpoint, so `isActive` isn't accepted here.
+ * PATCH /plans/:planId — renames a plan, updates its feature flags, or
+ * reassigns/clears its Hub. Activation is a separate endpoint, so `isActive`
+ * isn't accepted here.
  */
 export interface UpdatePlanDetailsDto {
   name?: string;
   features?: Record<string, unknown>;
+  /** Set to null to un-scope the plan back to a generic (non-Hub) tier. */
+  hubId?: string | null;
 }
 
 /** POST /modules — `key` must be lowercase snake_case. */

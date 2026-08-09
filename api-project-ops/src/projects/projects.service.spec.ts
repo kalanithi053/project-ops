@@ -18,6 +18,8 @@ describe('ProjectsService', () => {
       update: jest.Mock;
     };
     plan: { findMany: jest.Mock };
+    hub: { findMany: jest.Mock };
+    workspaceMember: { findFirst: jest.Mock };
     priority: { findFirst: jest.Mock };
     userRole: { findFirst: jest.Mock };
     projectMember: { create: jest.Mock };
@@ -50,6 +52,8 @@ describe('ProjectsService', () => {
         update: jest.fn(),
       },
       plan: { findMany: jest.fn() },
+      hub: { findMany: jest.fn() },
+      workspaceMember: { findFirst: jest.fn() },
       priority: { findFirst: jest.fn() },
       userRole: { findFirst: jest.fn() },
       projectMember: { create: jest.fn() },
@@ -129,10 +133,16 @@ describe('ProjectsService', () => {
           name: dto.name,
           projectTypeId: type.id,
           planId: [],
+          hubId: [],
           description: dto.description,
           startDate: new Date(dto.startDate),
           endDate: new Date(dto.endDate),
           ownerId: userId,
+          salesRepId: undefined,
+          projectManagerId: undefined,
+          engagementType: undefined,
+          estimatedHours: undefined,
+          estimatedDate: undefined,
         },
       });
       expect(prisma.projectMember.create).toHaveBeenCalledWith({
@@ -322,6 +332,181 @@ describe('ProjectsService', () => {
       expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
+    it('throws BadRequestException when one or more selected hubs are not found in the workspace', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+      // Only one of the two requested hubs exists.
+      prisma.hub.findMany.mockResolvedValue([{ id: 'hub-1', workspaceId }]);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({ planId: [], hubId: ['hub-1', 'hub-2'] }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it("throws BadRequestException when a selected plan's hub is not in the selected hubs", async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: true }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      // The plan belongs to hub-1, but hub-1 isn't in the submitted hubId list.
+      prisma.plan.findMany.mockResolvedValue([
+        { id: 'plan-1', workspaceId, hubId: 'hub-1' },
+      ]);
+      prisma.hub.findMany.mockResolvedValue([{ id: 'hub-2', workspaceId }]);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({ planId: ['plan-1'], hubId: ['hub-2'] }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when estimatedDate is set for a time_and_material engagement', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({
+            planId: [],
+            engagementType: 'time_and_material',
+            estimatedDate: futureEnd,
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when estimatedHours is set for a fixed_budget engagement', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({
+            planId: [],
+            engagementType: 'fixed_budget',
+            estimatedHours: 40,
+          }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when an estimation is set without an engagementType', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({ planId: [], estimatedHours: 40 }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when salesRepId is not an active workspace member', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+      prisma.workspaceMember.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({ planId: [], salesRepId: 'user-2' }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when projectManagerId is not an active workspace member', async () => {
+      prisma.projectType.findFirst.mockResolvedValue(
+        projectType({ isPlanAdd: false }),
+      );
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([]);
+      prisma.workspaceMember.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.create(
+          workspaceId,
+          userId,
+          baseDto({ planId: [], projectManagerId: 'user-3' }),
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    });
+
+    it('persists hub/plan/person/engagement fields on the happy path', async () => {
+      const type = projectType({ isPlanAdd: true });
+      prisma.projectType.findFirst.mockResolvedValue(type);
+      prisma.project.findMany.mockResolvedValue([]);
+      prisma.plan.findMany.mockResolvedValue([
+        { id: 'plan-1', workspaceId, hubId: 'hub-1' },
+      ]);
+      prisma.hub.findMany.mockResolvedValue([{ id: 'hub-1', workspaceId }]);
+      prisma.workspaceMember.findFirst.mockResolvedValue({ id: 'member-1' });
+      prisma.project.create.mockResolvedValue({ id: 'proj-1' });
+      prisma.userRole.findFirst.mockResolvedValue({
+        id: 'role-owner',
+        name: 'Owner',
+      });
+      prisma.projectMember.create.mockResolvedValue({});
+      prisma.module.findMany.mockResolvedValue([]);
+      prisma.project.findUnique.mockResolvedValue({ id: 'proj-1' });
+
+      const dto = baseDto({
+        planId: ['plan-1'],
+        hubId: ['hub-1'],
+        salesRepId: 'user-2',
+        projectManagerId: 'user-3',
+        engagementType: 'time_and_material',
+        estimatedHours: 120,
+      });
+      await service.create(workspaceId, userId, dto);
+
+      expect(prisma.project.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          hubId: ['hub-1'],
+          salesRepId: 'user-2',
+          projectManagerId: 'user-3',
+          engagementType: 'time_and_material',
+          estimatedHours: 120,
+          estimatedDate: undefined,
+        }),
+      });
+    });
+
     it('throws BadRequestException when startDate is before today', async () => {
       prisma.projectType.findFirst.mockResolvedValue(
         projectType({ isPlanAdd: false }),
@@ -371,6 +556,12 @@ describe('ProjectsService', () => {
           projectType: {
             select: { id: true, name: true, isPlanAdd: true, color: true },
           },
+          salesRep: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+          projectManager: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
           _count: { select: { members: true } },
         },
       });
@@ -393,6 +584,12 @@ describe('ProjectsService', () => {
         include: {
           projectType: {
             select: { id: true, name: true, isPlanAdd: true, color: true },
+          },
+          salesRep: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+          projectManager: {
+            select: { id: true, email: true, firstName: true, lastName: true },
           },
           moduleInstances: { include: { module: true } },
           members: {

@@ -43,6 +43,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
+import { useHubs } from "@/lib/api/hooks/use-hubs";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import { usePlans } from "@/lib/api/hooks/use-plans";
@@ -65,11 +66,13 @@ import type {
   CreateProjectDto,
   Me,
   Project,
+  ProjectEngagementType,
   ProjectType,
   WorkspaceMember,
 } from "@/lib/api/types";
 import { formatDate, todayDateInput } from "@/lib/format";
 import { toast } from "@/lib/toast/toast-store";
+import { getFullname } from "@/lib/utils";
 import type { ColumnDef, RowAction, Tone } from "@/types/module";
 
 /** Small rotating palette so distinct (dynamic) project types read apart. */
@@ -328,11 +331,19 @@ function NewProjectPanel({
   const router = useRouter();
   const createProject = useCreateProject(workspaceSlug);
   const { data: typeData } = useProjectTypes(workspaceSlug);
+  const { data: memberData } = useWorkspaceMembers(workspaceSlug);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [startDate, setStartDate] = React.useState(todayDateInput);
   const [endDate, setEndDate] = React.useState("");
+  const [salesRepId, setSalesRepId] = React.useState<string>();
+  const [projectManagerId, setProjectManagerId] = React.useState<string>();
+  const [engagementType, setEngagementType] =
+    React.useState<ProjectEngagementType>();
+  const [estimatedHours, setEstimatedHours] = React.useState("");
+  const [estimatedDate, setEstimatedDate] = React.useState("");
   const [projectTypeId, setProjectTypeId] = React.useState<string>();
+  const [hubIds, setHubIds] = React.useState<string[]>([]);
   const [planIds, setPlanIds] = React.useState<string[]>([]);
   const [error, setError] = React.useState<string | null>(null);
   // Staged locally — there's no project id to upload against until the
@@ -381,30 +392,63 @@ function NewProjectPanel({
     value: String(type.id),
   }));
 
+  const memberOptions: SelectOption[] = (memberData ?? [])
+    .filter((m) => m.user?.id)
+    .map((m) => ({
+      label: getFullname(m.user) ?? m.user?.email ?? "Unknown",
+      value: String(m.user!.id),
+    }));
+
+  const engagementTypeOptions: SelectOption[] = [
+    { label: "Fixed Budget", value: "fixed_budget" },
+    { label: "Time and Material", value: "time_and_material" },
+    { label: "Retainer", value: "retainer" },
+  ];
+
   // Project types with `isPlanAdd` provision plan-scoped modules — the API
   // requires at least one explicit plan for those (it does not fall back to
-  // the workspace's active plan despite what the docs imply).
+  // the workspace's active plan despite what the docs imply). For HubSpot
+  // that plan choice is now a two-step cascade: pick Hubs, then pick each
+  // selected Hub's tier.
   const selectedType = typeData?.find((t) => String(t.id) === projectTypeId);
   const requiresPlan = Boolean(selectedType?.isPlanAdd);
+  const { data: hubData } = useHubs(
+    workspaceSlug,
+    requiresPlan ? projectTypeId : undefined,
+  );
+  const hubOptions: SelectOption[] = (hubData ?? []).map((hub) => ({
+    label: hub.name,
+    value: String(hub.id),
+  }));
   const { data: planData } = usePlans(
     workspaceSlug,
     requiresPlan ? projectTypeId : undefined,
   );
-  const planOptions: SelectOption[] = (planData ?? []).map((plan) => ({
-    label: plan.isActive ? `${plan.name} (Active)` : plan.name,
-    value: String(plan.id),
-  }));
+  // Only hub-scoped tiers, limited to whichever Hubs are currently selected —
+  // picking a Hub is what makes its tiers choosable.
+  const planOptions: SelectOption[] = (planData ?? [])
+    .filter((plan) => plan.hubId && hubIds.includes(plan.hubId))
+    .map((plan) => ({
+      label: `${plan.hub?.name ?? ""} ${plan.name}`.trim(),
+      value: String(plan.id),
+    }));
 
   function handleTypeChange(value: string) {
     setProjectTypeId(value);
-    // Plans belong to a single type, so the previous picks can't carry over.
+    // Hubs/Plans belong to a single type, so the previous picks can't carry over.
+    setHubIds([]);
     setPlanIds([]);
   }
 
-  function stageImage(file: File): string {
-    const stagingId = `staging-${stagingIdCounter.current++}`;
-    stagedImagesRef.current.set(stagingId, file);
-    return stagingId;
+  function handleHubsChange(values: string[]) {
+    setHubIds(values);
+    // Drop any picked tier whose Hub just got deselected.
+    setPlanIds((current) =>
+      current.filter((id) => {
+        const plan = (planData ?? []).find((p) => String(p.id) === id);
+        return plan?.hubId && values.includes(plan.hubId);
+      }),
+    );
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -413,6 +457,9 @@ function NewProjectPanel({
 
     if (!name.trim()) return setError("Enter a project name.");
     if (!projectTypeId) return setError("Select a project type.");
+    if (requiresPlan && hubIds.length === 0) {
+      return setError("Select at least one hub.");
+    }
     if (requiresPlan && planIds.length === 0) {
       return setError("Select at least one plan.");
     }
@@ -442,6 +489,19 @@ function NewProjectPanel({
       // Always an array — the backend validates with @IsArray, so a bare
       // string is rejected outright.
       planId: requiresPlan ? planIds : undefined,
+      hubId: requiresPlan ? hubIds : undefined,
+      salesRepId: salesRepId || undefined,
+      projectManagerId: projectManagerId || undefined,
+      engagementType,
+      estimatedHours:
+        engagementType === "time_and_material" && estimatedHours
+          ? Number(estimatedHours)
+          : undefined,
+      estimatedDate:
+        (engagementType === "fixed_budget" || engagementType === "retainer") &&
+        estimatedDate
+          ? estimatedDate
+          : undefined,
     };
 
     // API errors surface via the global error toast; success closes the panel
@@ -539,57 +599,6 @@ function NewProjectPanel({
             />
           </div>
 
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="project-type">Project type</Label>
-            <SelectField
-              id="project-type"
-              aria-label="Project type"
-              options={typeOptions}
-              value={projectTypeId}
-              onValueChange={handleTypeChange}
-              placeholder="Select a project type"
-            />
-          </div>
-
-          {requiresPlan && (
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="project-plans">Plans</Label>
-              <MultiSelectField
-                id="project-plans"
-                aria-label="Plans"
-                options={planOptions}
-                values={planIds}
-                onValuesChange={setPlanIds}
-                placeholder={
-                  planOptions.length === 0
-                    ? "No plans on this project type"
-                    : "Select one or more plans"
-                }
-                disabled={planOptions.length === 0}
-              />
-              <p className="text-xs text-muted-foreground">
-                Each selected plan contributes its modules and a starter task
-                per module.
-              </p>
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="project-description">Description</Label>
-
-            <RichTextEditor
-              id="project-description"
-              value={description}
-              onChange={setDescription}
-              placeholder="Optional summary"
-              aria-label="Description"
-              onStageImage={stageImage}
-              onRemoveStagedImage={(stagingId) =>
-                stagedImagesRef.current.delete(stagingId)
-              }
-            />
-          </div>
-
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="flex flex-col gap-2">
               <Label htmlFor="project-start">Start date</Label>
@@ -614,6 +623,139 @@ function NewProjectPanel({
           </div>
 
           <div className="flex flex-col gap-2">
+            <Label htmlFor="project-sales-rep">Sales Rep</Label>
+            <SelectField
+              id="project-sales-rep"
+              aria-label="Sales Rep"
+              options={memberOptions}
+              value={salesRepId}
+              onValueChange={setSalesRepId}
+              placeholder="Select a sales rep"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-manager">Project Manager</Label>
+            <SelectField
+              id="project-manager"
+              aria-label="Project Manager"
+              options={memberOptions}
+              value={projectManagerId}
+              onValueChange={setProjectManagerId}
+              placeholder="Select a project manager"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-engagement-type">Engagement Type</Label>
+            <SelectField
+              id="project-engagement-type"
+              aria-label="Engagement Type"
+              options={engagementTypeOptions}
+              value={engagementType}
+              onValueChange={(value) =>
+                setEngagementType(value as ProjectEngagementType)
+              }
+              placeholder="Select an engagement type"
+            />
+          </div>
+
+          {engagementType === "time_and_material" && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-estimated-hours">Estimated Hours</Label>
+              <Input
+                id="project-estimated-hours"
+                type="number"
+                min={0}
+                placeholder="e.g. 120"
+                value={estimatedHours}
+                onChange={(event) => setEstimatedHours(event.target.value)}
+              />
+            </div>
+          )}
+
+          {(engagementType === "fixed_budget" ||
+            engagementType === "retainer") && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-estimated-date">Estimated Date</Label>
+              <Input
+                id="project-estimated-date"
+                type="date"
+                min={startDate || undefined}
+                value={estimatedDate}
+                onChange={(event) => setEstimatedDate(event.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-type">Project type</Label>
+            <SelectField
+              id="project-type"
+              aria-label="Project type"
+              options={typeOptions}
+              value={projectTypeId}
+              onValueChange={handleTypeChange}
+              placeholder="Select a project type"
+            />
+          </div>
+
+          {requiresPlan && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-hubs">Select Hubs</Label>
+              <MultiSelectField
+                id="project-hubs"
+                aria-label="Select Hubs"
+                options={hubOptions}
+                values={hubIds}
+                onValuesChange={handleHubsChange}
+                placeholder={
+                  hubOptions.length === 0
+                    ? "No hubs on this project type"
+                    : "Select one or more hubs"
+                }
+                disabled={hubOptions.length === 0}
+              />
+            </div>
+          )}
+
+          {requiresPlan && (
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="project-plans">Plans</Label>
+              <MultiSelectField
+                id="project-plans"
+                aria-label="Plans"
+                options={planOptions}
+                values={planIds}
+                onValuesChange={setPlanIds}
+                placeholder={
+                  hubIds.length === 0
+                    ? "Select a hub first"
+                    : planOptions.length === 0
+                      ? "No plans on the selected hubs"
+                      : "Select one or more plans"
+                }
+                disabled={planOptions.length === 0}
+              />
+              <p className="text-xs text-muted-foreground">
+                Each selected plan contributes its modules and a starter task
+                per module.
+              </p>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="project-description">Description</Label>
+            <RichTextEditor
+              id="project-description"
+              value={description}
+              onChange={setDescription}
+              placeholder="Optional summary"
+              aria-label="Description"
+            />
+          </div>
+
+          <div className="flex flex-col gap-2">
             <Label htmlFor="project-attachments">Attachments</Label>
             <button
               type="button"
@@ -624,8 +766,8 @@ function NewProjectPanel({
               <span className="text-sm">Click to attach files</span>
               <span className="text-xs text-muted-foreground">
                 Images, PDF, Word, Excel, or CSV — up to{" "}
-                {formatBytes(MAX_ATTACHMENT_BYTES)} per file, uploaded once
-                the project is created
+                {formatBytes(MAX_ATTACHMENT_BYTES)} per file, uploaded once the
+                project is created
               </span>
             </button>
             <input

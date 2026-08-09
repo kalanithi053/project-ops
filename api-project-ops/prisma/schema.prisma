@@ -51,6 +51,18 @@ enum WorkTypeCategory {
   @@map("work_type_category")
 }
 
+// Commercial engagement model for a project — distinct from `ProjectType`
+// (which project types like HubSpot/Development), this is how the work is
+// billed. Drives which format the Estimation field takes on the project
+// (hours for time_and_material, a target/renewal date for the other two).
+enum ProjectEngagementType {
+  fixed_budget
+  time_and_material
+  retainer
+
+  @@map("project_engagement_type")
+}
+
 // ---------------------------------------------------------------------------
 // Identity (global, not workspace-scoped)
 // ---------------------------------------------------------------------------
@@ -81,6 +93,8 @@ model User {
   workspaceMembers    WorkspaceMember[]
   projectMembers      ProjectMember[]
   ownedProjects       Project[]         @relation("ProjectOwner")
+  salesRepProjects    Project[]         @relation("ProjectSalesRep")
+  managedProjects     Project[]         @relation("ProjectManager")
   activityLogs        ActivityLog[]     @relation("ActivityLogActor")
   comments            Comment[]         @relation("CommentAuthor")
   commentMentions     CommentMention[]  @relation("CommentMentions")
@@ -135,6 +149,7 @@ model Workspace {
   timeLogs       TimeLog[]
   attachments    Attachment[]
   preference     WorkspacePreference?
+  hubs           Hub[]
 
   @@index([ownerId])
   @@map("workspace")
@@ -239,18 +254,48 @@ model Plan {
   id            String  @id @default(uuid())
   workspaceId   String  @map("workspace_id")
   projectTypeId String  @map("project_type_id")
+  // Set when this plan is a tier of a specific Hub (e.g. "Enterprise" under
+  // Sales Hub) rather than one of the generic Professional/Ultimate/Enterprise
+  // tiers — null for the latter.
+  hubId         String? @map("hub_id")
   name          String
   features      Json    @default("{}")
   isActive      Boolean @default(true) @map("is_active")
 
   workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   projectType ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
+  hub         Hub?        @relation(fields: [hubId], references: [id], onDelete: Cascade)
   modules     Module[]
 
   @@index([workspaceId])
   @@index([workspaceId, isActive])
   @@index([projectTypeId])
+  @@index([hubId])
   @@map("plan")
+}
+
+// ---------------------------------------------------------------------------
+// Hubs (HubSpot's product lines — Marketing/Sales/Service/Content/Operations/
+// Commerce Hub — only meaningful under a plan-add ProjectType). Each Hub has
+// its own tiers, modeled as ordinary hub-scoped `Plan` rows so the existing
+// Plan -> Module -> seed-task pipeline needs no changes.
+// ---------------------------------------------------------------------------
+
+model Hub {
+  id            String  @id @default(uuid())
+  workspaceId   String  @map("workspace_id")
+  projectTypeId String  @map("project_type_id")
+  name          String
+  color         String?
+  isActive      Boolean @default(true) @map("is_active")
+
+  workspace   Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectType ProjectType @relation(fields: [projectTypeId], references: [id], onDelete: Cascade)
+  plans       Plan[]
+
+  @@unique([projectTypeId, name])
+  @@index([workspaceId])
+  @@map("hub")
 }
 
 // ---------------------------------------------------------------------------
@@ -258,23 +303,38 @@ model Plan {
 // ---------------------------------------------------------------------------
 
 model Project {
-  id            String    @id @default(uuid())
-  workspaceId   String    @map("workspace_id")
-  name          String
-  projectTypeId String?   @map("project_type_id")
+  id               String                 @id @default(uuid())
+  workspaceId      String                 @map("workspace_id")
+  name             String
+  projectTypeId    String?                @map("project_type_id")
   // Plans the project is created under. Scalar list (Postgres text[]) — ids are
   // validated in the service layer; no FK relation is possible on a list.
-  planId        String[]  @default([]) @map("plan_ids")
-  description   String?
-  startDate     DateTime? @map("start_date")
-  endDate       DateTime? @map("end_date")
-  ownerId       String    @map("owner_id")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
-  deletedAt     DateTime? @map("deleted_at")
+  planId           String[]               @default([]) @map("plan_ids")
+  // Hubs (HubSpot product lines) this engagement covers — same scalar-list
+  // pattern as `planId`. Every `planId` that belongs to a Hub must have that
+  // Hub's id present here too (enforced in the service layer).
+  hubId            String[]               @default([]) @map("hub_ids")
+  description      String?
+  startDate        DateTime?              @map("start_date")
+  endDate          DateTime?              @map("end_date")
+  ownerId          String                 @map("owner_id")
+  salesRepId       String?                @map("sales_rep_id")
+  projectManagerId String?                @map("project_manager_id")
+  // Billing/commercial model — see `ProjectEngagementType`. Not to be confused
+  // with `ProjectType` (HubSpot vs Development), a different axis.
+  engagementType   ProjectEngagementType? @map("engagement_type")
+  // Exactly one of these is populated, matching `engagementType`: hours for
+  // time_and_material, a target/renewal date for fixed_budget/retainer.
+  estimatedHours   Float?                 @map("estimated_hours")
+  estimatedDate    DateTime?              @map("estimated_date")
+  createdAt        DateTime               @default(now()) @map("created_at")
+  updatedAt        DateTime               @updatedAt @map("updated_at")
+  deletedAt        DateTime?              @map("deleted_at")
 
   workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   owner           User             @relation("ProjectOwner", fields: [ownerId], references: [id])
+  salesRep        User?            @relation("ProjectSalesRep", fields: [salesRepId], references: [id])
+  projectManager  User?            @relation("ProjectManager", fields: [projectManagerId], references: [id])
   projectType     ProjectType?     @relation(fields: [projectTypeId], references: [id])
   members         ProjectMember[]
   moduleInstances ModuleInstance[]
@@ -285,6 +345,8 @@ model Project {
   @@index([workspaceId])
   @@index([ownerId])
   @@index([projectTypeId])
+  @@index([salesRepId])
+  @@index([projectManagerId])
   @@map("project")
 }
 
@@ -341,6 +403,7 @@ model ProjectType {
   workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   plans     Plan[]
   projects  Project[]
+  hubs      Hub[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])

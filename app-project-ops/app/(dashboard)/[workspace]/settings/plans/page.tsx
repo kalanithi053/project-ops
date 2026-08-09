@@ -38,8 +38,11 @@ import {
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 import { PERMISSIONS } from "@/lib/api/permissions";
-import type { PlanWithModules, ProjectType } from "@/lib/api/types";
+import type { Hub, PlanWithModules, ProjectType } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+
+/** Sentinel SelectField value for "no hub" — SelectField has no native clear option. */
+const NO_HUB_VALUE = "__none__";
 
 export default function PlansPage() {
   const { workspace } = useParams<{ workspace: string }>();
@@ -59,6 +62,7 @@ export default function PlansPage() {
     () => settings.data?.projectTypes ?? [],
     [settings.data],
   );
+  const hubs = React.useMemo(() => settings.data?.hubs ?? [], [settings.data]);
 
   const [creating, setCreating] = React.useState(false);
   const [renaming, setRenaming] = React.useState<PlanWithModules | null>(null);
@@ -83,6 +87,27 @@ export default function PlansPage() {
   const visiblePlans = plans.filter(
     (plan) => plan.projectTypeId === selectedTypeId,
   );
+
+  // Group by Hub so a Hub's Starter/Professional/Enterprise tiers sit
+  // together, with a final section for the generic (non-Hub) tiers.
+  const { hubGroups, ungroupedPlans } = React.useMemo(() => {
+    const byHub = new Map<string, { hub: Hub; plans: PlanWithModules[] }>();
+    const ungrouped: PlanWithModules[] = [];
+    for (const plan of visiblePlans) {
+      if (plan.hub) {
+        const hub = hubs.find((h) => h.id === plan.hub!.id) ?? plan.hub;
+        const existing = byHub.get(plan.hub.id);
+        if (existing) {
+          existing.plans.push(plan);
+        } else {
+          byHub.set(plan.hub.id, { hub: hub as Hub, plans: [plan] });
+        }
+      } else {
+        ungrouped.push(plan);
+      }
+    }
+    return { hubGroups: Array.from(byHub.values()), ungroupedPlans: ungrouped };
+  }, [visiblePlans, hubs]);
 
   const addButton =
     canManage && selectedType?.isPlanAdd ? (
@@ -162,21 +187,60 @@ export default function PlansPage() {
               action={addButton}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-              {visiblePlans.map((plan) => (
-                <PlanCard
-                  key={plan.id}
-                  workspaceSlug={workspace}
-                  plan={plan}
-                  canManage={canManage}
-                  isActivating={
-                    activate.isPending && activate.variables === plan.id
-                  }
-                  activatePending={activate.isPending}
-                  onActivate={() => activate.mutate(plan.id)}
-                  onRename={() => setRenaming(plan)}
-                />
+            <div className="flex flex-col gap-6">
+              {hubGroups.map(({ hub, plans: hubPlans }) => (
+                <div key={hub.id} className="flex flex-col gap-3">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className="h-2 w-2 rounded-full"
+                      style={{ backgroundColor: hub.color ?? "#94a3b8" }}
+                    />
+                    <span className="text-sm font-medium">{hub.name}</span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {hubPlans.map((plan) => (
+                      <PlanCard
+                        key={plan.id}
+                        workspaceSlug={workspace}
+                        plan={plan}
+                        canManage={canManage}
+                        isActivating={
+                          activate.isPending && activate.variables === plan.id
+                        }
+                        activatePending={activate.isPending}
+                        onActivate={() => activate.mutate(plan.id)}
+                        onRename={() => setRenaming(plan)}
+                      />
+                    ))}
+                  </div>
+                </div>
               ))}
+
+              {ungroupedPlans.length > 0 && (
+                <div className="flex flex-col gap-3">
+                  {hubGroups.length > 0 && (
+                    <span className="text-sm font-medium text-muted-foreground">
+                      Other Plans
+                    </span>
+                  )}
+                  <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                    {ungroupedPlans.map((plan) => (
+                      <PlanCard
+                        key={plan.id}
+                        workspaceSlug={workspace}
+                        plan={plan}
+                        canManage={canManage}
+                        isActivating={
+                          activate.isPending && activate.variables === plan.id
+                        }
+                        activatePending={activate.isPending}
+                        onActivate={() => activate.mutate(plan.id)}
+                        onRename={() => setRenaming(plan)}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -186,6 +250,7 @@ export default function PlansPage() {
         <RenamePlanPanel
           workspaceSlug={workspace}
           plan={renaming}
+          hubs={hubs.filter((hub) => hub.projectTypeId === renaming.projectTypeId)}
           onClose={() => setRenaming(null)}
         />
       )}
@@ -194,6 +259,7 @@ export default function PlansPage() {
         <CreatePlanDialog
           workspaceSlug={workspace}
           projectTypes={projectTypes}
+          hubs={hubs}
           defaultProjectTypeId={selectedTypeId}
           onClose={() => setCreating(false)}
         />
@@ -230,13 +296,14 @@ function PlanCard({
       )}
     >
       <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="truncate font-medium">{plan.name}</span>
           {plan.isActive ? (
             <Badge variant="success">Active</Badge>
           ) : (
             <Badge variant="neutral">Inactive</Badge>
           )}
+          {plan.hub && <Badge variant="outline">{plan.hub.name}</Badge>}
         </div>
 
         {canManage && (
@@ -295,11 +362,13 @@ function PlanCard({
 function CreatePlanDialog({
   workspaceSlug,
   projectTypes,
+  hubs,
   defaultProjectTypeId,
   onClose,
 }: {
   workspaceSlug: string;
   projectTypes: ProjectType[];
+  hubs: Hub[];
   /** Pre-selects the type currently being filtered on. */
   defaultProjectTypeId?: string;
   onClose: () => void;
@@ -310,6 +379,7 @@ function CreatePlanDialog({
   const [projectTypeId, setProjectTypeId] = React.useState<string | undefined>(
     defaultProjectTypeId ?? projectTypes[0]?.id,
   );
+  const [hubId, setHubId] = React.useState<string>(NO_HUB_VALUE);
   const [error, setError] = React.useState<string | null>(null);
 
   const typeOptions: any[] = projectTypes.map((type) => ({
@@ -317,6 +387,13 @@ function CreatePlanDialog({
     label: type.name,
     value: type.id,
   }));
+
+  const hubOptions = [
+    { label: "None", value: NO_HUB_VALUE },
+    ...hubs
+      .filter((hub) => hub.projectTypeId === projectTypeId)
+      .map((hub) => ({ label: hub.name, value: hub.id })),
+  ];
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -329,7 +406,12 @@ function CreatePlanDialog({
     if (!projectTypeId) return setError("Choose a project type.");
 
     create.mutate(
-      { name: trimmed, projectTypeId, isActive: false },
+      {
+        name: trimmed,
+        projectTypeId,
+        isActive: false,
+        hubId: hubId === NO_HUB_VALUE ? undefined : hubId,
+      },
       { onSuccess: onClose },
     );
   }
@@ -388,8 +470,29 @@ function CreatePlanDialog({
           aria-label="Project type"
           options={typeOptions?.filter((type) => type.isPlanAdd)}
           value={projectTypeId}
-          onValueChange={setProjectTypeId}
+          onValueChange={(value) => {
+            setProjectTypeId(value);
+            setHubId(NO_HUB_VALUE);
+          }}
           placeholder="Select a project type"
+        />
+      </SettingsField>
+
+      <SettingsField
+        label="Hub"
+        htmlFor="plan-hub"
+        hint="Scopes this plan as a tier of a Hub instead of a generic plan."
+      >
+        <SelectField
+          id="plan-hub"
+          aria-label="Hub"
+          options={hubOptions}
+          value={hubId}
+          onValueChange={setHubId}
+          disabled={hubOptions.length <= 1}
+          placeholder={
+            hubOptions.length <= 1 ? "No hubs under this type" : "None"
+          }
         />
       </SettingsField>
 
@@ -402,19 +505,27 @@ function CreatePlanDialog({
   );
 }
 
-/** Renames a plan. Names are unique per project type, so a clash 409s. */
+/** Renames a plan, or reassigns/clears its Hub. Names are unique per project type, so a clash 409s. */
 function RenamePlanPanel({
   workspaceSlug,
   plan,
+  hubs,
   onClose,
 }: {
   workspaceSlug: string;
   plan: PlanWithModules;
+  hubs: Hub[];
   onClose: () => void;
 }) {
   const update = useUpdatePlan(workspaceSlug);
   const [name, setName] = React.useState(plan.name);
+  const [hubId, setHubId] = React.useState<string>(plan.hub?.id ?? NO_HUB_VALUE);
   const [error, setError] = React.useState<string | null>(null);
+
+  const hubOptions = [
+    { label: "None", value: NO_HUB_VALUE },
+    ...hubs.map((hub) => ({ label: hub.name, value: hub.id })),
+  ];
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -424,10 +535,13 @@ function RenamePlanPanel({
     if (trimmed.length < 2) {
       return setError("Plan name must be at least 2 characters.");
     }
-    if (trimmed === plan.name) return onClose();
+
+    const nextHubId = hubId === NO_HUB_VALUE ? null : hubId;
+    const currentHubId = plan.hub?.id ?? null;
+    if (trimmed === plan.name && nextHubId === currentHubId) return onClose();
 
     update.mutate(
-      { id: plan.id, dto: { name: trimmed } },
+      { id: plan.id, dto: { name: trimmed, hubId: nextHubId } },
       { onSuccess: onClose },
     );
   }
@@ -469,6 +583,24 @@ function RenamePlanPanel({
           onChange={(event) => setName(event.target.value)}
           maxLength={50}
           autoFocus
+        />
+      </SettingsField>
+
+      <SettingsField
+        label="Hub"
+        htmlFor="rename-plan-hub"
+        hint="Scopes this plan as a tier of a Hub instead of a generic plan."
+      >
+        <SelectField
+          id="rename-plan-hub"
+          aria-label="Hub"
+          options={hubOptions}
+          value={hubId}
+          onValueChange={setHubId}
+          disabled={hubOptions.length <= 1}
+          placeholder={
+            hubOptions.length <= 1 ? "No hubs under this type" : "None"
+          }
         />
       </SettingsField>
 

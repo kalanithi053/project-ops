@@ -10,6 +10,7 @@ import { WorkspaceMembersModule } from './workspace-members/workspace-members.mo
 import { RolesModule } from './roles/roles.module';
 import { PermissionsModule } from './permissions/permissions.module';
 import { PlansModule } from './plans/plans.module';
+import { HubsModule } from './hubs/hubs.module';
 import { ProjectsModule } from './projects/projects.module';
 import { ProjectMembersModule } from './project-members/project-members.module';
 import { ModulesCatalogModule } from './modules-catalog/modules-catalog.module';
@@ -38,6 +39,7 @@ import { AppService } from './app.service';
     RolesModule,
     PermissionsModule,
     PlansModule,
+    HubsModule,
     ProjectsModule,
     ProjectMembersModule,
     ModulesCatalogModule,

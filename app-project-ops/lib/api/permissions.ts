@@ -22,6 +22,7 @@ export const PERMISSIONS = {
   WORKTYPE_MANAGE: "worktype.manage",
   PROJECTTYPE_MANAGE: "projecttype.manage",
   PLAN_MANAGE: "plan.manage",
+  HUB_MANAGE: "hub.manage",
   PERMISSION_READ: "permission.read",
   WORKSPACE_MANAGE: "workspace.manage",
   TIMELOG_READ: "timelog.read",

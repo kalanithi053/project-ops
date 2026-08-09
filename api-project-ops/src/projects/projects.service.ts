@@ -13,6 +13,14 @@ import { CreateProjectDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { POSITION_GAP } from '../common/constants/workspace-defaults';
 
+/** Shared select for the Sales Rep / Project Manager relations. */
+const PROJECT_PERSON_SELECT = {
+  id: true,
+  email: true,
+  firstName: true,
+  lastName: true,
+} as const;
+
 @Injectable()
 export class ProjectsService {
   constructor(
@@ -58,6 +66,40 @@ export class ProjectsService {
       );
     }
 
+    // Validate the chosen Hubs (all must belong to the workspace + this
+    // project type) and that every selected plan's Hub (if it has one) is
+    // among them — keeps the Hub multi-select and Plan multi-select
+    // referentially consistent.
+    const hubIds = dto.hubId ?? [];
+    const selectedHubs = hubIds.length
+      ? await this.prisma.hub.findMany({
+          where: {
+            id: { in: hubIds },
+            workspaceId,
+            projectTypeId: projectType.id,
+          },
+        })
+      : [];
+    if (selectedHubs.length !== hubIds.length) {
+      throw new BadRequestException('One or more hubs not found in workspace');
+    }
+    const planMissingHub = selectedPlans.find(
+      (plan) => plan.hubId && !hubIds.includes(plan.hubId),
+    );
+    if (planMissingHub) {
+      throw new BadRequestException(
+        'Every selected plan’s Hub must be included in the selected Hubs',
+      );
+    }
+
+    this.assertEstimation(dto);
+    await this.assertWorkspaceMember(workspaceId, dto.salesRepId, 'Sales rep');
+    await this.assertWorkspaceMember(
+      workspaceId,
+      dto.projectManagerId,
+      'Project manager',
+    );
+
     const startDate = new Date(dto.startDate);
     const endDate = new Date(dto.endDate);
     this.assertFutureDate(startDate, 'startDate');
@@ -73,10 +115,18 @@ export class ProjectsService {
           name: dto.name,
           projectTypeId: projectType.id,
           planId: planIds,
+          hubId: hubIds,
           description: dto.description,
           startDate,
           endDate,
           ownerId: userId,
+          salesRepId: dto.salesRepId,
+          projectManagerId: dto.projectManagerId,
+          engagementType: dto.engagementType,
+          estimatedHours: dto.estimatedHours,
+          estimatedDate: dto.estimatedDate
+            ? new Date(dto.estimatedDate)
+            : undefined,
         },
       });
 
@@ -122,11 +172,54 @@ export class ProjectsService {
           projectType: {
             select: { id: true, name: true, isPlanAdd: true, color: true },
           },
+          salesRep: { select: PROJECT_PERSON_SELECT },
+          projectManager: { select: PROJECT_PERSON_SELECT },
           moduleInstances: { include: { module: true } },
           members: true,
         },
       });
     });
+  }
+
+  /** Enforces the estimation format matching `engagementType`, see schema.prisma's Project comment. */
+  private assertEstimation(dto: CreateProjectDto) {
+    if (dto.engagementType === 'time_and_material') {
+      if (dto.estimatedDate) {
+        throw new BadRequestException(
+          'estimatedDate is not valid for a time_and_material engagement — use estimatedHours',
+        );
+      }
+    } else if (
+      dto.engagementType === 'fixed_budget' ||
+      dto.engagementType === 'retainer'
+    ) {
+      if (dto.estimatedHours !== undefined) {
+        throw new BadRequestException(
+          `estimatedHours is not valid for a ${dto.engagementType} engagement — use estimatedDate`,
+        );
+      }
+    } else if (dto.estimatedHours !== undefined || dto.estimatedDate) {
+      throw new BadRequestException(
+        'engagementType is required to set an estimation',
+      );
+    }
+  }
+
+  /** Confirms an optional user id is an active member of the workspace. */
+  private async assertWorkspaceMember(
+    workspaceId: string,
+    userId: string | undefined,
+    label: string,
+  ) {
+    if (!userId) return;
+    const member = await this.prisma.workspaceMember.findFirst({
+      where: { workspaceId, userId, status: 'active' },
+    });
+    if (!member) {
+      throw new BadRequestException(
+        `${label} must be an active member of the workspace`,
+      );
+    }
   }
 
   /**
@@ -228,6 +321,8 @@ export class ProjectsService {
         projectType: {
           select: { id: true, name: true, isPlanAdd: true, color: true },
         },
+        salesRep: { select: PROJECT_PERSON_SELECT },
+        projectManager: { select: PROJECT_PERSON_SELECT },
         _count: { select: { members: true } },
       },
     });
@@ -240,6 +335,8 @@ export class ProjectsService {
         projectType: {
           select: { id: true, name: true, isPlanAdd: true, color: true },
         },
+        salesRep: { select: PROJECT_PERSON_SELECT },
+        projectManager: { select: PROJECT_PERSON_SELECT },
         moduleInstances: { include: { module: true } },
         members: {
           include: { user: { select: { id: true, email: true } } },

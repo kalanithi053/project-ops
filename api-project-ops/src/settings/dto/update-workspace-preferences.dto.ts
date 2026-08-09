@@ -11,7 +11,7 @@ export class UpdateWorkspacePreferencesDto {
   allowManualTimeLog?: boolean;
 
   @ApiPropertyOptional({
-    description: "Whether a log entry may be dated before today.",
+    description: 'Whether a log entry may be dated before today.',
   })
   @IsOptional()
   @IsBoolean()

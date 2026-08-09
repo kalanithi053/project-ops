@@ -217,6 +217,242 @@ export const PLAN_TEMPLATES: PlanTemplate[] = [
   { name: 'Enterprise', features: SHARED_PLAN_FEATURES, isActive: true },
 ];
 
+interface HubModuleDef {
+  key: string;
+  name: string;
+  defaultTaskLimit: number;
+  isDefault: boolean;
+}
+
+/**
+ * HubSpot's real product lines ("Hubs"), each with its own module catalog —
+ * a static reference list (not a live HubSpot API integration). Each hub gets
+ * a `Plan` row per `HUB_TIERS` tier (see `provisionHubCatalog` in
+ * workspace-provisioning.ts), and that plan's modules come from here — the
+ * same Plan -> Module -> seed-task pipeline `DEFAULT_MODULES` already uses.
+ */
+export const DEFAULT_HUBS: Array<{
+  key: string;
+  name: string;
+  modules: HubModuleDef[];
+}> = [
+  {
+    key: 'marketing_hub',
+    name: 'Marketing Hub',
+    modules: [
+      { key: 'forms', name: 'Forms', defaultTaskLimit: 10, isDefault: true },
+      {
+        key: 'email_marketing',
+        name: 'Email Marketing',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'landing_pages',
+        name: 'Landing Pages',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'workflows',
+        name: 'Workflows',
+        defaultTaskLimit: 15,
+        isDefault: false,
+      },
+      { key: 'ads', name: 'Ads', defaultTaskLimit: 5, isDefault: false },
+      {
+        key: 'campaigns',
+        name: 'Campaigns',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+    ],
+  },
+  {
+    key: 'sales_hub',
+    name: 'Sales Hub',
+    modules: [
+      {
+        key: 'pipelines',
+        name: 'Pipelines',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'sequences',
+        name: 'Sequences',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      { key: 'quotes', name: 'Quotes', defaultTaskLimit: 5, isDefault: true },
+      {
+        key: 'playbooks',
+        name: 'Playbooks',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'meetings',
+        name: 'Meetings',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'deal_automation',
+        name: 'Deal Automation',
+        defaultTaskLimit: 10,
+        isDefault: false,
+      },
+    ],
+  },
+  {
+    key: 'service_hub',
+    name: 'Service Hub',
+    modules: [
+      {
+        key: 'ticket_pipelines',
+        name: 'Ticket Pipelines',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'knowledge_base',
+        name: 'Knowledge Base',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'feedback_surveys',
+        name: 'Feedback Surveys',
+        defaultTaskLimit: 5,
+        isDefault: true,
+      },
+      {
+        key: 'playbooks',
+        name: 'Playbooks',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'live_chat',
+        name: 'Live Chat',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      { key: 'slas', name: 'SLAs', defaultTaskLimit: 5, isDefault: false },
+    ],
+  },
+  {
+    key: 'content_hub',
+    name: 'Content Hub',
+    modules: [
+      {
+        key: 'website_pages',
+        name: 'Website Pages',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      { key: 'blog', name: 'Blog', defaultTaskLimit: 10, isDefault: true },
+      { key: 'seo', name: 'SEO', defaultTaskLimit: 10, isDefault: true },
+      {
+        key: 'themes',
+        name: 'Themes',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'memberships',
+        name: 'Memberships',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'dynamic_pages',
+        name: 'Dynamic Pages',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+    ],
+  },
+  {
+    key: 'operations_hub',
+    name: 'Operations Hub',
+    modules: [
+      {
+        key: 'data_sync',
+        name: 'Data Sync',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'workflow_automation',
+        name: 'Workflow Automation',
+        defaultTaskLimit: 15,
+        isDefault: true,
+      },
+      {
+        key: 'data_quality_automation',
+        name: 'Data Quality Automation',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'custom_properties',
+        name: 'Custom Properties',
+        defaultTaskLimit: 20,
+        isDefault: false,
+      },
+      {
+        key: 'datasets',
+        name: 'Datasets',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+      {
+        key: 'programmable_automation',
+        name: 'Programmable Automation',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+    ],
+  },
+  {
+    key: 'commerce_hub',
+    name: 'Commerce Hub',
+    modules: [
+      {
+        key: 'invoices',
+        name: 'Invoices',
+        defaultTaskLimit: 10,
+        isDefault: true,
+      },
+      {
+        key: 'payment_links',
+        name: 'Payment Links',
+        defaultTaskLimit: 5,
+        isDefault: true,
+      },
+      {
+        key: 'subscriptions',
+        name: 'Subscriptions',
+        defaultTaskLimit: 5,
+        isDefault: true,
+      },
+      { key: 'quotes', name: 'Quotes', defaultTaskLimit: 5, isDefault: false },
+      { key: 'carts', name: 'Carts', defaultTaskLimit: 5, isDefault: false },
+      {
+        key: 'discounts',
+        name: 'Discounts',
+        defaultTaskLimit: 5,
+        isDefault: false,
+      },
+    ],
+  },
+];
+
+/** Tiers seeded for every Hub — mirrors HubSpot's own tier naming. */
+export const HUB_TIERS = ['Starter', 'Professional', 'Enterprise'] as const;
+
 /**
  * Spacing between `WorkItem.position` values wherever rows are appended —
  * project seeding, single-item create, and the Kanban board's drag-and-drop

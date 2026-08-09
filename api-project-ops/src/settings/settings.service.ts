@@ -92,6 +92,7 @@ export class SettingsService {
       ticketStatuses,
       priorities,
       projectTypes,
+      hubs,
       roles,
       permissions,
       preference,
@@ -111,6 +112,7 @@ export class SettingsService {
         where: { workspaceId },
         orderBy: { name: 'asc' },
         include: {
+          hub: { select: { id: true, name: true } },
           modules: {
             orderBy: { name: 'asc' },
             select: {
@@ -138,6 +140,10 @@ export class SettingsService {
         include: {
           plans: { select: { id: true, name: true, isActive: true } },
         },
+      }),
+      this.prisma.hub.findMany({
+        where: { workspaceId },
+        orderBy: { name: 'asc' },
       }),
       this.prisma.userRole.findMany({
         where: { workspaceId },
@@ -167,6 +173,7 @@ export class SettingsService {
       ticketStatuses,
       priorities,
       projectTypes,
+      hubs,
       roles: roles.map((r) => ({
         id: r.id,
         name: r.name,

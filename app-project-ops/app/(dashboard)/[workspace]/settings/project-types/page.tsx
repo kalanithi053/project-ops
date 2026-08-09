@@ -39,6 +39,7 @@ export default function ProjectTypesPage() {
 
   const canManage = can(PERMISSIONS.PROJECTTYPE_MANAGE);
   const projectTypes = settings.data?.projectTypes ?? [];
+  const hubs = settings.data?.hubs ?? [];
 
   const [editing, setEditing] = React.useState<ProjectType | null>(null);
   const [creating, setCreating] = React.useState(false);
@@ -89,6 +90,10 @@ export default function ProjectTypesPage() {
                 key={projectType.id}
                 workspaceSlug={workspace}
                 projectType={projectType}
+                hubCount={
+                  hubs.filter((hub) => hub.projectTypeId === projectType.id)
+                    .length
+                }
                 canManage={canManage}
                 onEdit={() => setEditing(projectType)}
                 onDelete={() => setDeleting(projectType)}
@@ -129,12 +134,14 @@ export default function ProjectTypesPage() {
 function ProjectTypeCard({
   workspaceSlug,
   projectType,
+  hubCount,
   canManage,
   onEdit,
   onDelete,
 }: {
   workspaceSlug: string;
   projectType: ProjectType;
+  hubCount: number;
   canManage: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -221,6 +228,26 @@ function ProjectTypeCard({
               </Link>
             </Button>
           ))}
+        </div>
+      )}
+
+      {projectType.isPlanAdd && (
+        <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+          <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+            Hubs
+          </span>
+          <Button
+            asChild
+            variant="outline"
+            size="sm"
+            className="h-7 gap-1.5 px-2 text-xs"
+          >
+            <Link
+              href={`/${workspaceSlug}/settings/hubs?projectTypeId=${projectType.id}`}
+            >
+              {hubCount} hub{hubCount === 1 ? "" : "s"}
+            </Link>
+          </Button>
         </div>
       )}
     </Card>

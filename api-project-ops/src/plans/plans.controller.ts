@@ -17,6 +17,7 @@ import { WorkspaceOwnerGuard } from '../common/guards/workspace-owner.guard';
 import { WorkspaceScopeGuard } from '../common/guards/workspace-scope.guard';
 import { CreatePlanDto } from './dto/create-plan.dto';
 import { UpdatePlanDto } from './dto/update-plan.dto';
+import { UpdatePlanDetailsDto } from './dto/update-plan-details.dto';
 import { PlansService } from './plans.service';
 
 @ApiTags('plans')
@@ -76,5 +77,19 @@ export class PlansController {
     @Body() dto: UpdatePlanDto,
   ) {
     return this.plans.updateActivePlan(workspaceId, dto);
+  }
+
+  @Patch(':planId')
+  @UseGuards(WorkspaceOwnerGuard)
+  @RequirePermission(PERMISSIONS.PLAN_MANAGE)
+  @ApiOperation({
+    summary: 'Rename a plan, edit its features, or reassign/clear its Hub',
+  })
+  update(
+    @CurrentWorkspace('workspaceId') workspaceId: string,
+    @Param('planId') planId: string,
+    @Body() dto: UpdatePlanDetailsDto,
+  ) {
+    return this.plans.updatePlanDetails(workspaceId, planId, dto);
   }
 }

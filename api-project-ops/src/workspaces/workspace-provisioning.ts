@@ -4,11 +4,13 @@ import {
   PERMISSION_CATALOG,
 } from '../common/constants/permissions';
 import {
+  DEFAULT_HUBS,
   DEFAULT_MODULES,
   DEFAULT_PRIORITIES,
   DEFAULT_PROJECT_TYPES,
   DEFAULT_TICKET_STATUSES,
   DEFAULT_WORK_TYPES,
+  HUB_TIERS,
   PLAN_TEMPLATES,
 } from '../common/constants/workspace-defaults';
 
@@ -110,6 +112,13 @@ export async function provisionWorkspaceDefaults(
     select: { id: true },
   });
 
+  // 4.5. HubSpot Hub catalog (Marketing/Sales/Service/Content/Operations/
+  //      Commerce Hub), each with its own Starter/Professional/Enterprise
+  //      tiers — only meaningful under the plan-adding project type.
+  if (planProjectTypeId) {
+    await provisionHubCatalog(tx, workspaceId, planProjectTypeId);
+  }
+
   // 5. Modules catalog — the default modules are seeded per plan, so each tier
   //    starts with the same set but can diverge independently.
   await tx.module.createMany({
@@ -169,4 +178,71 @@ export async function provisionWorkspaceDefaults(
   });
 
   return { roleIdsByName, ownerRoleId, defaultRoleId };
+}
+
+/**
+ * Seeds the HubSpot Hub catalog (`DEFAULT_HUBS`) for a workspace under the
+ * given plan-adding project type: each Hub, then a hub-scoped `Plan` row per
+ * `HUB_TIERS` tier, then that hub's modules attached to every one of its
+ * tiers — reusing the exact Plan -> Module -> seed-task pipeline the generic
+ * Professional/Ultimate/Enterprise plans already go through.
+ *
+ * Idempotent (skips a Hub that already exists by name) so it's safe to call
+ * both from fresh-workspace provisioning and the one-off backfill script for
+ * workspaces created before Hubs existed.
+ */
+export async function provisionHubCatalog(
+  tx: Prisma.TransactionClient,
+  workspaceId: string,
+  projectTypeId: string,
+) {
+  await tx.hub.createMany({
+    data: DEFAULT_HUBS.map((hub) => ({
+      workspaceId,
+      projectTypeId,
+      name: hub.name,
+    })),
+    skipDuplicates: true,
+  });
+
+  const hubs = await tx.hub.findMany({
+    where: { workspaceId, projectTypeId },
+    select: { id: true, name: true },
+  });
+  const hubByName = new Map(hubs.map((h) => [h.name, h]));
+
+  for (const hubDef of DEFAULT_HUBS) {
+    const hub = hubByName.get(hubDef.name);
+    if (!hub) continue;
+
+    for (const tier of HUB_TIERS) {
+      const existingPlan = await tx.plan.findFirst({
+        where: { hubId: hub.id, name: tier },
+        select: { id: true },
+      });
+      const plan =
+        existingPlan ??
+        (await tx.plan.create({
+          data: {
+            workspaceId,
+            projectTypeId,
+            hubId: hub.id,
+            name: tier,
+            isActive: true,
+          },
+        }));
+
+      await tx.module.createMany({
+        data: hubDef.modules.map((m) => ({
+          workspaceId,
+          planId: plan.id,
+          key: m.key,
+          name: m.name,
+          defaultTaskLimit: m.defaultTaskLimit,
+          isDefault: m.isDefault,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
 }

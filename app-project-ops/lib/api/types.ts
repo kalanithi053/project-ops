@@ -93,7 +93,15 @@ export interface ProjectModuleInstance {
   taskLimit: number;
   /** Tasks created beyond `taskLimit` — metered, never rejected. */
   addonTask: number;
-  module: { key: string; name: string; plan?: { name: string } };
+  module: {
+    key: string;
+    name: string;
+    plan?: {
+      id: string;
+      name: string;
+      hub?: { id: string; name: string } | null;
+    };
+  };
   [key: string]: unknown;
 }
 
@@ -258,6 +266,25 @@ export interface CreateProjectDto {
   estimatedHours?: number;
   /** Only valid when engagementType is fixed_budget or retainer. */
   estimatedDate?: string;
+  /**
+   * Explicit module choices for this project (existing catalog modules
+   * and/or brand-new ones), each with its own task count. Falls back to
+   * each selected plan's isDefault modules at their catalog task limit
+   * when omitted.
+   */
+  moduleSelections?: ModuleSelectionDto[];
+}
+
+/**
+ * One module to attach to the project being created. Either `moduleId` (an
+ * existing catalog module) or `planId` + `name` (a brand-new module) must be
+ * set — enforced server-side since it depends on which plans were selected.
+ */
+export interface ModuleSelectionDto {
+  moduleId?: string;
+  planId?: string;
+  name?: string;
+  taskLimit: number;
 }
 
 /**

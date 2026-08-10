@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ProjectsService } from './projects.service';
 import { AttachmentsService } from '../attachments/attachments.service';
 import { PrismaService } from '../prisma/prisma.service';
@@ -24,7 +28,7 @@ describe('ProjectsService', () => {
     userRole: { findFirst: jest.Mock };
     projectMember: { create: jest.Mock };
     ticketStatus: { findFirst: jest.Mock };
-    module: { findMany: jest.Mock };
+    module: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     workType: { findFirst: jest.Mock };
     moduleInstance: { create: jest.Mock };
     workItem: { create: jest.Mock };
@@ -58,7 +62,11 @@ describe('ProjectsService', () => {
       userRole: { findFirst: jest.fn() },
       projectMember: { create: jest.fn() },
       ticketStatus: { findFirst: jest.fn() },
-      module: { findMany: jest.fn() },
+      module: {
+        findMany: jest.fn(),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
       workType: { findFirst: jest.fn() },
       moduleInstance: { create: jest.fn() },
       workItem: { create: jest.fn() },
@@ -247,6 +255,163 @@ describe('ProjectsService', () => {
           action: 'created',
           userId,
         }),
+      });
+    });
+
+    describe('with explicit moduleSelections', () => {
+      const plan = { id: 'plan-1', workspaceId };
+
+      function primeCommonMocks() {
+        prisma.projectType.findFirst.mockResolvedValue(
+          projectType({ isPlanAdd: true }),
+        );
+        prisma.project.findMany.mockResolvedValue([]);
+        prisma.plan.findMany.mockResolvedValue([plan]);
+        prisma.project.create.mockResolvedValue({ id: 'proj-1' });
+        prisma.userRole.findFirst.mockResolvedValue({
+          id: 'role-owner',
+          name: 'Owner',
+        });
+        prisma.projectMember.create.mockResolvedValue({});
+        prisma.priority.findFirst.mockResolvedValue({
+          id: 'priority-default',
+          isDefault: true,
+        });
+        prisma.ticketStatus.findFirst.mockResolvedValue({
+          id: 'status-default',
+          isDefault: true,
+        });
+        prisma.workType.findFirst.mockResolvedValue({
+          id: 'wtype-1',
+          category: 'task',
+        });
+        prisma.workItem.create.mockImplementation(({ data }: any) =>
+          Promise.resolve({ id: `wi-${data.prefix}`, ...data }),
+        );
+        prisma.activityLog.create.mockResolvedValue({});
+        prisma.project.findUnique.mockResolvedValue({ id: 'proj-1' });
+      }
+
+      it('uses the selection’s task count instead of the module’s catalog default, and skips the isDefault lookup entirely', async () => {
+        primeCommonMocks();
+        const existingModule = {
+          id: 'mod-1',
+          planId: plan.id,
+          name: 'Meetings',
+          defaultTaskLimit: 5,
+        };
+        prisma.module.findFirst.mockResolvedValue(existingModule);
+        prisma.moduleInstance.create.mockResolvedValue({
+          id: 'mi-1',
+          projectId: 'proj-1',
+          moduleId: existingModule.id,
+        });
+
+        const dto = baseDto({
+          planId: [plan.id],
+          moduleSelections: [{ moduleId: existingModule.id, taskLimit: 8 }],
+        });
+        await service.create(workspaceId, userId, dto);
+
+        expect(prisma.module.findMany).not.toHaveBeenCalled();
+        expect(prisma.moduleInstance.create).toHaveBeenCalledWith({
+          data: {
+            projectId: 'proj-1',
+            moduleId: existingModule.id,
+            taskLimit: 8,
+          },
+        });
+        expect(prisma.workItem.create).toHaveBeenCalledTimes(8);
+      });
+
+      it('creates a brand-new catalog module (isDefault: false) when a selection has no moduleId', async () => {
+        primeCommonMocks();
+        prisma.module.findFirst.mockResolvedValue(null); // no key collision
+        const created = {
+          id: 'mod-new',
+          planId: plan.id,
+          name: 'Client Workshops',
+          defaultTaskLimit: 3,
+        };
+        prisma.module.create.mockResolvedValue(created);
+        prisma.moduleInstance.create.mockResolvedValue({
+          id: 'mi-new',
+          projectId: 'proj-1',
+          moduleId: created.id,
+        });
+
+        const dto = baseDto({
+          planId: [plan.id],
+          moduleSelections: [
+            { planId: plan.id, name: 'Client Workshops', taskLimit: 3 },
+          ],
+        });
+        await service.create(workspaceId, userId, dto);
+
+        expect(prisma.module.create).toHaveBeenCalledWith({
+          data: {
+            workspaceId,
+            planId: plan.id,
+            key: 'client_workshops',
+            name: 'Client Workshops',
+            defaultTaskLimit: 3,
+            isDefault: false,
+            isActive: true,
+          },
+        });
+        expect(prisma.moduleInstance.create).toHaveBeenCalledWith({
+          data: { projectId: 'proj-1', moduleId: created.id, taskLimit: 3 },
+        });
+      });
+
+      it('throws BadRequestException when an existing-module selection does not belong to a selected plan', async () => {
+        primeCommonMocks();
+        prisma.module.findFirst.mockResolvedValue({
+          id: 'mod-1',
+          planId: 'some-other-plan',
+          name: 'Meetings',
+        });
+
+        const dto = baseDto({
+          planId: [plan.id],
+          moduleSelections: [{ moduleId: 'mod-1', taskLimit: 5 }],
+        });
+        await expect(service.create(workspaceId, userId, dto)).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('throws BadRequestException when a new module selection is missing planId or name', async () => {
+        primeCommonMocks();
+
+        const dto = baseDto({
+          planId: [plan.id],
+          moduleSelections: [{ taskLimit: 5 }],
+        });
+        await expect(service.create(workspaceId, userId, dto)).rejects.toThrow(
+          BadRequestException,
+        );
+      });
+
+      it('throws ConflictException when a new module’s derived key already exists on that plan', async () => {
+        primeCommonMocks();
+        prisma.module.findFirst.mockResolvedValue({
+          id: 'mod-existing',
+          planId: plan.id,
+          key: 'meetings',
+          name: 'Meetings',
+        });
+
+        const dto = baseDto({
+          planId: [plan.id],
+          moduleSelections: [
+            { planId: plan.id, name: 'Meetings', taskLimit: 5 },
+          ],
+        });
+        await expect(service.create(workspaceId, userId, dto)).rejects.toThrow(
+          ConflictException,
+        );
+        expect(prisma.module.create).not.toHaveBeenCalled();
       });
     });
 

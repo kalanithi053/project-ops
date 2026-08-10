@@ -90,10 +90,23 @@ export class OtpService {
     });
   }
 
+  /**
+   * The OTP is already persisted by the time this runs — a transport hiccup
+   * (SMTP provider down, IP not whitelisted, etc.) must not fail the whole
+   * request, or every login/register attempt 500s whenever mail delivery is
+   * degraded. Log and move on, matching the other non-critical mail sends
+   * (invites, mentions) elsewhere in the codebase.
+   */
   private async deliver(email: string, code: string): Promise<void> {
     if (this.config.get('NODE_ENV') !== 'production') {
       this.logger.log(`[OTP] email=${email} code=${code}`);
     }
-    await this.mail.sendOtpEmail(email, code, this.ttlSeconds);
+    await this.mail
+      .sendOtpEmail(email, code, this.ttlSeconds)
+      .catch((err) =>
+        this.logger.error(
+          `Failed to send OTP email to=${email}: ${(err as Error).message}`,
+        ),
+      );
   }
 }

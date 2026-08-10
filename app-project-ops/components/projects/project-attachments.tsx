@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Download, FileText, Loader2, Paperclip, Trash2, Upload } from "lucide-react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -23,12 +24,20 @@ import {
   formatBytes,
   isAllowedAttachmentFile,
   isPreviewableImage,
+  projectAttachmentsKey,
+  uploadProjectAttachment,
   useAttachmentPreviewUrl,
   useDeleteProjectAttachment,
   useProjectAttachments,
-  useUploadProjectAttachment,
 } from "@/lib/api/hooks/use-project-attachments";
 import type { ProjectAttachment } from "@/lib/api/types";
+
+/** One file mid-upload, tracked locally so each has its own progress bar. */
+interface UploadingFile {
+  id: string;
+  name: string;
+  progress: number;
+}
 
 function uploaderName(uploader: ProjectAttachment["uploader"]): string {
   if (!uploader) return "";
@@ -158,16 +167,48 @@ export function ProjectAttachments({
     error,
     refetch,
   } = useProjectAttachments(workspaceSlug, projectId, workItemId);
-  const upload = useUploadProjectAttachment(workspaceSlug, projectId, workItemId);
   const remove = useDeleteProjectAttachment(workspaceSlug, projectId, workItemId);
+  const queryClient = useQueryClient();
 
   const inputRef = React.useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = React.useState(false);
   const [downloadingId, setDownloadingId] = React.useState<string | null>(null);
+  const [uploadingFiles, setUploadingFiles] = React.useState<UploadingFile[]>(
+    [],
+  );
   const [previewAttachment, setPreviewAttachment] =
     React.useState<ProjectAttachment | null>(null);
 
   const attachments = data ?? [];
+
+  async function uploadOne(file: File) {
+    const id = `${file.name}-${file.size}-${Math.random().toString(36).slice(2)}`;
+    setUploadingFiles((current) => [
+      ...current,
+      { id, name: file.name, progress: 0 },
+    ]);
+    try {
+      const attachment = await uploadProjectAttachment(
+        workspaceSlug,
+        projectId,
+        file,
+        workItemId,
+        false,
+        (progress) =>
+          setUploadingFiles((current) =>
+            current.map((u) => (u.id === id ? { ...u, progress } : u)),
+          ),
+      );
+      await queryClient.invalidateQueries({
+        queryKey: projectAttachmentsKey(workspaceSlug, projectId, workItemId),
+      });
+      toast.success("Uploaded successfully", attachment.fileName);
+    } catch {
+      // apiUpload already toasted the error.
+    } finally {
+      setUploadingFiles((current) => current.filter((u) => u.id !== id));
+    }
+  }
 
   function submitFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -188,7 +229,7 @@ export function ProjectAttachments({
         );
         continue;
       }
-      upload.mutate(file);
+      void uploadOne(file);
     }
   }
 
@@ -237,7 +278,7 @@ export function ProjectAttachments({
                   setDragging(false);
                   submitFiles(event.dataTransfer.files);
                 }}
-                disabled={upload.isPending}
+                disabled={uploadingFiles.length > 0}
                 className={cn(
                   "flex cursor-pointer flex-col items-center gap-1.5 rounded-md border border-dashed border-border px-3 py-8 text-center transition-colors",
                   "hover:border-foreground/30 hover:bg-accent/40",
@@ -246,13 +287,13 @@ export function ProjectAttachments({
                   dragging && "border-foreground/40 bg-accent/60",
                 )}
               >
-                {upload.isPending ? (
+                {uploadingFiles.length > 0 ? (
                   <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
                 ) : (
                   <Upload className="h-5 w-5 text-muted-foreground" />
                 )}
                 <span className="text-sm">
-                  {upload.isPending
+                  {uploadingFiles.length > 0
                     ? "Uploading…"
                     : "Drop a file or click to browse"}
                 </span>
@@ -261,6 +302,33 @@ export function ProjectAttachments({
                   {formatBytes(MAX_ATTACHMENT_BYTES)} per file
                 </span>
               </button>
+
+              {uploadingFiles.length > 0 && (
+                <ul className="flex flex-col gap-1.5">
+                  {uploadingFiles.map((file) => (
+                    <li
+                      key={file.id}
+                      className="flex items-center gap-2 rounded-md border border-border px-3 py-2.5"
+                    >
+                      <Loader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="truncate text-sm font-medium">
+                          {file.name}
+                        </span>
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                          <div
+                            className="h-full rounded-full bg-primary transition-[width]"
+                            style={{ width: `${file.progress}%` }}
+                          />
+                        </div>
+                      </div>
+                      <span className="w-10 shrink-0 text-right text-xs text-muted-foreground">
+                        {file.progress}%
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               <input
                 ref={inputRef}

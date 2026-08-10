@@ -153,7 +153,7 @@ export async function apiDownload(
 }
 
 /** Exchange the stored refresh token for a fresh token pair. */
-async function tryRefresh(): Promise<boolean> {
+export async function tryRefresh(): Promise<boolean> {
   const { refreshToken, setTokens, clear } = useAuthStore.getState();
   if (!refreshToken) {
     clear();
@@ -236,6 +236,96 @@ export async function apiFetch<T>(
     toast.apiSuccess(
       responseMessage(json.message, "Request processed successfully"),
     );
+  }
+
+  return json.data;
+}
+
+function xhrHeaders(workspaceSlug?: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const token = useAuthStore.getState().accessToken;
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (workspaceSlug) headers[WORKSPACE_HEADER] = workspaceSlug;
+  return headers;
+}
+
+function sendUpload<T>(
+  path: string,
+  formData: FormData,
+  workspaceSlug: string | undefined,
+  onProgress: ((percent: number) => void) | undefined,
+): Promise<{ status: number; json: ApiEnvelope<T> | null }> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${API_BASE_URL}${path}`);
+    for (const [name, value] of Object.entries(xhrHeaders(workspaceSlug))) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        onProgress?.(Math.round((event.loaded / event.total) * 100));
+      }
+    };
+    xhr.onload = () => {
+      let json: ApiEnvelope<T> | null = null;
+      try {
+        json = JSON.parse(xhr.responseText);
+      } catch {
+        json = null;
+      }
+      resolve({ status: xhr.status, json });
+    };
+    xhr.onerror = () => reject(new Error("Network error"));
+    xhr.send(formData);
+  });
+}
+
+/**
+ * Uploads a file as multipart/form-data via `XMLHttpRequest` instead of
+ * `fetch` — `fetch` doesn't expose upload progress in a reliable,
+ * widely-supported way, but `XMLHttpRequest.upload.onprogress` does. Mirrors
+ * `apiFetch`'s envelope-unwrapping, 401-refresh-and-retry, and error-toast
+ * behavior. Deliberately never auto-toasts success (unlike `apiFetch`) —
+ * callers show their own toast once the upload (and any follow-up work,
+ * like cache invalidation) is fully settled.
+ */
+export async function apiUpload<T>(
+  path: string,
+  formData: FormData,
+  opts: {
+    workspaceSlug?: string;
+    onProgress?: (percent: number) => void;
+  } = {},
+): Promise<T> {
+  let { status, json } = await sendUpload<T>(
+    path,
+    formData,
+    opts.workspaceSlug,
+    opts.onProgress,
+  );
+
+  if (status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) {
+      ({ status, json } = await sendUpload<T>(
+        path,
+        formData,
+        opts.workspaceSlug,
+        opts.onProgress,
+      ));
+    }
+  }
+
+  if (status === 401) {
+    useAuthStore.getState().clear();
+    if (typeof window !== "undefined") window.location.reload();
+    throw new ApiError("Session expired. Please sign in again.", 401);
+  }
+
+  if (status < 200 || status >= 300 || !json || json.success === false) {
+    const message = responseMessage(json?.message, `Upload failed (${status})`);
+    toast.apiError(message);
+    throw new ApiError(message, json?.statusCode ?? status, undefined, json?.data);
   }
 
   return json.data;

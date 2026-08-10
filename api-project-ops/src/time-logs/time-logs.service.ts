@@ -75,7 +75,12 @@ export class TimeLogsService {
         include: TIME_LOG_INCLUDE,
       }),
       this.prisma.timeLog.findFirst({
-        where: { workItemId, userId, endTime: null, source: TimeLogSource.timer },
+        where: {
+          workItemId,
+          userId,
+          endTime: null,
+          source: TimeLogSource.timer,
+        },
       }),
     ]);
 

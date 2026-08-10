@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,7 +10,7 @@ import {
   extractAttachmentIds,
 } from '../attachments/attachments.service';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateProjectDto } from './dto/create-project.dto';
+import { CreateProjectDto, ModuleSelectionDto } from './dto/create-project.dto';
 import { UpdateProjectDto } from './dto/update-project.dto';
 import { POSITION_GAP } from '../common/constants/workspace-defaults';
 
@@ -151,18 +152,33 @@ export class ProjectsService {
         });
       }
 
-      // isPlanAdd types auto-provision each chosen plan's default modules;
-      // otherwise the project starts empty.
+      // isPlanAdd types provision modules for the project. The New Project
+      // form sends an explicit `moduleSelections` list (pre-populated from
+      // each plan's defaults, editable before submit); older/other callers
+      // that omit it get the legacy behavior — every isDefault module,
+      // at its catalog task limit.
       if (projectType.isPlanAdd) {
-        for (const plan of selectedPlans) {
-          await this.provisionDefaultModules(tx, {
+        if (dto.moduleSelections?.length) {
+          await this.provisionSelectedModules(tx, {
             project,
             workspaceId,
-            planId: plan.id,
             userId,
             startDate,
             endDate,
+            selections: dto.moduleSelections,
+            selectedPlanIds: new Set(selectedPlans.map((plan) => plan.id)),
           });
+        } else {
+          for (const plan of selectedPlans) {
+            await this.provisionDefaultModules(tx, {
+              project,
+              workspaceId,
+              planId: plan.id,
+              userId,
+              startDate,
+              endDate,
+            });
+          }
         }
       }
 
@@ -311,6 +327,182 @@ export class ProjectsService {
         });
       }
     }
+  }
+
+  /**
+   * Attaches the New Project form's explicit module choices instead of a
+   * plan's isDefault set — existing catalog modules and/or brand-new ones,
+   * each with its own per-project task count. New modules are created
+   * under their chosen plan with isDefault: false, so this stays a
+   * per-project override rather than changing what future projects on that
+   * plan get by default.
+   */
+  private async provisionSelectedModules(
+    tx: Prisma.TransactionClient,
+    ctx: {
+      project: { id: string };
+      workspaceId: string;
+      userId: string;
+      startDate: Date | null;
+      endDate: Date | null;
+      selections: ModuleSelectionDto[];
+      selectedPlanIds: Set<string>;
+    },
+  ) {
+    const {
+      project,
+      workspaceId,
+      userId,
+      startDate,
+      endDate,
+      selections,
+      selectedPlanIds,
+    } = ctx;
+
+    const defaultPriority = await tx.priority.findFirst({
+      where: { workspaceId, isDefault: true },
+    });
+    const defaultStatus =
+      (await tx.ticketStatus.findFirst({
+        where: { workspaceId, isDefault: true },
+      })) ??
+      (await tx.ticketStatus.findFirst({
+        where: { workspaceId },
+        orderBy: { order: 'asc' },
+      }));
+    const workType = await tx.workType.findFirst({
+      where: { workspaceId, category: 'task' },
+    });
+    const entityType = workType?.category ?? 'task';
+
+    let seedPosition = 0;
+
+    for (const selection of selections) {
+      const module = selection.moduleId
+        ? await this.getModuleForSelection(
+            tx,
+            workspaceId,
+            selection.moduleId,
+            selectedPlanIds,
+          )
+        : await this.createModuleForSelection(
+            tx,
+            workspaceId,
+            selection,
+            selectedPlanIds,
+          );
+
+      const taskLimit = Math.max(0, selection.taskLimit);
+      const instance = await tx.moduleInstance.create({
+        data: { projectId: project.id, moduleId: module.id, taskLimit },
+      });
+
+      for (let index = 0; index < taskLimit; index += 1) {
+        const workItem = await tx.workItem.create({
+          data: {
+            projectId: project.id,
+            moduleInstanceId: instance.id,
+            workItemTypeId: workType?.id ?? null,
+            prefix: `${module.name}-${index + 1}`,
+            name: module.name,
+            startDate,
+            dueDate: endDate,
+            statusId: defaultStatus?.id ?? null,
+            createdBy: userId,
+            assigneeId: userId,
+            priorityId: defaultPriority?.id,
+            position: seedPosition,
+          },
+        });
+        seedPosition += POSITION_GAP;
+
+        await tx.activityLog.create({
+          data: {
+            workspaceId,
+            projectId: project.id,
+            entityType,
+            entityId: workItem.id,
+            action: 'created',
+            userId,
+            metadata: {
+              name: workItem.name,
+              statusId: workItem.statusId,
+              assigneeId: workItem.assigneeId,
+            },
+          },
+        });
+      }
+    }
+  }
+
+  private async getModuleForSelection(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    moduleId: string,
+    selectedPlanIds: Set<string>,
+  ) {
+    const module = await tx.module.findFirst({
+      where: { id: moduleId, workspaceId },
+    });
+    if (!module) {
+      throw new BadRequestException(
+        `Module ${moduleId} not found in workspace`,
+      );
+    }
+    if (!selectedPlanIds.has(module.planId)) {
+      throw new BadRequestException(
+        'Module does not belong to one of the selected plans',
+      );
+    }
+    return module;
+  }
+
+  private async createModuleForSelection(
+    tx: Prisma.TransactionClient,
+    workspaceId: string,
+    selection: ModuleSelectionDto,
+    selectedPlanIds: Set<string>,
+  ) {
+    if (!selection.planId || !selection.name) {
+      throw new BadRequestException(
+        'New module selections require planId and name',
+      );
+    }
+    if (!selectedPlanIds.has(selection.planId)) {
+      throw new BadRequestException(
+        'A new module’s planId must be one of the selected plans',
+      );
+    }
+    const key = this.slugifyModuleKey(selection.name);
+    const existing = await tx.module.findFirst({
+      where: { planId: selection.planId, key },
+    });
+    if (existing) {
+      throw new ConflictException(
+        `A module named "${selection.name}" already exists on this plan — pick it from the list instead.`,
+      );
+    }
+    return tx.module.create({
+      data: {
+        workspaceId,
+        planId: selection.planId,
+        key,
+        name: selection.name,
+        defaultTaskLimit: selection.taskLimit,
+        isDefault: false,
+        isActive: true,
+      },
+    });
+  }
+
+  /** Derives a stable machine key from a free-typed module name. */
+  private slugifyModuleKey(name: string): string {
+    const slug = name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '');
+    return slug || 'module';
   }
 
   list(workspaceId: string) {

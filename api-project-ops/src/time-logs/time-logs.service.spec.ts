@@ -51,6 +51,16 @@ describe('TimeLogsService', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
 
+    // Permissive by default so date-based fixtures aren't coupled to the
+    // real wall-clock date drifting past them — tests that care about the
+    // past-date restriction itself should override this explicitly.
+    mockPrismaService.workspacePreference.findUnique.mockResolvedValue({
+      allowManualTimeLog: true,
+      allowPastTimeLog: true,
+      pastTimeLogLimitValue: null,
+      pastTimeLogLimitUnit: 'day',
+    });
+
     activityLog = { log: jest.fn().mockResolvedValue({ id: 'activity-1' }) };
 
     const module = await Test.createTestingModule({
@@ -346,14 +356,19 @@ describe('TimeLogsService', () => {
   describe('update / remove', () => {
     it('recomputes durationMinutes when start/end change', async () => {
       const date = new Date('2026-07-30');
-      mockPrismaService.timeLog.findFirst.mockResolvedValue({
-        id: 'log-1',
-        userId,
-        date,
-        startTime: new Date('2026-07-30T09:00:00.000Z'),
-        endTime: new Date('2026-07-30T09:30:00.000Z'),
-        durationMinutes: 30,
-      });
+      // First call is getOwned() fetching the entry; second is the overlap
+      // check, which must exclude this same entry (no other log to collide
+      // with here).
+      mockPrismaService.timeLog.findFirst
+        .mockResolvedValueOnce({
+          id: 'log-1',
+          userId,
+          date,
+          startTime: new Date('2026-07-30T09:00:00.000Z'),
+          endTime: new Date('2026-07-30T09:30:00.000Z'),
+          durationMinutes: 30,
+        })
+        .mockResolvedValueOnce(null);
       mockPrismaService.timeLog.update.mockResolvedValue({ id: 'log-1' });
 
       await service.update('log-1', userId, {

@@ -1,6 +1,11 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/auth-store";
@@ -48,6 +53,33 @@ export function useModules(workspaceSlug: string, planId?: string) {
       ),
     enabled: Boolean(token && workspaceSlug && planId),
   });
+}
+
+/**
+ * Every module across several plans at once — the New Project form can have
+ * multiple plans selected, and needs each one's full module list (not just
+ * its isDefault set) to build the editable "Default Modules" checklist.
+ * Fires one `useModules`-shaped query per plan id in parallel and flattens
+ * the results; still loading while any of them are.
+ */
+export function useModulesForPlans(workspaceSlug: string, planIds: string[]) {
+  const token = useAuthStore((state) => state.accessToken);
+  const results = useQueries({
+    queries: planIds.map((planId) => ({
+      queryKey: ["modules", workspaceSlug, planId],
+      queryFn: () =>
+        apiFetch<WorkspaceModule[]>(
+          `/modules?${new URLSearchParams({ planId })}`,
+          { workspaceSlug },
+        ),
+      enabled: Boolean(token && workspaceSlug && planId),
+    })),
+  });
+
+  return {
+    data: results.flatMap((result) => result.data ?? []),
+    isLoading: results.some((result) => result.isLoading),
+  };
 }
 
 /** Invalidates plan-shaped caches plus the settings bundle. */

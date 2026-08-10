@@ -101,6 +101,21 @@ const COLUMN_LABELS: Record<OptionalColumn, string> = {
 const BUG_KEY = "__bug__";
 const INCIDENT_KEY = "__incident__";
 const NO_MODULE_KEY = "__none__";
+// A well-formed but unassignable UUID v4 — sent as the module-instance
+// filter when a Hub/Plan/Area combination has no overlap, so the backend
+// query still runs (consistent loading state) but correctly returns zero
+// rows instead of the "no filter" behavior an empty array would trigger.
+const NO_MATCH_SENTINEL = "00000000-0000-4000-8000-000000000000";
+
+/** Intersects every *active* (non-empty) id list; `null` means unrestricted. */
+function intersectActive(lists: string[][]): string[] | null {
+  const active = lists.filter((list) => list.length > 0);
+  if (active.length === 0) return null;
+  return active.reduce((acc, list) => {
+    const set = new Set(list);
+    return acc.filter((id) => set.has(id));
+  });
+}
 
 /** A module's group-header label, e.g. "Professional - Workflows". */
 interface ModuleLabel {
@@ -239,6 +254,8 @@ export function TaskWorkItems({
   const [keyword, setKeyword] = React.useState("");
   const [workTypes, setWorkTypes] = React.useState<string[]>([]);
   const [moduleIds, setModuleIds] = React.useState<string[]>([]);
+  const [hubIds, setHubIds] = React.useState<string[]>([]);
+  const [planIds, setPlanIds] = React.useState<string[]>([]);
   const [statusIds, setStatusIds] = React.useState<string[]>([]);
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
@@ -323,10 +340,24 @@ export function TaskWorkItems({
   );
   function applyFilters() {
     setAppliedWorkTypes(workTypes);
+    // Hubs, Plans and Areas each narrow the result independently (AND across
+    // filter types); multiple picks within one filter type are OR'd — see
+    // intersectActive's doc comment. `null` means none of the three were
+    // touched, so no module-based restriction applies at all.
+    const moduleFilter = intersectActive([
+      ...(moduleIds.length ? [moduleIds] : []),
+      ...(hubIds.length ? [moduleIdsForHubs(hubIds)] : []),
+      ...(planIds.length ? [moduleIdsForPlans(planIds)] : []),
+    ]);
     setManualFilters({
       ...(assigneeIds.length ? { assigneeIds } : {}),
       ...(keyword.trim() ? { search: keyword.trim() } : {}),
-      ...(moduleIds.length ? { moduleInstanceIds: moduleIds } : {}),
+      ...(moduleFilter !== null
+        ? {
+            moduleInstanceIds:
+              moduleFilter.length > 0 ? moduleFilter : [NO_MATCH_SENTINEL],
+          }
+        : {}),
       ...(startDate ? { startDate } : {}),
       ...(endDate ? { endDate } : {}),
       ...(statusIds.length ? { statusIds } : {}),
@@ -371,6 +402,51 @@ export function TaskWorkItems({
     () => (modulesQuery.data ?? []).map((instance) => instance.id),
     [modulesQuery.data],
   );
+  // Hubs/Plans aren't stored on a work item directly — they're derived from
+  // its module's plan, so filtering by either one really means "any module
+  // instance whose plan (or plan's hub) is in the selected set." These two
+  // maps translate a Hub/Plan id filter into the equivalent moduleInstanceIds
+  // the backend already knows how to filter by (see applyFilters below).
+  /** Module instances whose plan's hub id is in `hubIds`. */
+  function moduleIdsForHubs(hubIds: string[]): string[] {
+    if (hubIds.length === 0) return [];
+    const wanted = new Set(hubIds);
+    return (modulesQuery.data ?? [])
+      .filter((instance) => {
+        const hubId = instance.module.plan?.hub?.id;
+        return hubId !== undefined && wanted.has(hubId);
+      })
+      .map((instance) => instance.id);
+  }
+
+  /** Module instances whose plan id is in `planIds`. */
+  function moduleIdsForPlans(planIds: string[]): string[] {
+    if (planIds.length === 0) return [];
+    const wanted = new Set(planIds);
+    return (modulesQuery.data ?? [])
+      .filter((instance) => {
+        const planId = instance.module.plan?.id;
+        return planId !== undefined && wanted.has(planId);
+      })
+      .map((instance) => instance.id);
+  }
+  const hubOptions = React.useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const instance of modulesQuery.data ?? []) {
+      const hub = instance.module.plan?.hub;
+      if (hub && !seen.has(hub.id)) seen.set(hub.id, hub.name);
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label }));
+  }, [modulesQuery.data]);
+  const planOptions = React.useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const instance of modulesQuery.data ?? []) {
+      const plan = instance.module.plan;
+      if (!plan || seen.has(plan.id)) continue;
+      seen.set(plan.id, plan.hub ? `${plan.hub.name} ${plan.name}`.trim() : plan.name);
+    }
+    return Array.from(seen, ([value, label]) => ({ value, label }));
+  }, [modulesQuery.data]);
   const statusOptions = React.useMemo(
     () => [
       ...(statusesQuery.data ?? []).map((status) => ({
@@ -462,6 +538,8 @@ export function TaskWorkItems({
     setKeyword("");
     setWorkTypes([]);
     setModuleIds([]);
+    setHubIds([]);
+    setPlanIds([]);
     setStatusIds([]);
     setStartDate("");
     setEndDate("");
@@ -581,6 +659,30 @@ export function TaskWorkItems({
                           placeholder="All statuses"
                         />
                       </label>
+                      {hubOptions.length > 0 && (
+                        <label className="flex flex-col gap-1.5 text-sm font-medium">
+                          Hubs
+                          <MultiSelectField
+                            aria-label="Filter by hubs"
+                            options={hubOptions}
+                            values={hubIds}
+                            onValuesChange={setHubIds}
+                            placeholder="Hub"
+                          />
+                        </label>
+                      )}
+                      {planOptions.length > 0 && (
+                        <label className="flex flex-col gap-1.5 text-sm font-medium">
+                          Plans
+                          <MultiSelectField
+                            aria-label="Filter by plans"
+                            options={planOptions}
+                            values={planIds}
+                            onValuesChange={setPlanIds}
+                            placeholder="Plan"
+                          />
+                        </label>
+                      )}
                       <label className="flex flex-col gap-1.5 text-sm font-medium">
                         Areas
                         <MultiSelectField

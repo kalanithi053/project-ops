@@ -80,12 +80,21 @@ export default function ProjectOverviewPage() {
   }, [modulesQuery.data]);
 
 
-  /** Plan ids on the project resolved to names via the settings bundle. */
-  const planNames = React.useMemo(() => {
+  /**
+   * Plan ids on the project resolved to hub-qualified labels via the
+   * settings bundle — a bare tier name like "Enterprise" isn't unique on
+   * its own (every Hub has its own Enterprise tier), so it can't double as
+   * both the label and the React key.
+   */
+  const planBadges = React.useMemo(() => {
     const ids = project?.planId ?? [];
-    return ids.map(
-      (id) => settings?.plans.find((plan) => plan.id === id)?.name ?? id,
-    );
+    return ids.map((id) => {
+      const plan = settings?.plans.find((p) => p.id === id);
+      const label = plan
+        ? `${plan.hub?.name ?? ""} ${plan.name}`.trim()
+        : id;
+      return { id, label };
+    });
   }, [project, settings]);
 
   const duration = daysBetween(project?.startDate, project?.endDate);
@@ -133,14 +142,14 @@ export default function ProjectOverviewPage() {
           <StatsGrid stats={stats} />
         </div>
 
-        {planNames.length > 0 && (
+        {planBadges.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Provisioned from
             </span>
-            {planNames.map((planName) => (
-              <Badge key={planName} variant="secondary">
-                {planName}
+            {planBadges.map((plan) => (
+              <Badge key={plan.id} variant="secondary">
+                {plan.label}
               </Badge>
             ))}
           </div>

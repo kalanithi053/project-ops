@@ -38,6 +38,8 @@ describe('UsersService', () => {
         createdAt: new Date('2024-01-01'),
         productTourCompletedAt: null,
         isTourDone: false,
+        projectOverviewTourCompletedAt: null,
+        isProjectOverviewTourDone: false,
       };
       prisma.user.findUnique.mockResolvedValue(user);
 
@@ -54,6 +56,8 @@ describe('UsersService', () => {
           createdAt: true,
           productTourCompletedAt: true,
           isTourDone: true,
+          projectOverviewTourCompletedAt: true,
+          isProjectOverviewTourDone: true,
         },
       });
       expect(result).toEqual(user);

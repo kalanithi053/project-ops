@@ -71,7 +71,21 @@ describe('ModuleInstancesService', () => {
       expect(result).toEqual(instances);
       expect(prisma.moduleInstance.findMany).toHaveBeenCalledWith({
         where: { projectId },
-        include: { module: { select: { key: true, name: true } } },
+        include: {
+          module: {
+            select: {
+              key: true,
+              name: true,
+              plan: {
+                select: {
+                  id: true,
+                  name: true,
+                  hub: { select: { id: true, name: true } },
+                },
+              },
+            },
+          },
+        },
       });
     });
 

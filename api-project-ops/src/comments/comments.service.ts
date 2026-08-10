@@ -26,6 +26,31 @@ const COMMENT_INCLUDE = {
 /** Fallback activity log entityType when the work item has no WorkType set. */
 const DEFAULT_ENTITY_TYPE = 'task';
 
+const HTML_ENTITIES: Record<string, string> = {
+  '&nbsp;': ' ',
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&apos;': "'",
+};
+
+/**
+ * Strips a rich-text comment body down to a flat, truncated snippet for the
+ * activity feed — drops tags (mention spans included, keeping their visible
+ * @name text), decodes common entities, and collapses whitespace so editor
+ * formatting doesn't bleed into the preview.
+ */
+function plainTextPreview(body: string, maxLength = 200): string {
+  const withoutTags = body.replace(/<[^>]+>/g, '');
+  const decoded = withoutTags.replace(
+    /&nbsp;|&amp;|&lt;|&gt;|&quot;|&#39;|&apos;/g,
+    (entity) => HTML_ENTITIES[entity],
+  );
+  return decoded.replace(/\s+/g, ' ').trim().slice(0, maxLength);
+}
+
 /**
  * Comments — either standalone workspace comments, or comments on a specific
  * work item. Other users can be tagged by email (`mentions`); each tagged
@@ -77,6 +102,7 @@ export class CommentsService {
           entityId: created.id,
           action: 'comment_added',
           userId: authorId,
+          metadata: { preview: plainTextPreview(dto.body) },
         },
         tx,
       );
@@ -131,6 +157,7 @@ export class CommentsService {
           entityId: commentId,
           action: 'comment_updated',
           userId,
+          metadata: { preview: plainTextPreview(dto.body) },
         },
         tx,
       );
@@ -233,6 +260,7 @@ export class CommentsService {
           userId: authorId,
           metadata: {
             commentId: created.id,
+            preview: plainTextPreview(dto.body),
           },
         },
         tx,
@@ -306,7 +334,7 @@ export class CommentsService {
           entityId: workItemId,
           action: 'comment_updated',
           userId,
-          metadata: { commentId },
+          metadata: { commentId, preview: plainTextPreview(dto.body) },
         },
         tx,
       );

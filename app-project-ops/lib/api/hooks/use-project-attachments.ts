@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { apiDownload, apiFetch } from "@/lib/api/client";
+import { apiDownload, apiFetch, apiUpload } from "@/lib/api/client";
 import { useAuthStore } from "@/lib/store/auth-store";
 import { toast } from "@/lib/toast/toast-store";
 import type { ProjectAttachment } from "@/lib/api/types";
@@ -25,7 +25,7 @@ export { ATTACHMENT_ACCEPT, MAX_ATTACHMENT_BYTES, formatBytes, isAllowedAttachme
  * one of its comments. Omit it for project-level attachments (unchanged
  * behavior/URLs from before work-item scoping existed).
  */
-function projectAttachmentsKey(
+export function projectAttachmentsKey(
   workspaceSlug: string,
   projectId: string,
   workItemId?: string,
@@ -66,49 +66,40 @@ export function useProjectAttachments(
   });
 }
 
-/** POST a file as multipart/form-data — used directly by uploadProjectAttachment too. */
+/**
+ * POST a file as multipart/form-data via XHR (not `apiFetch`) so upload
+ * progress is available — used directly by uploadProjectAttachment too.
+ * Never auto-toasts: callers show their own "Uploaded successfully" once
+ * the upload (and any cache invalidation) is fully settled.
+ */
 function uploadFile(
   workspaceSlug: string,
   projectId: string,
   file: File,
   workItemId?: string,
   isInline?: boolean,
+  onProgress?: (percent: number) => void,
 ): Promise<ProjectAttachment> {
   const body = new FormData();
   body.append("file", file);
-  return apiFetch<ProjectAttachment>(
+  return apiUpload<ProjectAttachment>(
     attachmentsPath(projectId, workItemId, isInline),
-    { method: "POST", body, workspaceSlug },
+    body,
+    { workspaceSlug, onProgress },
   );
 }
 
-export function useUploadProjectAttachment(
-  workspaceSlug: string,
-  projectId: string,
-  workItemId?: string,
-) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (file: File) =>
-      uploadFile(workspaceSlug, projectId, file, workItemId),
-    onSuccess: (attachment) => {
-      queryClient.invalidateQueries({
-        queryKey: projectAttachmentsKey(workspaceSlug, projectId, workItemId),
-      });
-      toast.success("File attached", attachment?.fileName);
-    },
-  });
-}
-
 /**
- * One-off upload outside the mutation/component lifecycle — for staging
- * files in the "New project" form and uploading them right after the
- * project is created (no project id exists yet while the form is open, so
- * this can't be a normal per-project `useMutation`), and for images inserted
- * into a description/comment's rich text (via `workItemId` to scope a
- * comment's image to that work item, and `isInline: true` so the upload
- * doesn't show up in any Attachments list — it's part of the text, not a
- * document the user manages there).
+ * Upload outside the mutation/component lifecycle — callers track their own
+ * per-file progress/pending state (a single mutation's `isPending` boolean
+ * doesn't fit uploading several files at once with independent progress).
+ * Used for the main Attachments list, staging files in the "New project"
+ * form and uploading them right after the project is created (no project id
+ * exists yet while the form is open), and for images inserted into a
+ * description/comment's rich text (via `workItemId` to scope a comment's
+ * image to that work item, and `isInline: true` so the upload doesn't show
+ * up in any Attachments list — it's part of the text, not a document the
+ * user manages there).
  */
 export function uploadProjectAttachment(
   workspaceSlug: string,
@@ -116,8 +107,9 @@ export function uploadProjectAttachment(
   file: File,
   workItemId?: string,
   isInline?: boolean,
+  onProgress?: (percent: number) => void,
 ): Promise<ProjectAttachment> {
-  return uploadFile(workspaceSlug, projectId, file, workItemId, isInline);
+  return uploadFile(workspaceSlug, projectId, file, workItemId, isInline, onProgress);
 }
 
 export function useDeleteProjectAttachment(

@@ -18,7 +18,17 @@ export class ModuleInstancesService {
       where: { projectId },
       include: {
         module: {
-          select: { key: true, name: true, plan: { select: { name: true } } },
+          select: {
+            key: true,
+            name: true,
+            plan: {
+              select: {
+                id: true,
+                name: true,
+                hub: { select: { id: true, name: true } },
+              },
+            },
+          },
         },
       },
     });

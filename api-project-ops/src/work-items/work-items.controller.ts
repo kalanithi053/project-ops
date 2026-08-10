@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -22,6 +23,74 @@ import { WorkItemsService } from './work-items.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
 import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
+
+@ApiTags('work-items')
+@ApiBearerAuth()
+@UseGuards(WorkspaceScopeGuard, PermissionsGuard)
+@Controller('work-items')
+export class WorkspaceWorkItemsController {
+  constructor(private readonly workItems: WorkItemsService) {}
+
+  @Get('attention')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      "The caller's own work items needing attention: overdue, due soon, or blocked, with due dates",
+  })
+  getAttentionItems(@CurrentWorkspace() ws: WorkspaceContext) {
+    return this.workItems.getAttentionItems(ws.workspaceId, ws.userId);
+  }
+
+  @Get('priority')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      "The caller's own open work items ranked by priority, for the dashboard",
+  })
+  getPriorityItems(@CurrentWorkspace() ws: WorkspaceContext) {
+    return this.workItems.getPriorityItems(ws.workspaceId, ws.userId);
+  }
+
+  @Get('mine')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      "Every open work item assigned to the caller, for the dashboard's quick time-log picker",
+  })
+  getMyOpenItems(@CurrentWorkspace() ws: WorkspaceContext) {
+    return this.workItems.getMyOpenItems(ws.workspaceId, ws.userId);
+  }
+
+  @Get('attention/team')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      'Every work item in the workspace needing attention, across every assignee — Owner/Admin/Client only',
+  })
+  getTeamAttentionItems(@CurrentWorkspace() ws: WorkspaceContext) {
+    this.assertManagerRole(ws.isManagerTier);
+    return this.workItems.getTeamAttentionItems(ws.workspaceId);
+  }
+
+  @Get('priority/team')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      'Every open work item in the workspace ranked by priority, across every assignee — Owner/Admin/Client only',
+  })
+  getTeamPriorityItems(@CurrentWorkspace() ws: WorkspaceContext) {
+    this.assertManagerRole(ws.isManagerTier);
+    return this.workItems.getTeamPriorityItems(ws.workspaceId);
+  }
+
+  private assertManagerRole(isManagerTier: boolean) {
+    if (!isManagerTier) {
+      throw new ForbiddenException(
+        'Your role is not set up for workspace-wide work items — enable it in Settings > Roles.',
+      );
+    }
+  }
+}
 
 @ApiTags('work-items')
 @ApiBearerAuth()

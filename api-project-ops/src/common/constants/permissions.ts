@@ -107,18 +107,22 @@ export const DEFAULT_ROLES: Array<{
   name: string;
   isDefault: boolean;
   isSystem: boolean;
+  /** Workspace-wide dashboard visibility instead of just-your-own-items — see UserRole.isManagerTier. */
+  isManagerTier: boolean;
   permissions: PermissionCode[];
 }> = [
   {
     name: 'Owner',
     isDefault: false,
     isSystem: true,
+    isManagerTier: true,
     permissions: ALL_PERMISSION_CODES,
   },
   {
     name: 'Admin',
     isDefault: false,
     isSystem: false,
+    isManagerTier: true,
     permissions: [
       PERMISSIONS.PROJECT_CREATE,
       PERMISSIONS.PROJECT_READ,
@@ -149,6 +153,7 @@ export const DEFAULT_ROLES: Array<{
     name: 'Member',
     isDefault: true,
     isSystem: false,
+    isManagerTier: false,
     permissions: [
       PERMISSIONS.PROJECT_READ,
       PERMISSIONS.WORKITEM_CREATE,
@@ -167,6 +172,7 @@ export const DEFAULT_ROLES: Array<{
     name: 'Viewer',
     isDefault: false,
     isSystem: false,
+    isManagerTier: false,
     permissions: [
       PERMISSIONS.PROJECT_READ,
       PERMISSIONS.WORKITEM_READ,
@@ -175,15 +181,22 @@ export const DEFAULT_ROLES: Array<{
     ],
   },
   {
-    // External customer role: can follow the work and comment on it.
+    // External customer role: can follow the work and comment on it. Also
+    // gets WORKITEM_UPDATE, but WorkItemsService restricts them to changing
+    // only the status of work items where they're the assignee or QA
+    // assignee — see WorkItemsService.assertClientCanUpdate.
     name: 'Client',
     isDefault: false,
     isSystem: false,
+    isManagerTier: true,
     permissions: [
       PERMISSIONS.PROJECT_READ,
       PERMISSIONS.WORKITEM_READ,
+      PERMISSIONS.WORKITEM_UPDATE,
       PERMISSIONS.COMMENT_CREATE,
       PERMISSIONS.ATTACHMENT_READ,
+      PERMISSIONS.TIMELOG_READ,
+      PERMISSIONS.TIMELOG_MANAGE,
     ],
   },
 ];

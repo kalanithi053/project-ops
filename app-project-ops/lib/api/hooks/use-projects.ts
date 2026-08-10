@@ -93,7 +93,7 @@ export function updateProject(
   });
 }
 
-/** PATCH /projects/:id — edit name/description/dates on an existing project. */
+/** PATCH /projects/:id — edit an existing project's details. */
 export function useUpdateProject(workspaceSlug: string, projectId: string) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -103,6 +103,9 @@ export function useUpdateProject(workspaceSlug: string, projectId: string) {
       queryClient.invalidateQueries({ queryKey: ["projects", workspaceSlug] });
       queryClient.invalidateQueries({
         queryKey: ["project", workspaceSlug, projectId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["project-modules", workspaceSlug, projectId],
       });
       toast.success("Project updated", project?.name);
     },

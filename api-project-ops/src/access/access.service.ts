@@ -14,7 +14,7 @@ export class AccessService {
   async workspacePermissions(workspaceId: string, roleId: string) {
     const role = await this.prisma.userRole.findUnique({
       where: { id: roleId },
-      select: { id: true, name: true },
+      select: { id: true, name: true, isManagerTier: true },
     });
     return {
       scope: 'workspace' as const,

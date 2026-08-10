@@ -11,7 +11,7 @@ export default function ProjectWorkItemsPage() {
     workspace: string;
     projectId: string;
   }>();
-  const { can } = useProjectPermissions(workspace, projectId);
+  const { can, roleName } = useProjectPermissions(workspace, projectId);
 
   return (
     <TaskWorkItems
@@ -19,6 +19,7 @@ export default function ProjectWorkItemsPage() {
       projectId={projectId}
       canCreate={can(PERMISSIONS.WORKITEM_CREATE)}
       canUpdate={can(PERMISSIONS.WORKITEM_UPDATE)}
+      roleName={roleName}
     />
   );
 }

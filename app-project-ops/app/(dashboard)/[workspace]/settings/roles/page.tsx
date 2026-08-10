@@ -153,6 +153,7 @@ function RoleCard({
             <span className="font-medium">{role.name}</span>
             {role.isSystem && <Badge variant="outline">System</Badge>}
             {role.isDefault && <Badge variant="secondary">Default</Badge>}
+            {role.isManagerTier && <Badge variant="success">Manager view</Badge>}
             {isOwnRole && <Badge variant="info">You</Badge>}
           </div>
           <p className="text-sm text-muted-foreground">

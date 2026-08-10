@@ -60,6 +60,7 @@ export async function provisionWorkspaceDefaults(
         name: roleDef.name,
         isDefault: roleDef.isDefault,
         isSystem: roleDef.isSystem,
+        isManagerTier: roleDef.isManagerTier,
       },
     });
     roleIdsByName[roleDef.name] = role.id;

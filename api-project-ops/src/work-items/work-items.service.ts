@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -275,6 +276,11 @@ export class WorkItemsService {
   ) {
     const project = await this.assertProject(workspaceId, projectId);
     const workItem = await this.getWorkItem(workspaceId, projectId, id);
+    // Diffed against the work item's current values, not raw DTO presence —
+    // the editor always resends unchanged fields (e.g. `name`), so a
+    // presence check would reject a Client's status-only save outright.
+    const changes = this.computeChanges(workItem, dto);
+    await this.assertClientCanUpdate(projectId, userId, workItem, changes);
 
     if (dto.moduleInstanceId) {
       await this.assertModuleInstance(projectId, dto.moduleInstanceId);
@@ -289,7 +295,6 @@ export class WorkItemsService {
       await this.assertAssignee(workspaceId, dto.qaAssigneeId);
     }
 
-    const changes = this.computeChanges(workItem, dto);
     const entityType = await this.resolveEntityType(
       workspaceId,
       dto.workItemTypeId ?? workItem.workItemTypeId,
@@ -390,6 +395,236 @@ export class WorkItemsService {
   async getActivity(workspaceId: string, projectId: string, id: string) {
     await this.getWorkItem(workspaceId, projectId, id);
     return this.activityLog.getTimeline(workspaceId, id);
+  }
+
+  /** Work items due within this many days count as "due soon" rather than merely on the radar. */
+  private static readonly DUE_SOON_WINDOW_DAYS = 3;
+
+  /** How many of the workspace's top priority tiers count as "high priority" (see getPriorityItems). */
+  private static readonly TOP_PRIORITY_TIER_COUNT = 2;
+
+  /** Shared select for the dashboard's attention/priority/"my open items" endpoints. */
+  private static readonly INSIGHT_SELECT = {
+    id: true,
+    name: true,
+    prefix: true,
+    dueDate: true,
+    project: { select: { id: true, name: true } },
+    status: { select: { name: true, category: true, color: true } },
+    priority: { select: { id: true, name: true, color: true, order: true } },
+    workItemType: { select: { id: true, name: true, category: true, color: true } },
+  } as const;
+
+  /** Same as INSIGHT_SELECT plus the assignee — the team-wide (Owner/Admin/Client) variants need to show who owns each item. */
+  private static readonly TEAM_INSIGHT_SELECT = {
+    ...WorkItemsService.INSIGHT_SELECT,
+    assignee: {
+      select: { id: true, email: true, firstName: true, lastName: true },
+    },
+  } as const;
+
+  /**
+   * The signed-in user's own work items that need attention: overdue,
+   * due soon, or blocked — excluding anything already done/removed.
+   * Sorted so the most overdue items lead, blocked-but-not-yet-due last
+   * (Postgres' default ASC ordering already puts null due dates last).
+   */
+  async getAttentionItems(workspaceId: string, userId: string) {
+    const now = new Date();
+    const dueSoonCutoff = new Date(
+      now.getTime() +
+        WorkItemsService.DUE_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        assigneeId: userId,
+        project: { workspaceId, deletedAt: null },
+        status: { is: { category: { notIn: ['done', 'removed'] } } },
+        OR: [
+          { dueDate: { lte: dueSoonCutoff } },
+          { status: { is: { category: 'blocked' } } },
+        ],
+      },
+      select: WorkItemsService.INSIGHT_SELECT,
+      orderBy: [{ dueDate: 'asc' }],
+    });
+
+    return {
+      total: items.length,
+      items: items.map((item) => {
+        const overdue = Boolean(item.dueDate && item.dueDate < now);
+        const dueSoon = !overdue && Boolean(item.dueDate);
+        return {
+          ...item,
+          reason: overdue
+            ? ('overdue' as const)
+            : dueSoon
+              ? ('due_soon' as const)
+              : ('blocked' as const),
+        };
+      }),
+    };
+  }
+
+  /**
+   * Every work item in the workspace that needs attention, across every
+   * assignee — the Owner/Admin/Client "team" view. Same overdue/due-soon/
+   * blocked rules as getAttentionItems, just without the assigneeId filter.
+   */
+  async getTeamAttentionItems(workspaceId: string) {
+    const now = new Date();
+    const dueSoonCutoff = new Date(
+      now.getTime() +
+        WorkItemsService.DUE_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        project: { workspaceId, deletedAt: null },
+        status: { is: { category: { notIn: ['done', 'removed'] } } },
+        OR: [
+          { dueDate: { lte: dueSoonCutoff } },
+          { status: { is: { category: 'blocked' } } },
+        ],
+      },
+      select: WorkItemsService.TEAM_INSIGHT_SELECT,
+      orderBy: [{ dueDate: 'asc' }],
+    });
+
+    return {
+      total: items.length,
+      items: items.map(({ assignee, ...item }) => {
+        const overdue = Boolean(item.dueDate && item.dueDate < now);
+        const dueSoon = !overdue && Boolean(item.dueDate);
+        return {
+          ...item,
+          reason: overdue
+            ? ('overdue' as const)
+            : dueSoon
+              ? ('due_soon' as const)
+              : ('blocked' as const),
+          assignee: this.mapAssigneeRef(assignee),
+        };
+      }),
+    };
+  }
+
+  /** The ids of the workspace's top N priority tiers (highest `order` first) — e.g. High + Urgent. */
+  private async getTopPriorityIds(workspaceId: string): Promise<string[]> {
+    const priorities = await this.prisma.priority.findMany({
+      where: { workspaceId },
+      orderBy: { order: 'desc' },
+      select: { id: true },
+      take: WorkItemsService.TOP_PRIORITY_TIER_COUNT,
+    });
+    return priorities.map((p) => p.id);
+  }
+
+  /**
+   * The signed-in user's own open work items that sit in the workspace's
+   * top priority tiers (High/Urgent, however they're named) — most urgent
+   * first, then due date. Powers the dashboard's priority list. Fetched
+   * unsorted-by-DB and ranked in JS since a per-user backlog is small and
+   * "no due date" needs to sort last, which Postgres' default null
+   * placement won't do consistently across ASC and DESC.
+   */
+  async getPriorityItems(workspaceId: string, userId: string, limit = 10) {
+    const topPriorityIds = await this.getTopPriorityIds(workspaceId);
+    if (!topPriorityIds.length) return { total: 0, items: [] };
+
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        assigneeId: userId,
+        project: { workspaceId, deletedAt: null },
+        status: { is: { category: { notIn: ['done', 'removed'] } } },
+        priorityId: { in: topPriorityIds },
+      },
+      select: WorkItemsService.INSIGHT_SELECT,
+    });
+
+    const ranked = items.sort((a, b) => {
+      const priorityDiff =
+        (b.priority?.order ?? -1) - (a.priority?.order ?? -1);
+      if (priorityDiff !== 0) return priorityDiff;
+      const aDue = a.dueDate?.getTime() ?? Infinity;
+      const bDue = b.dueDate?.getTime() ?? Infinity;
+      return aDue - bDue;
+    });
+
+    return { total: ranked.length, items: ranked.slice(0, limit) };
+  }
+
+  /**
+   * Every open work item in the workspace's top priority tiers, across
+   * every assignee — the Owner/Admin/Client "team" view of getPriorityItems.
+   */
+  async getTeamPriorityItems(workspaceId: string, limit = 10) {
+    const topPriorityIds = await this.getTopPriorityIds(workspaceId);
+    if (!topPriorityIds.length) return { total: 0, items: [] };
+
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        project: { workspaceId, deletedAt: null },
+        status: { is: { category: { notIn: ['done', 'removed'] } } },
+        priorityId: { in: topPriorityIds },
+      },
+      select: WorkItemsService.TEAM_INSIGHT_SELECT,
+    });
+
+    const ranked = items.sort((a, b) => {
+      const priorityDiff =
+        (b.priority?.order ?? -1) - (a.priority?.order ?? -1);
+      if (priorityDiff !== 0) return priorityDiff;
+      const aDue = a.dueDate?.getTime() ?? Infinity;
+      const bDue = b.dueDate?.getTime() ?? Infinity;
+      return aDue - bDue;
+    });
+
+    return {
+      total: ranked.length,
+      items: ranked.slice(0, limit).map(({ assignee, ...item }) => ({
+        ...item,
+        assignee: this.mapAssigneeRef(assignee),
+      })),
+    };
+  }
+
+  /** Shapes a nested assignee relation into the compact ref the team dashboard views return. */
+  private mapAssigneeRef(
+    assignee: {
+      id: string;
+      email: string;
+      firstName: string | null;
+      lastName: string | null;
+    } | null,
+  ) {
+    return assignee
+      ? {
+          id: assignee.id,
+          email: assignee.email,
+          name: this.displayName(assignee),
+        }
+      : null;
+  }
+
+  /**
+   * Every open work item assigned to the signed-in user, regardless of
+   * priority — the source list for the dashboard's quick time-log timer
+   * picker (logging time isn't gated by how urgent the item is).
+   */
+  async getMyOpenItems(workspaceId: string, userId: string) {
+    const items = await this.prisma.workItem.findMany({
+      where: {
+        assigneeId: userId,
+        project: { workspaceId, deletedAt: null },
+        status: { is: { category: { notIn: ['done', 'removed'] } } },
+      },
+      select: WorkItemsService.INSIGHT_SELECT,
+      orderBy: [{ dueDate: 'asc' }],
+    });
+
+    return { total: items.length, items };
   }
 
   /** On-demand nudge — emails the assignee a reminder about this work item. */
@@ -545,6 +780,14 @@ export class WorkItemsService {
       select: { email: true, firstName: true, lastName: true },
     });
     if (!user) return 'Someone';
+    return this.displayName(user);
+  }
+
+  private displayName(user: {
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+  }): string {
     const name = [user.firstName, user.lastName].filter(Boolean).join(' ');
     return name || user.email.split('@')[0];
   }
@@ -587,6 +830,51 @@ export class WorkItemsService {
     });
     if (!priority) {
       throw new BadRequestException('Priority not found in workspace');
+    }
+  }
+
+  /**
+   * The Client role holds WORKITEM_UPDATE (see DEFAULT_ROLES), but only so a
+   * client who is the assignee or QA assignee on a work item can move its
+   * status — not edit any other field, and not on items they aren't on.
+   * Every other role's project role already gates WORKITEM_UPDATE at the
+   * permission-catalog level, so this only narrows the Client case further.
+   *
+   * `position` is allowed alongside `statusId`: the Kanban board's drag
+   * handler always PATCHes both together (even a same-column reorder shifts
+   * the gap-based position value) — see task-board.tsx's handleDragEnd. It's
+   * a side effect of moving the card, not a distinct field edit.
+   */
+  private static readonly CLIENT_ALLOWED_UPDATE_FIELDS: readonly string[] = [
+    'statusId',
+    'position',
+  ];
+
+  private async assertClientCanUpdate(
+    projectId: string,
+    userId: string,
+    workItem: { assigneeId: string | null; qaAssigneeId: string | null },
+    changes: Record<string, { from: unknown; to: unknown }>,
+  ) {
+    const membership = await this.prisma.projectMember.findFirst({
+      where: { projectId, userId, status: { not: 'removed' } },
+      select: { role: { select: { name: true } } },
+    });
+    if (membership?.role.name !== 'Client') return;
+
+    const isAssigneeOrQa =
+      workItem.assigneeId === userId || workItem.qaAssigneeId === userId;
+    if (!isAssigneeOrQa) {
+      throw new ForbiddenException(
+        'Clients can only update the status of work items where they are the assignee or QA assignee.',
+      );
+    }
+
+    const otherFieldsChanged = Object.keys(changes).some(
+      (field) => !WorkItemsService.CLIENT_ALLOWED_UPDATE_FIELDS.includes(field),
+    );
+    if (otherFieldsChanged) {
+      throw new ForbiddenException("Clients can only change a work item's status.");
     }
   }
 

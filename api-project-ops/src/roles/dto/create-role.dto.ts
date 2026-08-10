@@ -23,6 +23,16 @@ export class CreateRoleDto {
 
   @ApiProperty({
     required: false,
+    default: false,
+    description:
+      'Workspace-wide dashboard visibility for members with this role, instead of just their own assigned work.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isManagerTier?: boolean;
+
+  @ApiProperty({
+    required: false,
     type: [String],
     example: ['project.create', 'task.create'],
     description: 'Permission codes to assign to this role',

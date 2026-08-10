@@ -124,6 +124,8 @@ export interface Role {
   isDefault?: boolean;
   /** Built-in role (currently "Owner") — cannot be deleted. */
   isSystem?: boolean;
+  /** Workspace-wide dashboard visibility for members with this role, instead of just their own assigned work. */
+  isManagerTier?: boolean;
   /** Permission codes granted by this role (from GET /roles). */
   permissions?: string[];
   [key: string]: unknown;
@@ -288,15 +290,27 @@ export interface ModuleSelectionDto {
 }
 
 /**
- * PATCH /projects/:id — the backend only actually applies these four fields
- * (see projects.service.ts's update()); projectTypeId/planId can't be
- * changed after creation, so there's no edit surface for them.
+ * PATCH /projects/:id — every CreateProjectDto field is editable, including
+ * projectTypeId/planId/hubId/moduleSelections: changing projectTypeId
+ * re-provisions the project the same way picking a type does on create, and
+ * touching planId/hubId/moduleSelections reconciles the project's module
+ * instances against the new selection (see ProjectsService.update()).
+ * `null` clears a field; `undefined` (an omitted key) leaves it unchanged.
  */
 export interface UpdateProjectDto {
   name?: string;
   startDate?: string;
   endDate?: string;
   description?: string;
+  projectTypeId?: string;
+  planId?: string[];
+  hubId?: string[];
+  moduleSelections?: ModuleSelectionDto[];
+  salesRepId?: string | null;
+  projectManagerId?: string | null;
+  engagementType?: ProjectEngagementType | null;
+  estimatedHours?: number | null;
+  estimatedDate?: string | null;
 }
 
 export interface InviteMemberDto {
@@ -448,7 +462,7 @@ export interface WorkspaceSettings {
 export interface MyPermissions {
   scope: "workspace";
   workspaceId: string;
-  role: { id: string; name: string } | null;
+  role: { id: string; name: string; isManagerTier: boolean } | null;
   permissions: string[];
 }
 
@@ -544,6 +558,8 @@ export type UpdatePriorityDto = Partial<CreatePriorityDto>;
 export interface CreateRoleDto {
   name: string;
   isDefault?: boolean;
+  /** Workspace-wide dashboard visibility for members with this role, instead of just their own assigned work. */
+  isManagerTier?: boolean;
   permissionCodes?: string[];
 }
 
@@ -917,6 +933,105 @@ export interface TimeLogFilters {
 /** POST .../time-logs/timer/stop */
 export interface StopTimerDto {
   notes?: string;
+}
+
+/** Why a work item showed up on the caller's attention list. */
+export type AttentionReason = "overdue" | "due_soon" | "blocked";
+
+/** Nested refs shared by the attention/priority/"my open items" dashboard endpoints. */
+export interface WorkItemInsightRef {
+  id: string;
+  name: string;
+  prefix?: string | null;
+  dueDate?: string | null;
+  project: { id: string; name: string };
+  status?: { name: string; category: StatusCategory; color?: string | null } | null;
+  priority?: { id: string; name: string; color?: string | null; order: number } | null;
+  workItemType?: {
+    id: string;
+    name: string;
+    category: WorkTypeCategory;
+    color?: string | null;
+  } | null;
+}
+
+/** GET /work-items/attention — the caller's own overdue/due-soon/blocked items. */
+export interface AttentionItem extends WorkItemInsightRef {
+  reason: AttentionReason;
+}
+
+export interface AttentionItemsResponse {
+  total: number;
+  items: AttentionItem[];
+}
+
+/** GET /work-items/priority — the caller's own open items in the workspace's top priority tiers. */
+export type PriorityItem = WorkItemInsightRef;
+
+export interface PriorityItemsResponse {
+  total: number;
+  items: PriorityItem[];
+}
+
+/** A work item's assignee, as embedded in the Owner/Admin/Client "team" dashboard views. */
+export interface WorkItemAssigneeRef {
+  id: string;
+  email: string;
+  name: string;
+}
+
+/** GET /work-items/attention/team — every workspace item needing attention, across every assignee. */
+export interface TeamAttentionItem extends WorkItemInsightRef {
+  reason: AttentionReason;
+  assignee: WorkItemAssigneeRef | null;
+}
+
+export interface TeamAttentionItemsResponse {
+  total: number;
+  items: TeamAttentionItem[];
+}
+
+/** GET /work-items/priority/team — every workspace top-priority item, across every assignee. */
+export interface TeamPriorityItem extends WorkItemInsightRef {
+  assignee: WorkItemAssigneeRef | null;
+}
+
+export interface TeamPriorityItemsResponse {
+  total: number;
+  items: TeamPriorityItem[];
+}
+
+/**
+ * GET /projects/utilization — one project's schedule/budget health, for the
+ * Owner/Admin/Client dashboard. `basis` picks which fields are populated:
+ * 'hours' (time_and_material, has an hours budget), 'date' (fixed_budget/
+ * retainer, has a start→target date window), or 'none' (neither is set).
+ */
+export interface ProjectUtilization {
+  id: string;
+  name: string;
+  engagementType?: ProjectEngagementType | null;
+  loggedHours: number;
+  basis: "hours" | "date" | "none";
+  estimatedHours?: number | null;
+  remainingHours?: number | null;
+  percentOfHoursUsed?: number | null;
+  startDate?: string | null;
+  targetDate?: string | null;
+  percentTimeElapsed?: number | null;
+  /** Negative once past targetDate. */
+  daysRemaining?: number | null;
+  statusPercentComplete: number;
+  totalWorkItems: number;
+  doneWorkItems: number;
+}
+
+/** GET /work-items/mine — every open item assigned to the caller, for the quick time-log picker. */
+export type MyOpenWorkItem = WorkItemInsightRef;
+
+export interface MyOpenWorkItemsResponse {
+  total: number;
+  items: MyOpenWorkItem[];
 }
 
 export type TimeLogPastLimitUnit = "day" | "week" | "month";

@@ -114,6 +114,9 @@ export function RolePanel({
 
   const [name, setName] = React.useState(role?.name ?? "");
   const [isDefault, setIsDefault] = React.useState(role?.isDefault ?? false);
+  const [isManagerTier, setIsManagerTier] = React.useState(
+    role?.isManagerTier ?? false,
+  );
   const [selected, setSelected] = React.useState<Set<string>>(
     () => new Set(role?.permissions ?? []),
   );
@@ -152,6 +155,7 @@ export function RolePanel({
     const dto = {
       name: trimmed,
       isDefault,
+      isManagerTier,
       permissionCodes: [...selected],
     };
 
@@ -222,6 +226,22 @@ export function RolePanel({
             checked={isDefault}
             onCheckedChange={setIsDefault}
             aria-label="Default role"
+          />
+        </div>
+
+        <div className="flex items-start justify-between gap-4 rounded-md border border-border p-3">
+          <div className="flex flex-col gap-0.5">
+            <span className="text-sm font-medium">Manager-tier role</span>
+            <span className="text-xs text-muted-foreground">
+              Members with this role see workspace-wide dashboard data (every
+              assignee&apos;s attention/priority items and project
+              utilization), not just their own.
+            </span>
+          </div>
+          <Switch
+            checked={isManagerTier}
+            onCheckedChange={setIsManagerTier}
+            aria-label="Manager-tier role"
           />
         </div>
       </fieldset>

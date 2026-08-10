@@ -55,6 +55,7 @@ export class WorkspaceScopeGuard implements CanActivate {
         userId: user.sub,
         status: 'active',
       },
+      include: { role: { select: { name: true, isManagerTier: true } } },
     });
     if (!membership) {
       throw new ForbiddenException(
@@ -65,6 +66,8 @@ export class WorkspaceScopeGuard implements CanActivate {
     request.workspace = {
       workspaceId: workspace.id,
       roleId: membership.roleId,
+      roleName: membership.role.name,
+      isManagerTier: membership.role.isManagerTier,
       membershipId: membership.id,
       userId: user.sub,
       ownerId: workspace.ownerId,

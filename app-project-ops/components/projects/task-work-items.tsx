@@ -214,11 +214,14 @@ export function TaskWorkItems({
   projectId,
   canCreate,
   canUpdate,
+  roleName,
 }: {
   workspaceSlug: string;
   projectId: string;
   canCreate: boolean;
   canUpdate: boolean;
+  /** Forwarded to TaskBoard — see its own `roleName` prop doc. */
+  roleName?: string;
 }) {
   const router = useRouter();
   const { data: me, isLoading: meLoading } = useMe();
@@ -780,6 +783,7 @@ export function TaskWorkItems({
           projectId={projectId}
           canCreate={canCreate}
           canUpdate={canUpdate}
+          roleName={roleName}
           typeCategory={typeCategory}
           onCreate={(statusId, workType) => goToCreate(workType, statusId)}
           filtersOpen={kanbanFiltersOpen}

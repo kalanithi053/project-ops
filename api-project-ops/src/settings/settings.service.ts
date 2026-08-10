@@ -179,6 +179,7 @@ export class SettingsService {
         name: r.name,
         isDefault: r.isDefault,
         isSystem: r.isSystem,
+        isManagerTier: r.isManagerTier,
         permissions: r.rolePermissions.map((rp) => rp.permission.code).sort(),
       })),
       permissions,

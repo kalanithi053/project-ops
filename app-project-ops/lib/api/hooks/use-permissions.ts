@@ -12,6 +12,8 @@ export interface WorkspacePermissions {
   /** True once we've actually resolved the current user's role permissions. */
   isResolved: boolean;
   roleName?: string;
+  /** Workspace-wide dashboard visibility instead of just-your-own-items — see the role's isManagerTier flag. */
+  isManagerTier: boolean;
   permissions: Set<string>;
   /**
    * Whether the current user holds a permission. Fails OPEN while
@@ -54,6 +56,7 @@ export function usePermissions(workspaceSlug: string): WorkspacePermissions {
     return {
       isResolved,
       roleName: data?.role?.name,
+      isManagerTier: data?.role?.isManagerTier ?? false,
       permissions,
       can: (permission: PermissionCode) =>
         !isResolved || permissions.has(permission),

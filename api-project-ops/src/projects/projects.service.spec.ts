@@ -30,7 +30,11 @@ describe('ProjectsService', () => {
     ticketStatus: { findFirst: jest.Mock };
     module: { findMany: jest.Mock; findFirst: jest.Mock; create: jest.Mock };
     workType: { findFirst: jest.Mock };
-    moduleInstance: { create: jest.Mock };
+    moduleInstance: {
+      create: jest.Mock;
+      update: jest.Mock;
+      deleteMany: jest.Mock;
+    };
     workItem: { create: jest.Mock };
     activityLog: { create: jest.Mock };
     $transaction: jest.Mock;
@@ -68,7 +72,11 @@ describe('ProjectsService', () => {
         create: jest.fn(),
       },
       workType: { findFirst: jest.fn() },
-      moduleInstance: { create: jest.fn() },
+      moduleInstance: {
+        create: jest.fn(),
+        update: jest.fn(),
+        deleteMany: jest.fn(),
+      },
       workItem: { create: jest.fn() },
       activityLog: { create: jest.fn() },
       $transaction: jest.fn(),
@@ -788,7 +796,7 @@ describe('ProjectsService', () => {
       const updated = { ...existing, ...dto };
       prisma.project.update.mockResolvedValue(updated);
 
-      const result = await service.update(workspaceId, projectId, dto);
+      const result = await service.update(workspaceId, projectId, dto, userId);
 
       expect(result).toEqual(updated);
       expect(prisma.project.update).toHaveBeenCalledWith({
@@ -806,7 +814,7 @@ describe('ProjectsService', () => {
       prisma.project.findFirst.mockResolvedValue(existing);
       prisma.project.update.mockResolvedValue(existing);
 
-      await service.update(workspaceId, projectId, {});
+      await service.update(workspaceId, projectId, {}, userId);
 
       expect(prisma.project.update).toHaveBeenCalledWith({
         where: { id: projectId },
@@ -822,10 +830,306 @@ describe('ProjectsService', () => {
     it('throws NotFoundException when the project does not exist', async () => {
       prisma.project.findFirst.mockResolvedValue(null);
 
-      await expect(service.update(workspaceId, projectId, {})).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.update(workspaceId, projectId, {}, userId),
+      ).rejects.toThrow(NotFoundException);
       expect(prisma.project.update).not.toHaveBeenCalled();
+    });
+
+    it('sets sales rep, project manager, and engagement estimate', async () => {
+      prisma.project.findFirst.mockResolvedValue(existing);
+      prisma.workspaceMember.findFirst.mockResolvedValue({ id: 'wm-1' });
+      prisma.project.update.mockResolvedValue(existing);
+      const dto: UpdateProjectDto = {
+        salesRepId: 'user-2',
+        projectManagerId: 'user-3',
+        engagementType: 'time_and_material',
+        estimatedHours: 40,
+      };
+
+      await service.update(workspaceId, projectId, dto, userId);
+
+      expect(prisma.project.update).toHaveBeenCalledWith({
+        where: { id: projectId },
+        data: {
+          name: undefined,
+          description: undefined,
+          startDate: undefined,
+          endDate: undefined,
+          salesRepId: 'user-2',
+          projectManagerId: 'user-3',
+          engagementType: 'time_and_material',
+          estimatedHours: 40,
+          estimatedDate: undefined,
+        },
+      });
+    });
+
+    it('clears sales rep, PM, and engagement estimate when given null', async () => {
+      const populated = {
+        ...existing,
+        salesRepId: 'user-2',
+        projectManagerId: 'user-3',
+        engagementType: 'time_and_material',
+        estimatedHours: 40,
+        estimatedDate: null,
+      };
+      prisma.project.findFirst.mockResolvedValue(populated);
+      prisma.project.update.mockResolvedValue(populated);
+      const dto: UpdateProjectDto = {
+        salesRepId: null,
+        projectManagerId: null,
+        engagementType: null,
+        estimatedHours: null,
+      };
+
+      await service.update(workspaceId, projectId, dto, userId);
+
+      expect(prisma.workspaceMember.findFirst).not.toHaveBeenCalled();
+      expect(prisma.project.update).toHaveBeenCalledWith({
+        where: { id: projectId },
+        data: {
+          name: undefined,
+          description: undefined,
+          startDate: undefined,
+          endDate: undefined,
+          salesRepId: null,
+          projectManagerId: null,
+          engagementType: null,
+          estimatedHours: null,
+          estimatedDate: undefined,
+        },
+      });
+    });
+
+    it('validates a partial estimate edit against the existing engagementType', async () => {
+      const populated = {
+        ...existing,
+        engagementType: 'fixed_budget',
+        estimatedDate: new Date(futureEnd),
+      };
+      prisma.project.findFirst.mockResolvedValue(populated);
+
+      // Setting estimatedHours without changing engagementType away from
+      // fixed_budget must fail, the same as it would on create.
+      await expect(
+        service.update(workspaceId, projectId, { estimatedHours: 10 }, userId),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.project.update).not.toHaveBeenCalled();
+    });
+
+    it('throws when the new endDate is before the existing startDate', async () => {
+      const populated = {
+        ...existing,
+        startDate: new Date(futureStart),
+        endDate: new Date(futureEnd),
+      };
+      prisma.project.findFirst.mockResolvedValue(populated);
+
+      await expect(
+        service.update(
+          workspaceId,
+          projectId,
+          { endDate: '2020-01-01T00:00:00.000Z' },
+          userId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.project.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects a sales rep who is not an active workspace member', async () => {
+      prisma.project.findFirst.mockResolvedValue(existing);
+      prisma.workspaceMember.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.update(
+          workspaceId,
+          projectId,
+          { salesRepId: 'user-9' },
+          userId,
+        ),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.project.update).not.toHaveBeenCalled();
+    });
+
+    describe('project type / hubs / plans / modules', () => {
+      const plan = { id: 'plan-1', workspaceId, hubId: null };
+
+      function primeSeedMocks() {
+        prisma.priority.findFirst.mockResolvedValue({
+          id: 'priority-default',
+          isDefault: true,
+        });
+        prisma.ticketStatus.findFirst.mockResolvedValue({
+          id: 'status-default',
+          isDefault: true,
+        });
+        prisma.workType.findFirst.mockResolvedValue({
+          id: 'wtype-1',
+          category: 'task',
+        });
+        prisma.workItem.create.mockImplementation(({ data }: any) =>
+          Promise.resolve({ id: `wi-${data.prefix}`, ...data }),
+        );
+        prisma.activityLog.create.mockResolvedValue({});
+      }
+
+      it('keeps a still-selected module instance and only adjusts its taskLimit', async () => {
+        const existingInstance = {
+          id: 'mi-1',
+          moduleId: 'mod-1',
+          taskLimit: 5,
+        };
+        const populated = {
+          ...existing,
+          projectTypeId: 'ptype-1',
+          planId: [plan.id],
+          hubId: [],
+          moduleInstances: [existingInstance],
+        };
+        prisma.project.findFirst.mockResolvedValue(populated);
+        prisma.projectType.findFirst.mockResolvedValue({
+          id: 'ptype-1',
+          isPlanAdd: true,
+        });
+        prisma.plan.findMany.mockResolvedValue([plan]);
+        prisma.module.findFirst.mockResolvedValue({
+          id: 'mod-1',
+          name: 'Pipeline',
+          planId: plan.id,
+        });
+        prisma.project.update.mockResolvedValue(populated);
+
+        await service.update(
+          workspaceId,
+          projectId,
+          {
+            planId: [plan.id],
+            moduleSelections: [{ moduleId: 'mod-1', taskLimit: 8 }],
+          },
+          userId,
+        );
+
+        expect(prisma.moduleInstance.update).toHaveBeenCalledWith({
+          where: { id: 'mi-1' },
+          data: { taskLimit: 8 },
+        });
+        expect(prisma.moduleInstance.create).not.toHaveBeenCalled();
+        expect(prisma.moduleInstance.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('swaps a deselected module for a newly attached one, seeding it like create() does', async () => {
+        const existingInstance = {
+          id: 'mi-1',
+          moduleId: 'mod-1',
+          taskLimit: 5,
+        };
+        const populated = {
+          ...existing,
+          projectTypeId: 'ptype-1',
+          planId: [plan.id],
+          hubId: [],
+          moduleInstances: [existingInstance],
+        };
+        prisma.project.findFirst.mockResolvedValue(populated);
+        prisma.projectType.findFirst.mockResolvedValue({
+          id: 'ptype-1',
+          isPlanAdd: true,
+        });
+        prisma.plan.findMany.mockResolvedValue([plan]);
+        prisma.module.findFirst.mockResolvedValue({
+          id: 'mod-2',
+          name: 'Design',
+          planId: plan.id,
+        });
+        prisma.project.update.mockResolvedValue(populated);
+        prisma.moduleInstance.create.mockResolvedValue({ id: 'mi-2' });
+        primeSeedMocks();
+
+        await service.update(
+          workspaceId,
+          projectId,
+          {
+            planId: [plan.id],
+            moduleSelections: [{ moduleId: 'mod-2', taskLimit: 2 }],
+          },
+          userId,
+        );
+
+        expect(prisma.moduleInstance.create).toHaveBeenCalledWith({
+          data: { projectId, moduleId: 'mod-2', taskLimit: 2 },
+        });
+        expect(prisma.workItem.create).toHaveBeenCalledTimes(2);
+        expect(prisma.moduleInstance.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: ['mi-1'] } },
+        });
+      });
+
+      it('clears every module instance when switching to a non-plan-add project type', async () => {
+        const existingInstance = {
+          id: 'mi-1',
+          moduleId: 'mod-1',
+          taskLimit: 5,
+        };
+        const populated = {
+          ...existing,
+          projectTypeId: 'ptype-1',
+          planId: [plan.id],
+          hubId: [],
+          moduleInstances: [existingInstance],
+        };
+        prisma.project.findFirst.mockResolvedValue(populated);
+        prisma.projectType.findFirst.mockResolvedValue({
+          id: 'ptype-2',
+          isPlanAdd: false,
+        });
+        prisma.project.update.mockResolvedValue({
+          ...populated,
+          projectTypeId: 'ptype-2',
+          planId: [],
+          hubId: [],
+        });
+
+        await service.update(
+          workspaceId,
+          projectId,
+          { projectTypeId: 'ptype-2' },
+          userId,
+        );
+
+        expect(prisma.plan.findMany).not.toHaveBeenCalled();
+        expect(prisma.project.update).toHaveBeenCalledWith({
+          where: { id: projectId },
+          data: expect.objectContaining({
+            projectTypeId: 'ptype-2',
+            planId: [],
+            hubId: [],
+          }),
+        });
+        expect(prisma.moduleInstance.deleteMany).toHaveBeenCalledWith({
+          where: { id: { in: ['mi-1'] } },
+        });
+      });
+
+      it('requires at least one plan when clearing plans on an isPlanAdd type', async () => {
+        const populated = {
+          ...existing,
+          projectTypeId: 'ptype-1',
+          planId: [plan.id],
+          hubId: [],
+          moduleInstances: [],
+        };
+        prisma.project.findFirst.mockResolvedValue(populated);
+        prisma.projectType.findFirst.mockResolvedValue({
+          id: 'ptype-1',
+          isPlanAdd: true,
+        });
+
+        await expect(
+          service.update(workspaceId, projectId, { planId: [] }, userId),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.project.update).not.toHaveBeenCalled();
+      });
     });
   });
 

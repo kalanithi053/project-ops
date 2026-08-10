@@ -209,6 +209,10 @@ model UserRole {
   name        String
   isDefault   Boolean @default(false) @map("is_default")
   isSystem    Boolean @default(false) @map("is_system")
+  // Workspace/project-wide dashboard visibility (vs. just-your-own-items) —
+  // the "manager tier" catalog. Editable per-role in Settings > Roles, not
+  // tied to the role's name so a renamed/custom role can still opt in.
+  isManagerTier Boolean @default(false) @map("is_manager_tier")
 
   workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   rolePermissions  RolePermission[]

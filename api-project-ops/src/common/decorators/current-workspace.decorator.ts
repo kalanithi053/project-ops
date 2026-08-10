@@ -4,6 +4,9 @@ import { Request } from 'express';
 export interface WorkspaceContext {
   workspaceId: string;
   roleId: string;
+  roleName: string;
+  /** Workspace-wide dashboard visibility instead of just-your-own-items — see UserRole.isManagerTier. */
+  isManagerTier: boolean;
   membershipId: string;
   userId: string;
   ownerId: string;

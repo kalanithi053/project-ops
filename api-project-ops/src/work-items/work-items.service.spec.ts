@@ -1,4 +1,8 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { ActivityLogService } from '../activity-log/activity-log.service';
 import { AttachmentsService } from '../attachments/attachments.service';
@@ -39,6 +43,9 @@ describe('WorkItemsService', () => {
       findFirst: jest.fn(),
     },
     workspaceMember: {
+      findFirst: jest.fn(),
+    },
+    projectMember: {
       findFirst: jest.fn(),
     },
     user: {
@@ -115,6 +122,7 @@ describe('WorkItemsService', () => {
     mockMail.sendWorkItemNotificationEmail.mockResolvedValue(undefined);
     mockActivityLog.log.mockResolvedValue({ id: 'log-1' });
     mockAttachments.deleteByIds.mockResolvedValue(undefined);
+    mockPrismaService.projectMember.findFirst.mockResolvedValue(null);
 
     const module = await Test.createTestingModule({
       providers: [
@@ -736,6 +744,92 @@ describe('WorkItemsService', () => {
         } as any),
       ).rejects.toThrow(BadRequestException);
       expect(mockPrismaService.workItem.update).not.toHaveBeenCalled();
+    });
+
+    describe('as a Client project member', () => {
+      beforeEach(() => {
+        mockPrismaService.projectMember.findFirst.mockResolvedValue({
+          role: { name: 'Client' },
+        });
+      });
+
+      it('lets the assignee change the status', async () => {
+        const existing = makeWorkItem({ assigneeId: userId });
+        mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+        mockPrismaService.ticketStatus.findFirst.mockResolvedValue({
+          id: 'st-2',
+        });
+        const updated = makeWorkItem({ assigneeId: userId, statusId: 'st-2' });
+        mockPrismaService.workItem.update.mockResolvedValue(updated);
+
+        await service.update(workspaceId, projectId, workItemId, userId, {
+          statusId: 'st-2',
+        });
+
+        expect(mockPrismaService.workItem.update).toHaveBeenCalled();
+      });
+
+      it('lets a Kanban drag change status and position together', async () => {
+        const existing = makeWorkItem({ assigneeId: userId, position: 0 });
+        mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+        mockPrismaService.ticketStatus.findFirst.mockResolvedValue({
+          id: 'st-2',
+        });
+        mockPrismaService.workItem.update.mockResolvedValue(
+          makeWorkItem({ assigneeId: userId, statusId: 'st-2', position: 500 }),
+        );
+
+        await service.update(workspaceId, projectId, workItemId, userId, {
+          statusId: 'st-2',
+          position: 500,
+        } as any);
+
+        expect(mockPrismaService.workItem.update).toHaveBeenCalled();
+      });
+
+      it('lets the QA assignee change the status', async () => {
+        const existing = makeWorkItem({ qaAssigneeId: userId });
+        mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+        mockPrismaService.ticketStatus.findFirst.mockResolvedValue({
+          id: 'st-2',
+        });
+        mockPrismaService.workItem.update.mockResolvedValue(
+          makeWorkItem({ qaAssigneeId: userId, statusId: 'st-2' }),
+        );
+
+        await service.update(workspaceId, projectId, workItemId, userId, {
+          statusId: 'st-2',
+        });
+
+        expect(mockPrismaService.workItem.update).toHaveBeenCalled();
+      });
+
+      it('rejects when the client is neither assignee nor QA assignee', async () => {
+        const existing = makeWorkItem({
+          assigneeId: 'someone-else',
+          qaAssigneeId: null,
+        });
+        mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+
+        await expect(
+          service.update(workspaceId, projectId, workItemId, userId, {
+            statusId: 'st-2',
+          }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(mockPrismaService.workItem.update).not.toHaveBeenCalled();
+      });
+
+      it('rejects a field other than status even for the assignee', async () => {
+        const existing = makeWorkItem({ assigneeId: userId });
+        mockPrismaService.workItem.findFirst.mockResolvedValue(existing);
+
+        await expect(
+          service.update(workspaceId, projectId, workItemId, userId, {
+            name: 'New Name',
+          }),
+        ).rejects.toThrow(ForbiddenException);
+        expect(mockPrismaService.workItem.update).not.toHaveBeenCalled();
+      });
     });
   });
 

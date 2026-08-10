@@ -18,6 +18,7 @@ const WORKSPACE_ROUTES = [
   "/settings/roles",
   "/settings/ticket-statuses",
   "/settings/workspace",
+  "/settings/hubs",
   "/work-items/new",
   "/work-items"
 ] as const;

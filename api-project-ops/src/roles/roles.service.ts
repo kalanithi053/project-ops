@@ -29,6 +29,7 @@ export class RolesService {
       name: r.name,
       isDefault: r.isDefault,
       isSystem: r.isSystem,
+      isManagerTier: r.isManagerTier,
       permissions: r.rolePermissions.map((rp) => rp.permission.code),
     }));
   }
@@ -47,6 +48,7 @@ export class RolesService {
           workspaceId,
           name: dto.name,
           isDefault: dto.isDefault ?? false,
+          isManagerTier: dto.isManagerTier ?? false,
         },
       });
       if (permissionIds.length > 0) {
@@ -81,6 +83,7 @@ export class RolesService {
         data: {
           name: dto.name ?? undefined,
           isDefault: dto.isDefault ?? undefined,
+          isManagerTier: dto.isManagerTier ?? undefined,
         },
       });
 

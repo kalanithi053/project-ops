@@ -115,7 +115,7 @@ export default function LoginPage() {
 
     requestOtp.mutate(
       {
-        email: email.trim(),
+        email: email.trim()?.toLocaleLowerCase(),
       },
       {
         onSuccess: (data) => {

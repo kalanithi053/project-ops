@@ -53,6 +53,7 @@ import {
   type TaskPlacement,
 } from "@/lib/api/hooks/use-tasks";
 import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
+import { useMe } from "@/lib/api/hooks/use-users";
 import type {
   Task,
   TaskStatusRef,
@@ -119,6 +120,13 @@ interface TaskBoardProps {
   projectId: string;
   canCreate: boolean;
   canUpdate: boolean;
+  /**
+   * The caller's project role name. A Client holds WORKITEM_UPDATE (so
+   * `canUpdate` is true) but can only drag a card whose assignee or QA
+   * assignee is themselves — see handleDragEnd and
+   * WorkItemsService.assertClientCanUpdate on the backend.
+   */
+  roleName?: string;
   /** Only tasks whose WorkType category matches are shown on the board. */
   typeCategory: WorkTypeCategory;
   /**
@@ -146,11 +154,14 @@ export function TaskBoard({
   projectId,
   canCreate,
   canUpdate,
+  roleName,
   typeCategory,
   onCreate,
   filtersOpen,
   onFiltersOpenChange,
 }: TaskBoardProps) {
+  const { data: me } = useMe();
+  const isClientRole = roleName === "Client";
   const statusesQuery = useTicketStatuses(workspaceSlug);
   const modulesQuery = useProjectModules(workspaceSlug, projectId);
   const membersQuery = useWorkspaceMembers(workspaceSlug);
@@ -350,6 +361,13 @@ export function TaskBoard({
     const activeId = String(active.id);
     const draggedTask = tasks.find((task) => task.id === activeId);
     if (!draggedTask) return;
+    if (
+      isClientRole &&
+      draggedTask.assigneeId !== me?.id &&
+      draggedTask.qaAssigneeId !== me?.id
+    ) {
+      return;
+    }
 
     const overId = String(over.id);
 

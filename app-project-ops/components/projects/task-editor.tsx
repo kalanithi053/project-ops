@@ -73,6 +73,16 @@ interface TaskEditorProps {
   /** WorkType chosen in the create-flow picker (task/incident/bug/…). */
   defaultWorkItemTypeId?: string;
   canSave: boolean;
+  /**
+   * The caller's workspace role name. A Client holds WORKITEM_UPDATE (so
+   * `canSave` is true) but the backend only lets them change `statusId`, and
+   * only on a task where they're the assignee or QA assignee — see
+   * WorkItemsService.assertClientCanUpdate. Narrows the UI to match: every
+   * other field stays read-only, and the status control only lights up on
+   * their own task. Undefined (role not resolved yet) behaves like any
+   * non-Client role, matching usePermissions' fail-open default.
+   */
+  roleName?: string;
   canComment: boolean;
   canCreateAttachment: boolean;
   canDeleteAttachment: boolean;
@@ -96,6 +106,7 @@ export function TaskEditor({
   defaultStatusId,
   defaultWorkItemTypeId,
   canSave,
+  roleName,
   canComment,
   canCreateAttachment,
   canDeleteAttachment,
@@ -181,6 +192,14 @@ export function TaskEditor({
     "details" | "activity" | "timeLogs" | "attachments"
   >("details");
   const canLogTime = Boolean(task && me?.id && me.id === task.assigneeId);
+  // See the `roleName` prop doc: a Client can only flip status, and only on
+  // a task they're the assignee or QA assignee of.
+  const isClientRole = roleName === "Client";
+  const isAssigneeOrQa = Boolean(
+    task && me?.id && (task.assigneeId === me.id || task.qaAssigneeId === me.id),
+  );
+  const canFullEdit = canSave && !isClientRole;
+  const canChangeStatus = canSave && (!isClientRole || isAssigneeOrQa);
 
   // Captured once from the task being edited, so "Save changes" can stay
   // disabled until the user actually changes something rather than just
@@ -402,7 +421,7 @@ export function TaskEditor({
                   }
                   maxLength={200}
                   autoFocus={!isEdit}
-                  disabled={!canSave}
+                  disabled={!canFullEdit}
                   aria-label="Task name"
                   title={name}
                   className="h-auto min-w-0 truncate rounded-md border border-transparent bg-transparent px-3 py-1 pr-10 text-2xl font-semibold tracking-tight shadow-none transition-colors hover:border-dashed hover:border-input focus-visible:border-dashed focus-visible:border-primary focus-visible:ring-0 placeholder:text-muted-foreground/70"
@@ -438,7 +457,7 @@ export function TaskEditor({
                 </span>
                 <DropdownMenu>
                   <DropdownMenuTrigger
-                    disabled={!canSave || assigneeOptions.length === 0}
+                    disabled={!canFullEdit || assigneeOptions.length === 0}
                     className="inline-flex h-8 min-w-0 items-center gap-2 rounded-md px-1.5 outline-none transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
                     aria-label="Change assignee"
                   >
@@ -450,7 +469,7 @@ export function TaskEditor({
                     <span className="truncate font-medium">
                       {assigneeLabel}
                     </span>
-                    {canSave && assigneeOptions.length > 0 && (
+                    {canFullEdit && assigneeOptions.length > 0 && (
                       <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                     )}
                   </DropdownMenuTrigger>
@@ -486,7 +505,7 @@ export function TaskEditor({
                   <DropdownMenu>
                     <DropdownMenuTrigger
                       disabled={
-                        isEdit || !canSave || moduleOptions.length === 0
+                        isEdit || !canFullEdit || moduleOptions.length === 0
                       }
                       className="inline-flex h-8 min-w-0 items-center gap-1.5 rounded-md px-2 text-muted-foreground outline-none transition-colors enabled:hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label="Change module"
@@ -495,7 +514,7 @@ export function TaskEditor({
                       <span className="truncate">
                         {selectedModule?.label ?? "Select module"}
                       </span>
-                      {!isEdit && canSave && moduleOptions.length > 0 && (
+                      {!isEdit && canFullEdit && moduleOptions.length > 0 && (
                         <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                       )}
                     </DropdownMenuTrigger>
@@ -524,14 +543,14 @@ export function TaskEditor({
                 <div className="flex h-8 items-center gap-2">
                   <DropdownMenu>
                     <DropdownMenuTrigger
-                      disabled={!canSave || statusOptions.length === 0}
+                      disabled={!canChangeStatus || statusOptions.length === 0}
                       className="inline-flex h-7 min-w-0 items-center gap-1.5 rounded-md border border-transparent bg-status-info-bg px-2 text-xs font-medium text-status-info outline-none transition-colors enabled:hover:bg-status-info-bg/70 focus-visible:ring-2 focus-visible:ring-ring"
                       aria-label="Change status"
                     >
                       <span className="truncate">
                         {selectedStatus?.name ?? "Select status"}
                       </span>
-                      {canSave && statusOptions.length > 0 && (
+                      {canChangeStatus && statusOptions.length > 0 && (
                         <ChevronDown className="h-3 w-3 shrink-0" />
                       )}
                     </DropdownMenuTrigger>
@@ -584,7 +603,7 @@ export function TaskEditor({
                   workItemId={task.id}
                 />
               )}
-              {canSave && (
+              {(canFullEdit || canChangeStatus) && (
                 <Button
                   type="button"
                   onClick={() => handleSubmit()}
@@ -676,7 +695,7 @@ export function TaskEditor({
               <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_18rem]">
                 <div className="flex flex-col gap-5">
                   <fieldset
-                    disabled={!canSave}
+                    disabled={!canFullEdit}
                     className="min-w-0 border-0 p-0"
                   >
                     <SettingsField
@@ -689,7 +708,7 @@ export function TaskEditor({
                         onChange={setDescription}
                         placeholder="Add a description…"
                         aria-label="Description"
-                        disabled={!canSave || isUploadingImages}
+                        disabled={!canFullEdit || isUploadingImages}
                         imageContext={
                           task ? { workspaceSlug, projectId } : undefined
                         }
@@ -715,7 +734,7 @@ export function TaskEditor({
                 </div>
 
                 <fieldset
-                  disabled={!canSave}
+                  disabled={!canFullEdit}
                   className="flex min-w-0 flex-col gap-4 border-0 p-0 lg:border-l lg:border-border lg:pl-5"
                 >
                   <SettingsField label="QA assignee" htmlFor="task-qa-assignee">

@@ -690,9 +690,13 @@ export class ProjectsService {
     return slug || 'module';
   }
 
-  list(workspaceId: string) {
+  list(workspaceId: string, userId: string) {
     return this.prisma.project.findMany({
-      where: { workspaceId, deletedAt: null },
+      where: {
+        workspaceId,
+        deletedAt: null,
+        members: { some: { userId, status: { not: 'removed' } } },
+      },
       orderBy: { createdAt: 'desc' },
       include: {
         projectType: {

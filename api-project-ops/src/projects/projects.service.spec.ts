@@ -720,10 +720,14 @@ describe('ProjectsService', () => {
       const projects = [{ id: 'proj-1', workspaceId, deletedAt: null }];
       prisma.project.findMany.mockResolvedValue(projects);
 
-      const result = service.list(workspaceId);
+      const result = service.list(workspaceId, userId);
 
       expect(prisma.project.findMany).toHaveBeenCalledWith({
-        where: { workspaceId, deletedAt: null },
+        where: {
+          workspaceId,
+          deletedAt: null,
+          members: { some: { userId, status: { not: 'removed' } } },
+        },
         orderBy: { createdAt: 'desc' },
         include: {
           projectType: {

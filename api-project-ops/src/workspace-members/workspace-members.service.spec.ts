@@ -22,7 +22,10 @@ describe('WorkspaceMembersService', () => {
       create: jest.Mock;
       update: jest.Mock;
       updateMany: jest.Mock;
+      delete: jest.Mock;
     };
+    projectMember: { deleteMany: jest.Mock };
+    project: { findUnique: jest.Mock };
     user: { upsert: jest.Mock };
     userRole: { findFirst: jest.Mock };
     workspace: { findUnique: jest.Mock; findUniqueOrThrow: jest.Mock };
@@ -40,7 +43,10 @@ describe('WorkspaceMembersService', () => {
         create: jest.fn(),
         update: jest.fn(),
         updateMany: jest.fn(),
+        delete: jest.fn(),
       },
+      projectMember: { deleteMany: jest.fn() },
+      project: { findUnique: jest.fn() },
       user: { upsert: jest.fn() },
       userRole: { findFirst: jest.fn() },
       workspace: { findUnique: jest.fn(), findUniqueOrThrow: jest.fn() },
@@ -308,6 +314,10 @@ describe('WorkspaceMembersService', () => {
       prisma.workspace.findUnique.mockResolvedValue({
         ownerId: 'someone-else',
       });
+      prisma.project.findUnique.mockResolvedValue({
+        ownerId: 'someone-else',
+      });
+      prisma.projectMember.deleteMany.mockResolvedValue({ count: 0 });
       const updated = { id: 'member-1', status: 'removed' };
       prisma.workspaceMember.update.mockResolvedValue(updated);
 
@@ -315,6 +325,9 @@ describe('WorkspaceMembersService', () => {
         status: 'removed',
       });
 
+      expect(prisma.projectMember.deleteMany).toHaveBeenCalledWith({
+        where: { project: { workspaceId: 'ws-1' }, userId: 'user-1' },
+      });
       expect(result).toEqual(updated);
     });
   });
@@ -340,7 +353,7 @@ describe('WorkspaceMembersService', () => {
       );
     });
 
-    it('marks a non-owner member as removed', async () => {
+    it('removes a non-owner member and their project memberships', async () => {
       prisma.workspaceMember.findFirst.mockResolvedValue({
         id: 'member-1',
         userId: 'user-1',
@@ -348,13 +361,19 @@ describe('WorkspaceMembersService', () => {
       prisma.workspace.findUnique.mockResolvedValue({
         ownerId: 'someone-else',
       });
-      prisma.workspaceMember.update.mockResolvedValue({});
+      prisma.project.findUnique.mockResolvedValue({
+        ownerId: 'someone-else',
+      });
+      prisma.projectMember.deleteMany.mockResolvedValue({ count: 2 });
+      prisma.workspaceMember.delete.mockResolvedValue({});
 
       const result = await service.remove('ws-1', 'member-1');
 
-      expect(prisma.workspaceMember.update).toHaveBeenCalledWith({
+      expect(prisma.projectMember.deleteMany).toHaveBeenCalledWith({
+        where: { project: { workspaceId: 'ws-1' }, userId: 'user-1' },
+      });
+      expect(prisma.workspaceMember.delete).toHaveBeenCalledWith({
         where: { id: 'member-1' },
-        data: { status: 'removed' },
       });
       expect(result).toEqual({ id: 'member-1', removed: true });
     });

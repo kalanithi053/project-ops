@@ -1,3 +1,5 @@
+import { escapeHtml, renderEmailLayout } from './email-layout.template';
+
 export function workspaceInviteEmailTemplate(params: {
   workspaceName: string;
   roleName: string;
@@ -5,36 +7,20 @@ export function workspaceInviteEmailTemplate(params: {
 }): string {
   const { workspaceName, roleName, loginUrl } = params;
 
-  return `
-<!doctype html>
-<html>
-  <body style="margin:0;padding:0;background-color:#f4f5f7;font-family:Helvetica,Arial,sans-serif;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f5f7;padding:32px 0;">
-      <tr>
-        <td align="center">
-          <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;">
-            <tr>
-              <td style="padding:32px 40px 16px 40px;">
-                <h1 style="margin:0;font-size:18px;color:#111827;">ProjectOps</h1>
-              </td>
-            </tr>
-            <tr>
-              <td style="padding:0 40px 24px 40px;">
-                <p style="margin:0 0 16px 0;font-size:14px;color:#374151;">
-                  You've been added to the <strong>${workspaceName}</strong> workspace as <strong>${roleName}</strong>.
-                </p>
-                <p style="margin:0;font-size:13px;color:#6b7280;">
-                  Sign in with this email address to get started.
-                </p>
-                <p style="margin:20px 0 0 0;">
-                  <a href="${loginUrl}" style="display:inline-block;border-radius:6px;background-color:#2563eb;padding:10px 16px;color:#ffffff;font-size:14px;font-weight:bold;text-decoration:none;">Sign in</a>
-                </p>
-              </td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-  </body>
-</html>`;
+  const bodyHtml = `
+    <p style="margin:0 0 14px 0;font-size:15px;color:#6b7280;line-height:1.6;">
+      You've been added to this workspace as
+    </p>
+    <span style="display:inline-block;padding:4px 12px;border-radius:999px;background-color:#eff6ff;border:1px solid #bfdbfe;font-size:12px;font-weight:700;color:#1d4ed8;">${escapeHtml(roleName)}</span>
+    <p style="margin:14px 0 0 0;font-size:14px;color:#9ca3af;">
+      Sign in with this email address to get started.
+    </p>`;
+
+  return renderEmailLayout({
+    icon: '🏢',
+    title: escapeHtml(workspaceName),
+    bodyHtml,
+    cta: { label: 'Sign in', url: loginUrl },
+    footnote: "If you weren't expecting this, you can safely ignore this email.",
+  });
 }

@@ -62,24 +62,33 @@ export class ProjectMembersService {
     const existing = await this.prisma.projectMember.findUnique({
       where: { projectId_userId: { projectId, userId: user.id } },
     });
-    if (existing) {
+    if (existing && existing.status !== 'removed') {
       throw new ConflictException('User is already a member of this project.');
     }
 
     const member = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.projectMember.create({
-        data: {
-          projectId,
-          userId: user.id,
-          roleId: dto.roleId,
-          invitedBy,
-          status: 'active',
-        },
-        include: {
-          user: { select: { id: true, email: true } },
-          role: { select: { id: true, name: true } },
-        },
-      });
+      const created = existing
+        ? await tx.projectMember.update({
+            where: { id: existing.id },
+            data: { roleId: dto.roleId, status: 'active', invitedBy },
+            include: {
+              user: { select: { id: true, email: true } },
+              role: { select: { id: true, name: true } },
+            },
+          })
+        : await tx.projectMember.create({
+            data: {
+              projectId,
+              userId: user.id,
+              roleId: dto.roleId,
+              invitedBy,
+              status: 'active',
+            },
+            include: {
+              user: { select: { id: true, email: true } },
+              role: { select: { id: true, name: true } },
+            },
+          });
 
       await this.activityLog.log(
         {
@@ -137,9 +146,8 @@ export class ProjectMembersService {
     if (project?.ownerId === member.userId) {
       throw new BadRequestException('The project owner cannot be removed.');
     }
-    await this.prisma.projectMember.update({
-      where: { id: memberId },
-      data: { status: 'removed' },
+    await this.prisma.projectMember.delete({
+      where: { id: memberId, projectId },
     });
     return { id: memberId, removed: true };
   }

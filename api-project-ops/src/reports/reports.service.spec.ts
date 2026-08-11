@@ -228,8 +228,9 @@ describe('ReportsService', () => {
 
   describe('getWorkspaceReport()', () => {
     const workspaceId = 'ws-1';
+    const userId = 'user-1';
 
-    it('groups live work items by type and by type+status label', async () => {
+    it('groups live work items by type and by type+status label, scoped to the caller\'s projects', async () => {
       prisma.workItem.findMany.mockResolvedValue([
         {
           workItemType: { name: 'Task', category: 'task' },
@@ -249,11 +250,15 @@ describe('ReportsService', () => {
         },
       ]);
 
-      const report = await service.getWorkspaceReport(workspaceId);
+      const report = await service.getWorkspaceReport(workspaceId, userId);
 
       expect(prisma.workItem.findMany).toHaveBeenCalledWith({
         where: {
-          project: { workspaceId, deletedAt: null },
+          project: {
+            workspaceId,
+            deletedAt: null,
+            members: { some: { userId, status: { not: 'removed' } } },
+          },
           NOT: { status: { is: { category: 'removed' } } },
         },
         select: {
@@ -275,10 +280,10 @@ describe('ReportsService', () => {
       ]);
     });
 
-    it('returns zeroed output when the workspace has no live work items', async () => {
+    it('returns zeroed output when the caller has no live work items in their projects', async () => {
       prisma.workItem.findMany.mockResolvedValue([]);
 
-      const report = await service.getWorkspaceReport(workspaceId);
+      const report = await service.getWorkspaceReport(workspaceId, userId);
 
       expect(report).toEqual({
         totalItems: 0,

@@ -21,6 +21,7 @@ describe('ProjectMembersService', () => {
       findFirst: jest.Mock;
       create: jest.Mock;
       update: jest.Mock;
+      delete: jest.Mock;
     };
     user: { findUnique: jest.Mock; create: jest.Mock };
     userRole: { findFirst: jest.Mock };
@@ -47,6 +48,7 @@ describe('ProjectMembersService', () => {
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        delete: jest.fn(),
       },
       user: { findUnique: jest.fn(), create: jest.fn() },
       userRole: { findFirst: jest.fn() },
@@ -326,6 +328,48 @@ describe('ProjectMembersService', () => {
       expect(prisma.projectMember.create).not.toHaveBeenCalled();
     });
 
+    it('reactivates a removed project membership instead of rejecting it', async () => {
+      const existingUser = { id: 'user-existing', email: dto.email };
+      const existingMember = {
+        id: 'pm-existing',
+        projectId,
+        userId: existingUser.id,
+        status: 'removed',
+      };
+      prisma.project.findFirst.mockResolvedValue(project);
+      prisma.userRole.findFirst.mockResolvedValue(role);
+      prisma.user.findUnique.mockResolvedValue(existingUser);
+      prisma.workspaceMember.findUnique.mockResolvedValue({
+        id: 'wsm-1',
+        status: 'active',
+      });
+      prisma.projectMember.findUnique.mockResolvedValue(existingMember);
+      const reactivated = {
+        ...existingMember,
+        status: 'active',
+        roleId: dto.roleId,
+      };
+      prisma.projectMember.update.mockResolvedValue(reactivated);
+
+      const result = await service.invite(
+        workspaceId,
+        projectId,
+        invitedBy,
+        dto,
+      );
+
+      expect(result).toEqual({ ...reactivated, message: 'Member invited' });
+      expect(prisma.projectMember.update).toHaveBeenCalledWith({
+        where: { id: existingMember.id },
+        data: { roleId: dto.roleId, status: 'active', invitedBy },
+        include: {
+          user: { select: { id: true, email: true } },
+          role: { select: { id: true, name: true } },
+        },
+      });
+      expect(prisma.projectMember.create).not.toHaveBeenCalled();
+    });
+
     it('throws BadRequestException when the workspace has no default role for a brand-new membership', async () => {
       prisma.project.findFirst.mockResolvedValue(project);
       prisma.userRole.findFirst
@@ -427,21 +471,17 @@ describe('ProjectMembersService', () => {
     const memberId = 'pm-1';
     const member = { id: memberId, projectId, userId: 'user-not-owner' };
 
-    it('marks the member as removed on the happy path', async () => {
+    it('removes the member on the happy path', async () => {
       prisma.project.findFirst.mockResolvedValue(project);
       prisma.projectMember.findFirst.mockResolvedValue(member);
       prisma.project.findUnique.mockResolvedValue({ ownerId: project.ownerId });
-      prisma.projectMember.update.mockResolvedValue({
-        ...member,
-        status: 'removed',
-      });
+      prisma.projectMember.delete.mockResolvedValue(member);
 
       const result = await service.remove(workspaceId, projectId, memberId);
 
       expect(result).toEqual({ id: memberId, removed: true });
-      expect(prisma.projectMember.update).toHaveBeenCalledWith({
-        where: { id: memberId },
-        data: { status: 'removed' },
+      expect(prisma.projectMember.delete).toHaveBeenCalledWith({
+        where: { id: memberId, projectId },
       });
     });
 
@@ -451,7 +491,7 @@ describe('ProjectMembersService', () => {
       await expect(
         service.remove(workspaceId, projectId, memberId),
       ).rejects.toThrow(NotFoundException);
-      expect(prisma.projectMember.update).not.toHaveBeenCalled();
+      expect(prisma.projectMember.delete).not.toHaveBeenCalled();
     });
 
     it('throws NotFoundException when the member does not belong to the project', async () => {
@@ -461,7 +501,7 @@ describe('ProjectMembersService', () => {
       await expect(
         service.remove(workspaceId, projectId, memberId),
       ).rejects.toThrow(NotFoundException);
-      expect(prisma.projectMember.update).not.toHaveBeenCalled();
+      expect(prisma.projectMember.delete).not.toHaveBeenCalled();
     });
 
     it('throws BadRequestException when trying to remove the project owner', async () => {

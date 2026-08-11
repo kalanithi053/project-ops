@@ -43,9 +43,9 @@ export class ProjectsController {
 
   @Get()
   @RequirePermission(PERMISSIONS.PROJECT_READ)
-  @ApiOperation({ summary: 'List projects in the workspace' })
-  list(@CurrentWorkspace('workspaceId') workspaceId: string) {
-    return this.projects.list(workspaceId);
+  @ApiOperation({ summary: "List the caller's projects in the workspace" })
+  list(@CurrentWorkspace() ws: { workspaceId: string; userId: string }) {
+    return this.projects.list(ws.workspaceId, ws.userId);
   }
 
   @Get('utilization')

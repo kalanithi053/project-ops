@@ -116,11 +116,15 @@ export class ReportsService {
     };
   }
 
-  /** Every live work item in a workspace, grouped by its WorkType and status. */
-  async getWorkspaceReport(workspaceId: string) {
+  /** Every live work item across projects the caller is a member of, grouped by its WorkType and status. */
+  async getWorkspaceReport(workspaceId: string, userId: string) {
     const items = await this.prisma.workItem.findMany({
       where: {
-        project: { workspaceId, deletedAt: null },
+        project: {
+          workspaceId,
+          deletedAt: null,
+          members: { some: { userId, status: { not: 'removed' } } },
+        },
         NOT: { status: { is: { category: 'removed' } } },
       },
       select: {

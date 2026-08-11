@@ -102,6 +102,13 @@ export class WorkspaceMembersService {
 
     if (dto.status === 'removed') {
       await this.assertNotOwner(workspaceId, member.userId);
+      await this.assertProjectNotOwner(workspaceId, member.userId);
+      // Mirrors remove()'s cascade: losing workspace access must also drop
+      // any project-level access, or reactivating this member later would
+      // silently restore access to every project they used to be in.
+      await this.prisma.projectMember.deleteMany({
+        where: { project: { workspaceId }, userId: member.userId },
+      });
     }
 
     return this.prisma.workspaceMember.update({
@@ -116,9 +123,12 @@ export class WorkspaceMembersService {
   async remove(workspaceId: string, memberId: string) {
     const member = await this.getMember(workspaceId, memberId);
     await this.assertNotOwner(workspaceId, member.userId);
-    await this.prisma.workspaceMember.update({
+    await this.assertProjectNotOwner(workspaceId, member.userId);
+    await this.prisma.projectMember.deleteMany({
+      where: { project: { workspaceId }, userId: member.userId },
+    });
+    await this.prisma.workspaceMember.delete({
       where: { id: memberId },
-      data: { status: 'removed' },
     });
     return { id: memberId, removed: true };
   }
@@ -193,6 +203,16 @@ export class WorkspaceMembersService {
     });
     if (workspace?.ownerId === userId) {
       throw new BadRequestException('The workspace owner cannot be removed.');
+    }
+  }
+
+  private async assertProjectNotOwner(workspaceId: string, userId: string) {
+    const workspace = await this.prisma.project.findUnique({
+      where: { id: workspaceId },
+      select: { ownerId: true },
+    });
+    if (workspace?.ownerId === userId) {
+      throw new BadRequestException('The project owner cannot be removed.');
     }
   }
   /**

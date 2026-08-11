@@ -40,7 +40,9 @@ export class WorkspaceReportsController {
   @ApiOperation({
     summary: 'Workspace-wide work item type and status breakdown',
   })
-  getWorkspaceReport(@CurrentWorkspace('workspaceId') workspaceId: string) {
-    return this.reports.getWorkspaceReport(workspaceId);
+  getWorkspaceReport(
+    @CurrentWorkspace() ws: { workspaceId: string; userId: string },
+  ) {
+    return this.reports.getWorkspaceReport(ws.workspaceId, ws.userId);
   }
 }

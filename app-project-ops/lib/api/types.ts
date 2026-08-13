@@ -1034,6 +1034,22 @@ export interface MyOpenWorkItemsResponse {
   items: MyOpenWorkItem[];
 }
 
+/** GET /search — a single project/work item/member match, for the header's global search. */
+export interface GlobalSearchResultItem {
+  type: "project" | "workitem" | "member";
+  id: string;
+  title: string;
+  subtitle?: string | null;
+  /** Only set for a 'workitem' result — the project it belongs to, for building its URL. */
+  projectId?: string;
+}
+
+export interface GlobalSearchResult {
+  projects: GlobalSearchResultItem[];
+  workItems: GlobalSearchResultItem[];
+  members: GlobalSearchResultItem[];
+}
+
 export type TimeLogPastLimitUnit = "day" | "week" | "month";
 
 /** Workspace-wide time-log restrictions, part of the settings bundle. */

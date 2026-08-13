@@ -25,6 +25,7 @@ import { CommentsModule } from './comments/comments.module';
 import { ReportsModule } from './reports/reports.module';
 import { TimeLogsModule } from './time-logs/time-logs.module';
 import { AttachmentsModule } from './attachments/attachments.module';
+import { SearchModule } from './search/search.module';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 
@@ -54,6 +55,7 @@ import { AppService } from './app.service';
     ReportsModule,
     TimeLogsModule,
     AttachmentsModule,
+    SearchModule,
   ],
   controllers: [AppController],
   providers: [

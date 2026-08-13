@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { NewProjectPanel } from "@/components/projects/new-project-panel";
 import { DataTable } from "@/components/shared/data-table";
 import { PageHeader } from "@/components/shared/page-header";
 import { QueryState } from "@/components/shared/query-state";
@@ -100,6 +101,7 @@ export default function ProjectsPage() {
   const { data: typeData } = useProjectTypes(workspace);
   const { data: me } = useMe();
   const { can } = usePermissions(workspace);
+  const [newProjectOpen, setNewProjectOpen] = React.useState(false);
 
   const projects = React.useMemo(() => data ?? [], [data]);
   const members = React.useMemo(() => memberData ?? [], [memberData]);
@@ -226,17 +228,14 @@ export default function ProjectsPage() {
           <Button
             className="w-full sm:w-auto"
             data-tour="new-project-button"
-            asChild
+            onClick={() => setNewProjectOpen(true)}
           >
-            <Link href={`/${workspace}/projects/new`}>
-              <Plus className="h-4 w-4" />
-              New project
-            </Link>
+            <Plus className="h-4 w-4" />
+            New project
           </Button>
         )}
       </div>
 
-      <StatsGrid stats={stats} />
 
       <QueryState
         isLoading={isLoading}
@@ -255,6 +254,12 @@ export default function ProjectsPage() {
           emptyMessage="No projects yet. Create your first project to get started."
         />
       </QueryState>
+
+      <NewProjectPanel
+        open={newProjectOpen}
+        onOpenChange={setNewProjectOpen}
+        workspaceSlug={workspace}
+      />
     </PageContainer>
   );
 }

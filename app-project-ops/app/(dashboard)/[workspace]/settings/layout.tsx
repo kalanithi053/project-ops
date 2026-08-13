@@ -7,8 +7,8 @@ import { PageHeader } from "@/components/shared/page-header";
 import { SettingsSidebar } from "@/components/settings/settings-sidebar";
 
 /**
- * Shell for the settings area: page heading plus the persistent section
- * rail, with each section rendered as a nested route.
+ * Shell for the settings area: page heading plus a bento grid of section
+ * tiles, with each section rendered as a nested route below it.
  *
  * Sections deliberately don't receive data through this layout. They each
  * call useWorkspaceSettings(), which resolves to the same cached
@@ -30,10 +30,8 @@ export default function SettingsLayout({
         description="Manage your workspace configuration, access control and project structure."
       />
 
-      <div className="flex flex-col gap-6 md:flex-row md:gap-8">
-        <SettingsSidebar workspaceSlug={workspace} />
-        <div className="min-w-0 flex-1">{children}</div>
-      </div>
+      <SettingsSidebar workspaceSlug={workspace} />
+      <div className="min-w-0 flex-1">{children}</div>
     </PageContainer>
   );
 }

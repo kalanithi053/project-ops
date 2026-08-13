@@ -1,11 +1,33 @@
-import { Boxes, Check } from "lucide-react";
+import { Boxes, Gauge, ShieldCheck, Sparkles, Users } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
 
 const highlights = [
-  "Plan sprints and track delivery in one shared workspace",
-  "See team capacity and resourcing at a glance",
-  "Enterprise-grade roles, SSO, and audit logs built in",
+  {
+    icon: Sparkles,
+    title: "One shared workspace",
+    description: "Plan sprints and track delivery end to end.",
+    span: "col-span-2",
+  },
+  {
+    icon: Gauge,
+    title: "Capacity at a glance",
+    description: "See team load and resourcing instantly.",
+    span: "",
+  },
+  {
+    icon: Users,
+    title: "Built for teams",
+    description: "Everyone stays aligned on what's next.",
+    span: "",
+  },
+  {
+    icon: ShieldCheck,
+    title: "Enterprise-grade security",
+    description: "Roles, SSO, and audit logs built in.",
+    span: "col-span-2",
+  },
 ];
 
 /**
@@ -60,16 +82,32 @@ export function AuthBrandPanel({ className }: { className?: string }) {
           </p>
         </div>
 
-        <ul className="flex flex-col gap-3">
-          {highlights.map((item) => (
-            <li key={item} className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/10">
-                <Check className="h-3 w-3 text-neutral-100" />
-              </span>
-              <span className="text-sm text-neutral-300">{item}</span>
-            </li>
-          ))}
-        </ul>
+        <BentoGrid className="sm:grid-cols-4">
+          {highlights.map((item) => {
+            const Icon = item.icon;
+            return (
+              <BentoTile
+                key={item.title}
+                className={cn(
+                  "gap-3 border-white/10 bg-white/[0.04] backdrop-blur-sm",
+                  item.span,
+                )}
+              >
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-white/10">
+                  <Icon className="h-4 w-4 text-neutral-100" />
+                </span>
+                <div className="flex flex-col gap-1">
+                  <span className="text-sm font-medium text-neutral-100">
+                    {item.title}
+                  </span>
+                  <span className="text-xs leading-relaxed text-neutral-400">
+                    {item.description}
+                  </span>
+                </div>
+              </BentoTile>
+            );
+          })}
+        </BentoGrid>
       </div>
 
       <div className="relative flex items-center justify-between text-xs text-neutral-500">

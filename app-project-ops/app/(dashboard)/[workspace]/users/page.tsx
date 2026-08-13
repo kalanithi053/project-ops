@@ -1,10 +1,11 @@
 "use client";
 
-import { Loader2, UserPlus, Users } from "lucide-react";
+import { Loader2, ShieldCheck, UserCheck, UserCog, UserPlus, Users } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
+import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { DataTable } from "@/components/shared/data-table";
 import { FormPanel } from "@/components/shared/form-panel";
@@ -16,7 +17,6 @@ import {
   type SelectOption,
 } from "@/components/shared/select-field";
 import { TableSkeleton } from "@/components/shared/skeletons";
-import { StatsGrid } from "@/components/shared/stats-grid";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,15 +74,12 @@ export default function UsersPage() {
   const [removing, setRemoving] = React.useState<WorkspaceMember | null>(null);
   const members = data ?? [];
 
-  const stats = [
-    { label: "Total Users", value: members.length, icon: Users },
-    {
-      label: "Active",
-      value: members.filter(
-        (m) => String(m.status ?? "").toLowerCase() === "active",
-      ).length,
-    },
-  ];
+  const activeCount = members.filter(
+    (m) => String(m.status ?? "").toLowerCase() === "active",
+  ).length;
+  const roleCount = new Set(
+    members.map((m) => roleName(m)).filter((name) => name !== "—"),
+  ).size;
 
   const canInvite = can(PERMISSIONS.MEMBER_INVITE);
   const canRemove = can(PERMISSIONS.MEMBER_REMOVE);
@@ -182,7 +179,49 @@ export default function UsersPage() {
         )}
       </div>
 
-      <StatsGrid stats={stats} />
+      <BentoGrid>
+        <BentoTile className="col-span-2 justify-between sm:col-span-2 sm:row-span-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              Total Users
+            </span>
+            <Users className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-3xl font-semibold">{members.length}</p>
+        </BentoTile>
+
+        <BentoTile>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              Active
+            </span>
+            <UserCheck className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-2xl font-semibold">{activeCount}</p>
+        </BentoTile>
+
+        <BentoTile>
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              Roles in use
+            </span>
+            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-2xl font-semibold">{roleCount}</p>
+        </BentoTile>
+
+        <BentoTile className="col-span-2 sm:col-span-2">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">
+              Other status
+            </span>
+            <UserCog className="h-4 w-4 text-muted-foreground" />
+          </div>
+          <p className="text-2xl font-semibold">
+            {members.length - activeCount}
+          </p>
+        </BentoTile>
+      </BentoGrid>
 
       <QueryState
         isLoading={isLoading}

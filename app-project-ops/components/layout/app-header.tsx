@@ -1,8 +1,9 @@
-import { Menu, PanelLeft, Search } from "lucide-react";
+import { Menu, PanelLeft } from "lucide-react";
 
 import type { AuthUser, Notification } from "@/types/auth";
 import { Button } from "@/components/ui/button";
 import { Breadcrumbs } from "@/components/layout/breadcrumbs";
+import { GlobalSearch } from "@/components/layout/global-search";
 import { TenantSelector } from "@/components/layout/tenant-selector";
 import { UserMenu } from "@/components/layout/user-menu";
 import { NotificationsMenu } from "@/components/layout/notifications-menu";
@@ -50,14 +51,7 @@ export function AppHeader({
       <Breadcrumbs />
 
       <div className="ml-auto flex items-center gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          className="hidden gap-2 text-muted-foreground sm:flex"
-        >
-          <Search className="h-4 w-4" />
-          <span>Search…</span>
-        </Button>
+        <GlobalSearch />
         <TenantSelector />
         <TimerHeaderWidget />
         <NotificationsMenu notifications={notifications} />

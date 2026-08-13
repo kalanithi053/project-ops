@@ -7,6 +7,7 @@ import { ArrowLeft, Boxes, ChevronRight, Plus, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { WorkspaceForm } from "@/components/auth/workspace-form";
+import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
 import { ListSkeleton } from "@/components/shared/skeletons";
 import {
   useMyWorkspaces,
@@ -69,11 +70,11 @@ function WorkspacesHub() {
 
   useEffect(() => {
     // `replace`, not `push` — otherwise Back lands here and forwards again.
-    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/dashboard`);
+    if (autoOpenSlug) router.replace(`/${autoOpenSlug}/projects`);
   }, [autoOpenSlug, router]);
 
   function openWorkspace(workspace: Workspace) {
-    router.push(`/${workspace.slug}/dashboard`);
+    router.push(`/${workspace.slug}/projects`);
   }
 
   function setAsDefault(workspace: Workspace) {
@@ -120,7 +121,7 @@ function WorkspacesHub() {
   }
 
   return (
-    <div className="flex w-full max-w-md flex-col gap-8">
+    <div className="flex w-full max-w-2xl flex-col gap-8">
       <BrandMark />
 
       <div className="flex flex-col gap-2">
@@ -146,52 +147,52 @@ function WorkspacesHub() {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground/80">
               Your workspaces
             </p>
-            <ul className="flex flex-col gap-2">
+            <BentoGrid className="sm:grid-cols-2">
               {workspaces.map((workspace) => (
-                <li key={String(workspace.id ?? workspace.slug)}>
-                  <div
-                    className={cn(
-                      "group flex w-full items-center gap-3 rounded-lg border border-border bg-card p-3 text-left transition-colors",
-                      "hover:border-foreground/20 hover:bg-accent",
-                    )}
+                <BentoTile
+                  key={String(workspace.id ?? workspace.slug)}
+                  interactive
+                  className="group relative col-span-2 p-4 sm:col-span-1"
+                >
+                  <button
+                    type="button"
+                    onClick={() => openWorkspace(workspace)}
+                    className="flex flex-1 flex-col gap-3 rounded-xl text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                   >
-                    <button
-                      type="button"
-                      onClick={() => openWorkspace(workspace)}
-                      className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    >
+                    <div className="flex items-center justify-between">
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-primary text-sm font-semibold text-primary-foreground">
                         {initials(workspace.name ?? workspace.slug)}
                       </span>
-                      <span className="flex min-w-0 flex-1 flex-col">
-                        <span className="truncate text-sm font-medium">
-                          {workspace.name ?? workspace.slug}
-                        </span>
-                        <span className="truncate text-xs text-muted-foreground">
-                          projectops.app/{workspace.slug}
-                        </span>
-                      </span>
-                      {workspace.isDefault ? (
-                        <span className="shrink-0 text-xs text-muted-foreground">
-                          Default
-                        </span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setAsDefault(workspace)}
-                          disabled={setDefaultWorkspace.isPending}
-                          className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          <Star className="h-3.5 w-3.5" />
-                          Set as default
-                        </button>
-                      )}
                       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                    </div>
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-sm font-medium">
+                        {workspace.name ?? workspace.slug}
+                      </span>
+                      <span className="truncate text-xs text-muted-foreground">
+                        projectops.app/{workspace.slug}
+                      </span>
+                    </span>
+                  </button>
+
+                  {workspace.isDefault ? (
+                    <span className="self-start text-xs text-muted-foreground">
+                      Default
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setAsDefault(workspace)}
+                      disabled={setDefaultWorkspace.isPending}
+                      className="flex shrink-0 items-center gap-1 self-start rounded-md px-2 py-1 text-xs text-muted-foreground opacity-0 transition-opacity hover:bg-background hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      <Star className="h-3.5 w-3.5" />
+                      Set as default
                     </button>
-                  </div>
-                </li>
+                  )}
+                </BentoTile>
               ))}
-            </ul>
+            </BentoGrid>
           </div>
         )
       )}
@@ -200,7 +201,7 @@ function WorkspacesHub() {
         type="button"
         onClick={() => setMode("create")}
         className={cn(
-          "flex w-full items-center gap-3 rounded-lg border border-dashed border-border p-3 text-left transition-colors",
+          "flex w-full items-center gap-3 rounded-2xl border border-dashed border-border p-4 text-left transition-colors",
           "hover:border-foreground/30 hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
         )}
       >

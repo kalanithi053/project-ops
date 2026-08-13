@@ -1,21 +1,10 @@
 "use client";
 
-import {
-  FileText,
-  Loader2,
-  Lock,
-  Sparkles,
-  Upload,
-  X,
-} from "lucide-react";
-import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { FileText, Loader2, Sparkles, Upload, X } from "lucide-react";
+import { useRouter } from "next/navigation";
 import * as React from "react";
 
-import { PageContainer } from "@/components/layout/page-container";
 import { MultiSelectField } from "@/components/shared/multi-select-field";
-import { EmptyState } from "@/components/shared/empty-state";
-import { PageHeader } from "@/components/shared/page-header";
 import {
   RichTextEditor,
   finalizeStagedImages,
@@ -28,10 +17,16 @@ import {
 } from "@/components/shared/select-field";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { useHubs } from "@/lib/api/hooks/use-hubs";
 import { useWorkspaceMembers } from "@/lib/api/hooks/use-members";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
@@ -44,10 +39,7 @@ import {
   uploadProjectAttachment,
 } from "@/lib/api/hooks/use-project-attachments";
 import { useProjectTypes } from "@/lib/api/hooks/use-project-types";
-import {
-  updateProject,
-  useCreateProject,
-} from "@/lib/api/hooks/use-projects";
+import { updateProject, useCreateProject } from "@/lib/api/hooks/use-projects";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import type {
   CreateProjectDto,
@@ -75,35 +67,37 @@ interface ModuleRow {
   isNew: boolean;
 }
 
-/**
- * Full-page project creation flow. Previously a slide-in panel; broken out
- * to its own route since the form (plan/hub/module provisioning, staged
- * attachments) outgrew a sheet.
- */
-export default function NewProjectPage() {
-  const { workspace } = useParams<{ workspace: string }>();
-  const { can, isResolved } = usePermissions(workspace);
+/** Slide-in panel for creating a project — the projects list page's counterpart to EditProjectPanel. */
+export function NewProjectPanel({
+  open,
+  onOpenChange,
+  workspaceSlug,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceSlug: string;
+}) {
+  const { can } = usePermissions(workspaceSlug);
+  if (!can(PERMISSIONS.PROJECT_CREATE)) return null;
 
-  if (isResolved && !can(PERMISSIONS.PROJECT_CREATE)) {
-    return (
-      <PageContainer className="flex flex-col gap-6">
-        <PageHeader
-          title="New project"
-          description="Create and track a new project in this workspace."
-        />
-        <EmptyState
-          icon={Lock}
-          title="You don't have permission to create projects"
-          description="Ask a workspace owner or admin to grant you project.create access."
-        />
-      </PageContainer>
-    );
-  }
-
-  return <NewProjectForm workspaceSlug={workspace} />;
+  return (
+    <NewProjectForm
+      open={open}
+      onOpenChange={onOpenChange}
+      workspaceSlug={workspaceSlug}
+    />
+  );
 }
 
-function NewProjectForm({ workspaceSlug }: { workspaceSlug: string }) {
+function NewProjectForm({
+  open,
+  onOpenChange,
+  workspaceSlug,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  workspaceSlug: string;
+}) {
   const router = useRouter();
   const createProject = useCreateProject(workspaceSlug);
   const { data: typeData } = useProjectTypes(workspaceSlug);
@@ -444,27 +438,33 @@ function NewProjectForm({ workspaceSlug }: { workspaceSlug: string }) {
           }
         }
 
-        if (project?.id)
+        if (project?.id) {
+          onOpenChange(false);
           router.push(`/${workspaceSlug}/projects/${project.id}`);
+        }
       },
     });
   }
 
   return (
-    <PageContainer className="flex flex-col gap-6">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <PageHeader
-          title="New project"
-          description="Add a project and choose its project type."
-        />
-        <Button variant="outline" className="w-full sm:w-auto" asChild>
-          <Link href={`/${workspaceSlug}/projects`}>Cancel</Link>
-        </Button>
-      </div>
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent
+        side="right"
+        className="flex w-full flex-col gap-0 sm:max-w-[800px]"
+      >
+        <SheetHeader>
+          <SheetTitle className="text-base">New project</SheetTitle>
+          <SheetDescription>
+            Add a project and choose its project type.
+          </SheetDescription>
+        </SheetHeader>
 
-      <Card className="mx-auto w-full max-w-2xl">
-        <CardContent className="pt-6">
-          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4">
+        <form
+          onSubmit={handleSubmit}
+          noValidate
+          className="flex min-h-0 flex-1 flex-col"
+        >
+          <div className="flex flex-1 flex-col gap-4 overflow-y-auto p-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="project-name">Project name</Label>
               <Input
@@ -854,33 +854,37 @@ function NewProjectForm({ workspaceSlug }: { workspaceSlug: string }) {
                 {error}
               </p>
             ) : null}
+          </div>
 
-            <div className="flex justify-end gap-2 border-t border-border pt-4">
-              <Button variant="outline" type="button" asChild>
-                <Link href={`/${workspaceSlug}/projects`}>Cancel</Link>
-              </Button>
-              <Button
-                type="submit"
-                disabled={createProject.isPending || isUploadingFiles}
-              >
-                {createProject.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating…
-                  </>
-                ) : isUploadingFiles ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Uploading files…
-                  </>
-                ) : (
-                  "Create project"
-                )}
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-    </PageContainer>
+          <div className="flex justify-end gap-2 border-t border-border p-4">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => onOpenChange(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={createProject.isPending || isUploadingFiles}
+            >
+              {createProject.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Creating…
+                </>
+              ) : isUploadingFiles ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Uploading files…
+                </>
+              ) : (
+                "Create project"
+              )}
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
   );
 }

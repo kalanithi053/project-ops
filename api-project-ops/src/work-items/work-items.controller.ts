@@ -84,11 +84,16 @@ export class WorkspaceWorkItemsController {
   }
 
   private assertManagerRole(isManagerTier: boolean) {
-    if (!isManagerTier) {
-      throw new ForbiddenException(
-        'Your role is not set up for workspace-wide work items — enable it in Settings > Roles.',
-      );
-    }
+    assertManagerRole(isManagerTier);
+  }
+}
+
+/** Shared by both controllers below — see WorkspaceWorkItemsController.assertManagerRole. */
+function assertManagerRole(isManagerTier: boolean) {
+  if (!isManagerTier) {
+    throw new ForbiddenException(
+      'Your role is not set up for workspace-wide work items — enable it in Settings > Roles.',
+    );
   }
 }
 
@@ -119,6 +124,34 @@ export class WorkItemsController {
     @Body() dto: CreateWorkItemDto,
   ) {
     return this.workItems.create(ws.workspaceId, projectId, ws.userId, dto);
+  }
+
+  @Get('attention')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      'Every work item in this project needing attention, across every assignee — Owner/Admin/Client only',
+  })
+  getProjectAttentionItems(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+  ) {
+    assertManagerRole(ws.isManagerTier);
+    return this.workItems.getTeamAttentionItems(ws.workspaceId, projectId);
+  }
+
+  @Get('priority')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      'Every open work item in this project ranked by priority, across every assignee — Owner/Admin/Client only',
+  })
+  getProjectPriorityItems(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+  ) {
+    assertManagerRole(ws.isManagerTier);
+    return this.workItems.getTeamPriorityItems(ws.workspaceId, projectId);
   }
 
   @Get(':workItemId')

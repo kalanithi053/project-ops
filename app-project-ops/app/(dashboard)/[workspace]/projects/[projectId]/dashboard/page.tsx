@@ -30,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { TeamAttentionItemsCard } from "@/components/dashboard/team-attention-items-card";
+import { TeamPriorityItemsCard } from "@/components/dashboard/team-priority-items-card";
 import {
   useProjectMembers,
   useProjectPermissions,
@@ -38,6 +40,11 @@ import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useProjectReport } from "@/lib/api/hooks/use-project-report";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useTasks } from "@/lib/api/hooks/use-tasks";
+import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import {
+  useProjectAttentionItems,
+  useProjectPriorityItems,
+} from "@/lib/api/hooks/use-work-item-insights";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { formatDurationMinutes } from "@/lib/format";
 
@@ -61,6 +68,11 @@ export default function ProjectOverviewPage() {
   const membersQuery = useProjectMembers(workspace, projectId);
   const { data: settings } = useWorkspaceSettings(workspace);
   const { can } = useProjectPermissions(workspace, projectId);
+  const { isManagerTier: isManager } = usePermissions(workspace);
+  const { data: attentionData, isLoading: isAttentionLoading } =
+    useProjectAttentionItems(workspace, projectId, { enabled: isManager });
+  const { data: priorityData, isLoading: isPriorityLoading } =
+    useProjectPriorityItems(workspace, projectId, { enabled: isManager });
   const [editOpen, setEditOpen] = React.useState(false);
 
   const project = projectQuery.data;
@@ -195,6 +207,21 @@ export default function ProjectOverviewPage() {
             workspaceSlug={workspace}
             project={project}
           />
+        )}
+
+        {isManager && (
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <TeamAttentionItemsCard
+              workspaceSlug={workspace}
+              items={attentionData?.items ?? []}
+              isLoading={isAttentionLoading}
+            />
+            <TeamPriorityItemsCard
+              workspaceSlug={workspace}
+              items={priorityData?.items ?? []}
+              isLoading={isPriorityLoading}
+            />
+          </div>
         )}
 
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">

@@ -1,11 +1,10 @@
 "use client";
 
-import { Loader2, ShieldCheck, UserCheck, UserCog, UserPlus, Users } from "lucide-react";
+import { Loader2, UserPlus, X } from "lucide-react";
 import { useParams } from "next/navigation";
 import * as React from "react";
 
 import { PageContainer } from "@/components/layout/page-container";
-import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { DataTable } from "@/components/shared/data-table";
 import { FormPanel } from "@/components/shared/form-panel";
@@ -22,12 +21,21 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   useAddWorkspaceMember,
   useRemoveWorkspaceMember,
   useUpdateWorkspaceMember,
   useWorkspaceMembers,
 } from "@/lib/api/hooks/use-members";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
+import {
+  useRemoveProjectMembership,
+  useUpdateProjectMembership,
+} from "@/lib/api/hooks/use-project-members";
 import { useProjects } from "@/lib/api/hooks/use-projects";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { PERMISSIONS } from "@/lib/api/permissions";
@@ -62,6 +70,10 @@ function roleIdOf(m: WorkspaceMember): string | undefined {
   return m.role && typeof m.role !== "string" ? m.role.id : undefined;
 }
 
+function projectMemberships(m: WorkspaceMember) {
+  return memberUser(m).projectMembers ?? [];
+}
+
 export default function UsersPage() {
   const { workspace } = useParams<{ workspace: string }>();
   const { data, isLoading, isError, error, refetch } =
@@ -70,16 +82,17 @@ export default function UsersPage() {
   const { can } = usePermissions(workspace);
   const updateMember = useUpdateWorkspaceMember(workspace);
   const removeMember = useRemoveWorkspaceMember(workspace);
+  const removeProjectMembership = useRemoveProjectMembership(workspace);
+  const updateProjectMembership = useUpdateProjectMembership(workspace);
   const [open, setOpen] = React.useState(false);
   const [removing, setRemoving] = React.useState<WorkspaceMember | null>(null);
+  const [removingProject, setRemovingProject] = React.useState<{
+    memberId: string;
+    projectId: string;
+    projectName: string;
+    memberName: string;
+  } | null>(null);
   const members = data ?? [];
-
-  const activeCount = members.filter(
-    (m) => String(m.status ?? "").toLowerCase() === "active",
-  ).length;
-  const roleCount = new Set(
-    members.map((m) => roleName(m)).filter((name) => name !== "—"),
-  ).size;
 
   const canInvite = can(PERMISSIONS.MEMBER_INVITE);
   const canRemove = can(PERMISSIONS.MEMBER_REMOVE);
@@ -127,6 +140,90 @@ export default function UsersPage() {
               <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-muted-foreground" />
             )}
           </div>
+        );
+      },
+    },
+    {
+      key: "projects",
+      header: "Projects",
+      hideBelow: "md",
+      cell: (m) => {
+        const memberships = projectMemberships(m);
+        if (memberships.length === 0) {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        return (
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-7 text-xs">
+                {memberships.length} project
+                {memberships.length === 1 ? "" : "s"}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-72 p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                Project access for {memberName(m)}
+              </p>
+              <div className="flex flex-col gap-2">
+                {memberships.map((pm) => {
+                  const busy =
+                    updateProjectMembership.isPending &&
+                    updateProjectMembership.variables?.memberId === pm.id;
+                  return (
+                    <div key={pm.id} className="flex items-center gap-1.5">
+                      <span
+                        className="min-w-0 flex-1 truncate text-sm"
+                        title={pm.project?.name}
+                      >
+                        {pm.project?.name ?? "Project"}
+                      </span>
+                      {canInvite ? (
+                        <SelectField
+                          aria-label={`Role in ${pm.project?.name ?? "project"}`}
+                          options={roleOptions}
+                          value={pm.role?.id}
+                          onValueChange={(roleId) =>
+                            updateProjectMembership.mutate({
+                              projectId: pm.projectId,
+                              memberId: pm.id,
+                              dto: { roleId },
+                            })
+                          }
+                          placeholder="Select a role"
+                          disabled={busy}
+                          className="h-7 w-28 shrink-0 text-xs"
+                        />
+                      ) : (
+                        <span className="shrink-0 text-xs">
+                          {pm.role?.name ?? "—"}
+                        </span>
+                      )}
+                      {busy && (
+                        <Loader2 className="h-3 w-3 shrink-0 animate-spin text-muted-foreground" />
+                      )}
+                      {canRemove && (
+                        <button
+                          type="button"
+                          aria-label={`Remove from ${pm.project?.name ?? "project"}`}
+                          className="shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() =>
+                            setRemovingProject({
+                              memberId: pm.id,
+                              projectId: pm.projectId,
+                              projectName: pm.project?.name ?? "this project",
+                              memberName: memberName(m),
+                            })
+                          }
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
         );
       },
     },
@@ -179,50 +276,6 @@ export default function UsersPage() {
         )}
       </div>
 
-      <BentoGrid>
-        <BentoTile className="col-span-2 justify-between sm:col-span-2 sm:row-span-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              Total Users
-            </span>
-            <Users className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-3xl font-semibold">{members.length}</p>
-        </BentoTile>
-
-        <BentoTile>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              Active
-            </span>
-            <UserCheck className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-2xl font-semibold">{activeCount}</p>
-        </BentoTile>
-
-        <BentoTile>
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              Roles in use
-            </span>
-            <ShieldCheck className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-2xl font-semibold">{roleCount}</p>
-        </BentoTile>
-
-        <BentoTile className="col-span-2 sm:col-span-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-muted-foreground">
-              Other status
-            </span>
-            <UserCog className="h-4 w-4 text-muted-foreground" />
-          </div>
-          <p className="text-2xl font-semibold">
-            {members.length - activeCount}
-          </p>
-        </BentoTile>
-      </BentoGrid>
-
       <QueryState
         isLoading={isLoading}
         isError={isError}
@@ -261,6 +314,26 @@ export default function UsersPage() {
           removeMember.mutate(removing.id, {
             onSuccess: () => setRemoving(null),
           })
+        }
+      />
+
+      <ConfirmDialog
+        open={Boolean(removingProject)}
+        onOpenChange={(nextOpen) => !nextOpen && setRemovingProject(null)}
+        title={`Remove ${removingProject?.memberName ?? "this member"} from ${removingProject?.projectName ?? "this project"}?`}
+        description="They keep workspace access but lose access to this project."
+        confirmLabel="Remove from project"
+        destructive
+        pending={removeProjectMembership.isPending}
+        onConfirm={() =>
+          removingProject &&
+          removeProjectMembership.mutate(
+            {
+              projectId: removingProject.projectId,
+              memberId: removingProject.memberId,
+            },
+            { onSuccess: () => setRemovingProject(null) },
+          )
         }
       />
     </PageContainer>

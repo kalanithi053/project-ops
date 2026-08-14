@@ -18,6 +18,11 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
 import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
 
 export const SETTINGS_NAV_ICONS: Record<string, LucideIcon> = {
@@ -51,45 +56,43 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
 
   return (
     <nav aria-label="Settings sections">
-      <BentoGrid className="sm:grid-cols-3 lg:grid-cols-4">
+      <div className="flex flex-wrap gap-3">
         {visibleNav.map((item) => {
           const href = `${base}/${item.segment}`;
           const isActive = pathname === href || pathname.startsWith(`${href}/`);
           const Icon = SETTINGS_NAV_ICONS[item.segment];
 
           return (
-            <BentoTile key={item.segment} interactive className="p-0">
-              <Link
-                href={href}
-                aria-current={isActive ? "page" : undefined}
-                className={cn(
-                  "flex h-full items-center gap-2.5 rounded-2xl p-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                  isActive && "bg-accent",
-                )}
-              >
-                <span
-                  className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                    isActive
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-secondary text-secondary-foreground",
-                  )}
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5" />}
-                </span>
-                <span
-                  className={cn(
-                    "text-sm font-medium",
-                    isActive ? "text-accent-foreground" : "text-foreground",
-                  )}
-                >
-                  {item.label}
-                </span>
-              </Link>
-            </BentoTile>
+            <Tooltip key={item.segment}>
+              <TooltipTrigger asChild>
+                <BentoTile interactive className="w-auto p-0">
+                  <Link
+                    href={href}
+                    aria-current={isActive ? "page" : undefined}
+                    aria-label={item.label}
+                    className={cn(
+                      "flex h-12 w-12 items-center justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                      isActive && "bg-accent",
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
+                        isActive
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-secondary text-secondary-foreground",
+                      )}
+                    >
+                      {Icon && <Icon className="h-3.5 w-3.5" />}
+                    </span>
+                  </Link>
+                </BentoTile>
+              </TooltipTrigger>
+              <TooltipContent side="bottom">{item.label}</TooltipContent>
+            </Tooltip>
           );
         })}
-      </BentoGrid>
+      </div>
     </nav>
   );
 }

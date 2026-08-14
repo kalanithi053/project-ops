@@ -25,12 +25,14 @@ export default function SettingsLayout({
 
   return (
     <PageContainer className="flex flex-col gap-6">
-      <PageHeader
-        title="Settings"
-        description="Manage your workspace configuration, access control and project structure."
-      />
+      <div className="sticky top-0 z-30 -mx-4 flex flex-col gap-6 border-b border-border bg-background px-4 pb-4 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+        <PageHeader
+          title="Settings"
+          description="Manage your workspace configuration, access control and project structure."
+        />
 
-      <SettingsSidebar workspaceSlug={workspace} />
+        <SettingsSidebar workspaceSlug={workspace} />
+      </div>
       <div className="min-w-0 flex-1">{children}</div>
     </PageContainer>
   );

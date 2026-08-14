@@ -30,6 +30,18 @@ export class WorkspaceMembersService {
             email: true,
             firstName: true,
             lastName: true,
+            // Surfaced so the workspace Users page can revoke a single
+            // project's access without a trip to that project's own page.
+            projectMembers: {
+              where: { project: { workspaceId } },
+              select: {
+                id: true,
+                projectId: true,
+                status: true,
+                role: { select: { id: true, name: true } },
+                project: { select: { id: true, name: true } },
+              },
+            },
           },
         },
         role: { select: { id: true, name: true } },

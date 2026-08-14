@@ -85,3 +85,49 @@ export function useTeamPriorityItems(
     enabled: Boolean(token && workspaceSlug) && (options.enabled ?? true),
   });
 }
+
+/**
+ * GET /projects/:projectId/work-items/attention — every item in this
+ * project needing attention, across every assignee. Owner/Admin/Client
+ * only; see useTeamAttentionItems for the `enabled` gate.
+ */
+export function useProjectAttentionItems(
+  workspaceSlug: string,
+  projectId: string,
+  options: { enabled?: boolean } = {},
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ["work-items", "attention-project", workspaceSlug, projectId],
+    queryFn: () =>
+      apiFetch<TeamAttentionItemsResponse>(
+        `/projects/${projectId}/work-items/attention`,
+        { workspaceSlug },
+      ),
+    enabled:
+      Boolean(token && workspaceSlug && projectId) && (options.enabled ?? true),
+  });
+}
+
+/**
+ * GET /projects/:projectId/work-items/priority — every open top-priority
+ * item in this project, across every assignee. Owner/Admin/Client only;
+ * see useTeamAttentionItems for the `enabled` gate.
+ */
+export function useProjectPriorityItems(
+  workspaceSlug: string,
+  projectId: string,
+  options: { enabled?: boolean } = {},
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ["work-items", "priority-project", workspaceSlug, projectId],
+    queryFn: () =>
+      apiFetch<TeamPriorityItemsResponse>(
+        `/projects/${projectId}/work-items/priority`,
+        { workspaceSlug },
+      ),
+    enabled:
+      Boolean(token && workspaceSlug && projectId) && (options.enabled ?? true),
+  });
+}

@@ -131,6 +131,15 @@ export interface Role {
   [key: string]: unknown;
 }
 
+/** A user's membership of a single project, as embedded under a workspace member. */
+export interface ProjectMembershipSummary {
+  id: string;
+  projectId: string;
+  status?: MembershipStatus;
+  role?: { id: string; name: string };
+  project?: { id: string; name: string };
+}
+
 /** Nested user record embedded in a workspace member. */
 export interface MemberUser {
   id?: string;
@@ -138,6 +147,8 @@ export interface MemberUser {
   firstName?: string;
   lastName?: string;
   email?: string;
+  /** This user's project memberships within the current workspace. */
+  projectMembers?: ProjectMembershipSummary[];
   [key: string]: unknown;
 }
 

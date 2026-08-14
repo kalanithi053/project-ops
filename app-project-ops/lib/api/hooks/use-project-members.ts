@@ -188,3 +188,68 @@ export function useRemoveProjectMember(
     },
   });
 }
+
+/**
+ * Same PATCH /projects/:projectId/members/:memberId as
+ * {@link useUpdateProjectMember}, for callers — like the workspace Users
+ * page — that show memberships across several projects at once and only
+ * know which `projectId` to hit at the moment of the call.
+ */
+export function useUpdateProjectMembership(workspaceSlug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      memberId,
+      dto,
+    }: {
+      projectId: string;
+      memberId: string;
+      dto: UpdateProjectMemberDto;
+    }) =>
+      apiFetch<ProjectMember>(`/projects/${projectId}/members/${memberId}`, {
+        method: "PATCH",
+        body: dto,
+        workspaceSlug,
+      }),
+    onSuccess: (_data, { projectId }) => {
+      queryClient.invalidateQueries({
+        queryKey: projectMembersKey(workspaceSlug, projectId),
+      });
+      queryClient.invalidateQueries({ queryKey: ["members", workspaceSlug] });
+      toast.success("Member updated");
+    },
+  });
+}
+
+/**
+ * Same DELETE /projects/:projectId/members/:memberId as
+ * {@link useRemoveProjectMember}, for callers — like the workspace Users
+ * page — that show memberships across several projects at once and only
+ * know which `projectId` to hit at the moment of the call.
+ */
+export function useRemoveProjectMembership(workspaceSlug: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      projectId,
+      memberId,
+    }: {
+      projectId: string;
+      memberId: string;
+    }) =>
+      apiFetch<{ id: string; removed: boolean }>(
+        `/projects/${projectId}/members/${memberId}`,
+        { method: "DELETE", workspaceSlug },
+      ),
+    onSuccess: (_data, { projectId }) => {
+      queryClient.invalidateQueries({
+        queryKey: projectMembersKey(workspaceSlug, projectId),
+      });
+      // The workspace-wide member list embeds each user's project
+      // memberships, so it needs refreshing too.
+      queryClient.invalidateQueries({ queryKey: ["members", workspaceSlug] });
+      toast.success("Removed from project");
+    },
+  });
+}

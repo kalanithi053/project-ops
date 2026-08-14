@@ -468,11 +468,12 @@ export class WorkItemsService {
   }
 
   /**
-   * Every work item in the workspace that needs attention, across every
-   * assignee — the Owner/Admin/Client "team" view. Same overdue/due-soon/
-   * blocked rules as getAttentionItems, just without the assigneeId filter.
+   * Every work item in the workspace (optionally narrowed to one project)
+   * that needs attention, across every assignee — the Owner/Admin/Client
+   * "team" view. Same overdue/due-soon/blocked rules as getAttentionItems,
+   * just without the assigneeId filter.
    */
-  async getTeamAttentionItems(workspaceId: string) {
+  async getTeamAttentionItems(workspaceId: string, projectId?: string) {
     const now = new Date();
     const dueSoonCutoff = new Date(
       now.getTime() +
@@ -481,7 +482,7 @@ export class WorkItemsService {
 
     const items = await this.prisma.workItem.findMany({
       where: {
-        project: { workspaceId, deletedAt: null },
+        project: { workspaceId, deletedAt: null, ...(projectId && { id: projectId }) },
         status: { is: { category: { notIn: ['done', 'removed'] } } },
         OR: [
           { dueDate: { lte: dueSoonCutoff } },
@@ -556,16 +557,21 @@ export class WorkItemsService {
   }
 
   /**
-   * Every open work item in the workspace's top priority tiers, across
-   * every assignee — the Owner/Admin/Client "team" view of getPriorityItems.
+   * Every open work item in the workspace's (optionally one project's) top
+   * priority tiers, across every assignee — the Owner/Admin/Client "team"
+   * view of getPriorityItems.
    */
-  async getTeamPriorityItems(workspaceId: string, limit = 10) {
+  async getTeamPriorityItems(
+    workspaceId: string,
+    projectId?: string,
+    limit = 10,
+  ) {
     const topPriorityIds = await this.getTopPriorityIds(workspaceId);
     if (!topPriorityIds.length) return { total: 0, items: [] };
 
     const items = await this.prisma.workItem.findMany({
       where: {
-        project: { workspaceId, deletedAt: null },
+        project: { workspaceId, deletedAt: null, ...(projectId && { id: projectId }) },
         status: { is: { category: { notIn: ['done', 'removed'] } } },
         priorityId: { in: topPriorityIds },
       },

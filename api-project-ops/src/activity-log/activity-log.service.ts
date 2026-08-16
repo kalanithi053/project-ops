@@ -76,6 +76,53 @@ export class ActivityLogService {
     });
     if (logs.length === 0) return [];
 
+    return this.describeEntries(workspaceId, logs);
+  }
+
+  /**
+   * One page of a timeline, newest first (unlike getTimeline, which is
+   * oldest first), plus the total count so callers can tell whether more
+   * pages remain.
+   */
+  async getTimelinePage(
+    workspaceId: string,
+    entityId: string,
+    entityType: ActivityEntityType | undefined,
+    { skip, take }: { skip: number; take: number },
+  ) {
+    const where = { workspaceId, entityId, entityType };
+    const [logs, total] = await Promise.all([
+      this.prisma.activityLog.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          actor: {
+            select: { id: true, email: true, firstName: true, lastName: true },
+          },
+        },
+        skip,
+        take,
+      }),
+      this.prisma.activityLog.count({ where }),
+    ]);
+
+    const items = logs.length ? await this.describeEntries(workspaceId, logs) : [];
+    return { items, total };
+  }
+
+  /** Resolves lookups once for a batch of log rows and maps each to a described entry. */
+  private async describeEntries(
+    workspaceId: string,
+    logs: Array<{
+      id: string;
+      entityType: string;
+      entityId: string;
+      action: string;
+      actor: NamedUser | null;
+      createdAt: Date;
+      metadata: unknown;
+    }>,
+  ) {
     const lookups = await this.buildLookups(workspaceId, logs);
 
     return logs.map((entry) => {

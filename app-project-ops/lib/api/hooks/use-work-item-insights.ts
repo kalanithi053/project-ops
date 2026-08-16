@@ -131,3 +131,45 @@ export function useProjectPriorityItems(
       Boolean(token && workspaceSlug && projectId) && (options.enabled ?? true),
   });
 }
+
+/**
+ * GET /projects/:projectId/work-items/attention/mine — the caller's own
+ * overdue/due-soon/blocked items within this project only. The project
+ * dashboard's non-manager view of useAttentionItems, which is workspace-wide.
+ */
+export function useMyProjectAttentionItems(
+  workspaceSlug: string,
+  projectId: string,
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ["work-items", "attention-project-mine", workspaceSlug, projectId],
+    queryFn: () =>
+      apiFetch<AttentionItemsResponse>(
+        `/projects/${projectId}/work-items/attention/mine`,
+        { workspaceSlug },
+      ),
+    enabled: Boolean(token && workspaceSlug && projectId),
+  });
+}
+
+/**
+ * GET /projects/:projectId/work-items/priority/mine — the caller's own open
+ * top-priority items within this project only. The project dashboard's
+ * non-manager view of usePriorityItems, which is workspace-wide.
+ */
+export function useMyProjectPriorityItems(
+  workspaceSlug: string,
+  projectId: string,
+) {
+  const token = useAuthStore((state) => state.accessToken);
+  return useQuery({
+    queryKey: ["work-items", "priority-project-mine", workspaceSlug, projectId],
+    queryFn: () =>
+      apiFetch<PriorityItemsResponse>(
+        `/projects/${projectId}/work-items/priority/mine`,
+        { workspaceSlug },
+      ),
+    enabled: Boolean(token && workspaceSlug && projectId),
+  });
+}

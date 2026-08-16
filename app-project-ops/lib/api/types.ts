@@ -6,6 +6,7 @@
  */
 
 import type { ThemeMode } from "@/lib/store/theme-store";
+import type { AccentKey } from "@/lib/theme/accents";
 
 export interface Workspace {
   id: string;
@@ -834,6 +835,12 @@ export interface TaskActivityEntry {
   metadata?: Record<string, unknown> | null;
 }
 
+/** One page of a task's activity log, as returned by GET .../activity. */
+export interface TaskActivityPage {
+  items: TaskActivityEntry[];
+  total: number;
+}
+
 export interface TaskCommentUser {
   id: string;
   email: string;
@@ -1083,9 +1090,12 @@ export interface MyWorkspaceMembership {
   isDefault: boolean;
   /** The member's own display-theme preference. Self-service, unrestricted by role. */
   theme: ThemeMode;
+  /** The member's own accent color preference. Self-service, unrestricted by role. */
+  themeColor: AccentKey;
 }
 
 /** PATCH /workspace-members/me/theme */
 export interface UpdateMyThemeDto {
   theme: ThemeMode;
+  themeColor: AccentKey;
 }

@@ -21,6 +21,13 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
 import {
   Table,
@@ -30,6 +37,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ProjectSeverityCard } from "@/components/dashboard/project-severity-card";
 import { TeamAttentionItemsCard } from "@/components/dashboard/team-attention-items-card";
 import { TeamPriorityItemsCard } from "@/components/dashboard/team-priority-items-card";
 import {
@@ -40,19 +48,65 @@ import { useProject, useProjectModules } from "@/lib/api/hooks/use-projects";
 import { useProjectReport } from "@/lib/api/hooks/use-project-report";
 import { useWorkspaceSettings } from "@/lib/api/hooks/use-settings";
 import { useTasks } from "@/lib/api/hooks/use-tasks";
+import { useTicketStatuses } from "@/lib/api/hooks/use-ticket-statuses";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
 import {
+  useMyProjectAttentionItems,
+  useMyProjectPriorityItems,
   useProjectAttentionItems,
   useProjectPriorityItems,
 } from "@/lib/api/hooks/use-work-item-insights";
 import { PERMISSIONS } from "@/lib/api/permissions";
 import { formatDurationMinutes } from "@/lib/format";
+import { AttentionItemsCard } from "@/components/dashboard/attention-items-card";
+import { PriorityItemsCard } from "@/components/dashboard/priority-items-card";
 
 function daysBetween(start?: string, end?: string): number | null {
   if (!start || !end) return null;
   const ms = new Date(end).getTime() - new Date(start).getTime();
   if (Number.isNaN(ms)) return null;
   return Math.max(0, Math.round(ms / 86_400_000));
+}
+
+/** How many modules the card shows before collapsing the rest behind "Show all". */
+const MODULE_PREVIEW_COUNT = 3;
+
+interface ModuleUsage {
+  id: string;
+  module: string;
+  used: number;
+  limit: number;
+  addon: number;
+}
+
+/** One module's usage, as its own compact tile — used in the preview grid and the "show all" modal alike. */
+function ModuleCapacityCard({ module }: { module: ModuleUsage }) {
+  const pct = module.limit
+    ? Math.min(100, Math.round((module.used / module.limit) * 100))
+    : 0;
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-sm font-medium">{module.module}</span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {module.used} / {module.limit}
+        </span>
+      </div>
+      <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+        <div
+          className={
+            pct >= 100 ? "h-full bg-status-warning" : "h-full bg-status-info"
+          }
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {module.addon > 0 && (
+        <span className="text-xs text-status-warning">
+          +{module.addon} add-on
+        </span>
+      )}
+    </div>
+  );
 }
 
 export default function ProjectOverviewPage() {
@@ -67,14 +121,19 @@ export default function ProjectOverviewPage() {
   const reportQuery = useProjectReport(workspace, projectId);
   const membersQuery = useProjectMembers(workspace, projectId);
   const { data: settings } = useWorkspaceSettings(workspace);
+  const { data: ticketStatuses } = useTicketStatuses(workspace);
   const { can } = useProjectPermissions(workspace, projectId);
   const { isManagerTier: isManager } = usePermissions(workspace);
-  const { data: attentionData, isLoading: isAttentionLoading } =
+  const { data: attentionTeamData, isLoading: isAttentionTeamLoading } =
     useProjectAttentionItems(workspace, projectId, { enabled: isManager });
-  const { data: priorityData, isLoading: isPriorityLoading } =
+  const { data: priorityTeamData, isLoading: isPriorityTeamLoading } =
     useProjectPriorityItems(workspace, projectId, { enabled: isManager });
   const [editOpen, setEditOpen] = React.useState(false);
-
+  const [modulesModalOpen, setModulesModalOpen] = React.useState(false);
+  const { data: attentionData, isLoading: isAttentionLoading } =
+    useMyProjectAttentionItems(workspace, projectId);
+  const { data: priorityData, isLoading: isPriorityLoading } =
+    useMyProjectPriorityItems(workspace, projectId);
   const project = projectQuery.data;
   const tasks = React.useMemo(() => tasksQuery.data ?? [], [tasksQuery.data]);
   const members = React.useMemo(
@@ -91,7 +150,6 @@ export default function ProjectOverviewPage() {
     return map;
   }, [modulesQuery.data]);
 
-
   /**
    * Plan ids on the project resolved to hub-qualified labels via the
    * settings bundle — a bare tier name like "Enterprise" isn't unique on
@@ -102,12 +160,19 @@ export default function ProjectOverviewPage() {
     const ids = project?.planId ?? [];
     return ids.map((id) => {
       const plan = settings?.plans.find((p) => p.id === id);
-      const label = plan
-        ? `${plan.hub?.name ?? ""} ${plan.name}`.trim()
-        : id;
+      const label = plan ? `${plan.hub?.name ?? ""} ${plan.name}`.trim() : id;
       return { id, label };
     });
   }, [project, settings]);
+
+  /** The report's status breakdown only has names — resolve each to its id to link into the filtered work-items list. */
+  const statusIdByName = React.useMemo(() => {
+    const map = new Map<string, string>();
+    for (const status of ticketStatuses ?? []) {
+      map.set(status.name, status.id);
+    }
+    return map;
+  }, [ticketStatuses]);
 
   const duration = daysBetween(project?.startDate, project?.endDate);
   const report = reportQuery.data;
@@ -115,21 +180,32 @@ export default function ProjectOverviewPage() {
     () =>
       Array.from(
         new Set(
-          report?.byPriority.flatMap((entry) => Object.keys(entry.statuses)) ?? [],
+          report?.byPriority.flatMap((entry) => Object.keys(entry.statuses)) ??
+            [],
         ),
       ).sort(),
     [report],
   );
 
   const stats = [
-    { label: "Work items", value: String(report?.progress.totalItems ?? tasks.length), icon: ListChecks },
+    {
+      label: "Work items",
+      value: String(report?.progress.totalItems ?? tasks.length),
+      icon: ListChecks,
+    },
     {
       label: "Completed",
       value: report ? `${report.progress.percentComplete}%` : "—",
       icon: ListChecks,
-      hint: report ? `${report.progress.doneItems} of ${report.progress.totalItems} · ${report.progress.stage}` : undefined,
+      hint: report
+        ? `${report.progress.doneItems} of ${report.progress.totalItems} · ${report.progress.stage}`
+        : undefined,
     },
-    { label: "Modules", value: String(report?.modules.length ?? 0), icon: Boxes },
+    {
+      label: "Modules",
+      value: String(report?.modules.length ?? 0),
+      icon: Boxes,
+    },
     {
       label: "Members",
       value: String(members.filter((m) => m.status !== "removed").length),
@@ -153,6 +229,94 @@ export default function ProjectOverviewPage() {
         <div data-tour="project-stats">
           <StatsGrid stats={stats} />
         </div>
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          <ProjectSeverityCard endDate={project?.endDate} />
+          {isManager ? (
+            <>
+              <TeamAttentionItemsCard
+                workspaceSlug={workspace}
+                items={attentionTeamData?.items ?? []}
+                isLoading={isAttentionTeamLoading}
+              />
+              <TeamPriorityItemsCard
+                workspaceSlug={workspace}
+                items={priorityTeamData?.items ?? []}
+                isLoading={isPriorityTeamLoading}
+              />
+            </>
+          ) : (
+            <>
+              <AttentionItemsCard
+                workspaceSlug={workspace}
+                items={attentionData?.items ?? []}
+                isLoading={isAttentionLoading}
+              />
+              <PriorityItemsCard
+                workspaceSlug={workspace}
+                items={priorityData?.items ?? []}
+                isLoading={isPriorityLoading}
+              />
+            </>
+          )}
+        </div>
+
+        <Card data-tour="project-module-capacity">
+          <CardHeader>
+            <CardTitle>Module capacity</CardTitle>
+            <CardDescription>
+              Tasks filed under each module, against the limit this project
+              was provisioned with.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {report?.modules.length === 0 ? (
+              <EmptyState
+                icon={Boxes}
+                title="No modules"
+                description="This project type doesn't provision modules, so work items stand on their own."
+                className="border-0 py-6"
+              />
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {report?.modules
+                    .slice(0, MODULE_PREVIEW_COUNT)
+                    .map((module) => (
+                      <ModuleCapacityCard key={module.id} module={module} />
+                    ))}
+                </div>
+                {(report?.modules.length ?? 0) > MODULE_PREVIEW_COUNT && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => setModulesModalOpen(true)}
+                  >
+                    Show all modules ({report?.modules.length})
+                  </Button>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Dialog open={modulesModalOpen} onOpenChange={setModulesModalOpen}>
+          <DialogContent className="max-h-[80vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Module capacity</DialogTitle>
+              <DialogDescription>
+                Tasks filed under each module, against the limit this project
+                was provisioned with.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {report?.modules.map((module) => (
+                <ModuleCapacityCard key={module.id} module={module} />
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {planBadges.length > 0 && (
           <div className="flex flex-wrap items-center gap-2">
@@ -209,139 +373,63 @@ export default function ProjectOverviewPage() {
           />
         )}
 
-        {isManager && (
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <TeamAttentionItemsCard
-              workspaceSlug={workspace}
-              items={attentionData?.items ?? []}
-              isLoading={isAttentionLoading}
-            />
-            <TeamPriorityItemsCard
-              workspaceSlug={workspace}
-              items={priorityData?.items ?? []}
-              isLoading={isPriorityLoading}
-            />
-          </div>
-        )}
-
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2" data-tour="project-module-capacity">
+          <Card data-tour="project-work-by-type">
             <CardHeader>
-              <CardTitle>Module capacity</CardTitle>
+              <CardTitle>Work by type</CardTitle>
               <CardDescription>
-                Tasks filed under each module, against the limit this project
-                was provisioned with.
+                {report?.byType
+                  ?.map((v) => v.name)
+                  ?.join(", ")
+                  ?.trim() ?? "Work Type"}{" "}
+                counts.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              {report?.modules.length === 0 ? (
-                <EmptyState
-                  icon={Boxes}
-                  title="No modules"
-                  description="This project type doesn't provision modules, so work items stand on their own."
-                  className="border-0 py-6"
-                />
-              ) : (
-                <ul className="flex flex-col">
-                  {report?.modules.map((module, index) => {
-                    const pct = module.limit
-                      ? Math.min(
-                          100,
-                          Math.round((module.used / module.limit) * 100),
-                        )
-                      : 0;
-                    return (
-                      <li key={module.id} className="flex flex-col gap-1.5">
-                        {index > 0 && <Separator className="my-3" />}
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="truncate text-sm font-medium">
-                            {module.module}
-                          </span>
-                          <span className="shrink-0 text-xs text-muted-foreground">
-                            {module.used} / {module.limit}
-                            {module.addon > 0 && (
-                              <span className="ml-1.5 text-status-warning">
-                                +{module.addon} add-on
-                              </span>
-                            )}
-                          </span>
-                        </div>
-                        <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-                          <div
-                            className={
-                              pct >= 100
-                                ? "h-full bg-status-warning"
-                                : "h-full bg-status-info"
-                            }
-                            style={{ width: `${pct}%` }}
-                          />
-                        </div>
-                      </li>
-                    );
-                  })}
+              {report?.byType.length ? (
+                <ul className="flex flex-col gap-2.5">
+                  {report.byType.map((type) => (
+                    <li
+                      key={type.name}
+                      className="flex items-center justify-between gap-2"
+                    >
+                      <span className="inline-flex items-center gap-2 text-sm">
+                        <span
+                          className="h-2.5 w-2.5 rounded-full"
+                          style={{
+                            backgroundColor:
+                              type.color ?? "var(--status-neutral)",
+                          }}
+                        />
+                        {type.name}
+                      </span>
+                      <span className="text-sm font-medium">
+                        {type.total}
+                      </span>
+                    </li>
+                  ))}
                 </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No work has been reported yet.
+                </p>
               )}
             </CardContent>
           </Card>
-
-          <div className="flex flex-col gap-4">
-            <Card data-tour="project-work-by-type">
-              <CardHeader>
-                <CardTitle>Work by type</CardTitle>
-                <CardDescription>
-                  {report?.byType
-                    ?.map((v) => v.name)
-                    ?.join(", ")
-                    ?.trim() ?? "Work Type"}{" "}
-                  counts.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {report?.byType.length ? (
-                  <ul className="flex flex-col gap-2.5">
-                    {report.byType.map((type) => (
-                      <li
-                        key={type.name}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="inline-flex items-center gap-2 text-sm">
-                          <span
-                            className="h-2.5 w-2.5 rounded-full"
-                            style={{
-                              backgroundColor:
-                                type.color ?? "var(--status-neutral)",
-                            }}
-                          />
-                          {type.name}
-                        </span>
-                        <span className="text-sm font-medium">
-                          {type.total}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No work has been reported yet.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-            <Card data-tour="project-work-by-status">
-              <CardHeader>
-                <CardTitle>Work by status</CardTitle>
-                <CardDescription>
-                  Where the work currently sits.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="flex flex-col gap-3">
-                {!report ? null : (
-                  <ul className="flex flex-col gap-2.5">
-                    {report.statusBreakdown.map((status) => (
-                      <li
-                        key={status.name}
-                        className="flex items-center justify-between gap-2"
-                      >
+          <Card data-tour="project-work-by-status">
+            <CardHeader>
+              <CardTitle>Work by status</CardTitle>
+              <CardDescription>
+                Where the work currently sits.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {!report ? null : (
+                <ul className="flex flex-col gap-2.5">
+                  {report.statusBreakdown.map((status) => {
+                    const statusId = statusIdByName.get(status.name);
+                    const row = (
+                      <>
                         <span className="inline-flex items-center gap-2 text-sm">
                           <span
                             className="h-2.5 w-2.5 rounded-full"
@@ -355,60 +443,76 @@ export default function ProjectOverviewPage() {
                         <span className="text-sm font-medium">
                           {status.count}
                         </span>
+                      </>
+                    );
+                    return (
+                      <li key={status.name}>
+                        {statusId ? (
+                          <Link
+                            href={`/${workspace}/projects/${projectId}/work-items?statusId=${statusId}`}
+                            className="flex items-center justify-between gap-2 rounded-md -mx-1 px-1 py-0.5 transition-colors hover:bg-accent"
+                          >
+                            {row}
+                          </Link>
+                        ) : (
+                          <div className="flex items-center justify-between gap-2">
+                            {row}
+                          </div>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              {report?.progress.totalItems === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  No work has been reported yet.
+                </p>
+              )}
+
+              <Button asChild variant="outline" size="sm" className="mt-1">
+                <Link
+                  href={`/${workspace}/projects/${projectId}/work-items`}
+                  className="justify-center"
+                >
+                  <ListChecks className="h-4 w-4" />
+                  Open work items
+                </Link>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card data-tour="project-hours-logged">
+            <CardHeader>
+              <CardTitle>Hours logged</CardTitle>
+              <CardDescription>
+                Actual time tracked per member.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {report?.user.length ? (
+                <ul className="flex flex-col gap-2.5">
+                  {[...report.user]
+                    .sort((a, b) => b.loggedMinutes - a.loggedMinutes)
+                    .map((user) => (
+                      <li
+                        key={user.name}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="text-sm">{user.name}</span>
+                        <span className="text-sm font-medium">
+                          {formatDurationMinutes(user.loggedMinutes)}
+                        </span>
                       </li>
                     ))}
-                  </ul>
-                )}
-                {report?.progress.totalItems === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No work has been reported yet.
-                  </p>
-                )}
-
-                <Button asChild variant="outline" size="sm" className="mt-1">
-                  <Link
-                    href={`/${workspace}/projects/${projectId}/work-items`}
-                    className="justify-center"
-                  >
-                    <ListChecks className="h-4 w-4" />
-                    Open work items
-                  </Link>
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card data-tour="project-hours-logged">
-              <CardHeader>
-                <CardTitle>Hours logged</CardTitle>
-                <CardDescription>
-                  Actual time tracked per member.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {report?.user.length ? (
-                  <ul className="flex flex-col gap-2.5">
-                    {[...report.user]
-                      .sort((a, b) => b.loggedMinutes - a.loggedMinutes)
-                      .map((user) => (
-                        <li
-                          key={user.name}
-                          className="flex items-center justify-between gap-2"
-                        >
-                          <span className="text-sm">{user.name}</span>
-                          <span className="text-sm font-medium">
-                            {formatDurationMinutes(user.loggedMinutes)}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    No project members are available for time reporting.
-                  </p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+                </ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  No project members are available for time reporting.
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

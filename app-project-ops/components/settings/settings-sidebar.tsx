@@ -1,29 +1,13 @@
 "use client";
 
-import {
-  Building2,
-  CreditCard,
-  FolderKanban,
-  Flag,
-  Layers,
-  ListChecks,
-  ShieldCheck,
-  SlidersHorizontal,
-  UserCircle,
-  type LucideIcon,
-} from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import { cn } from "@/lib/utils";
 import { SETTINGS_NAV } from "@/components/settings/settings-nav";
-import { BentoGrid, BentoTile } from "@/components/shared/bento-grid";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { useIsWorkspaceOwner } from "@/lib/api/hooks/use-workspace-owner";
+import { Building2, CreditCard, Flag, FolderKanban, Layers, ListChecks, LucideIcon, ShieldCheck, SlidersHorizontal, UserCircle } from "lucide-react";
+
 
 export const SETTINGS_NAV_ICONS: Record<string, LucideIcon> = {
   workspace: Building2,
@@ -38,8 +22,12 @@ export const SETTINGS_NAV_ICONS: Record<string, LucideIcon> = {
 };
 
 /**
- * Settings sub-navigation, rendered as a bento tile grid so each section
- * reads as its own destination rather than a row in a list.
+ * Settings sub-navigation rail.
+ *
+ * A vertical list on desktop; on narrow viewports it becomes a horizontally
+ * scrollable strip so all seven sections stay reachable without a second
+ * disclosure layer. Active detection matches the section prefix so nested
+ * routes (a plan's module editor, say) keep their parent highlighted.
  *
  * `ownerOnly` items are hidden until we've resolved that the viewer *is* the
  * owner — never shown-then-yanked for a non-owner, and briefly absent for
@@ -55,44 +43,37 @@ export function SettingsSidebar({ workspaceSlug }: { workspaceSlug: string }) {
   );
 
   return (
-    <nav aria-label="Settings sections">
-      <div className="flex flex-wrap gap-3">
-        {visibleNav.map((item) => {
-          const href = `${base}/${item.segment}`;
-          const isActive = pathname === href || pathname.startsWith(`${href}/`);
-          const Icon = SETTINGS_NAV_ICONS[item.segment];
+    <nav
+      aria-label="Settings sections"
+      className={cn(
+        "flex gap-1 overflow-x-auto border-b border-border pb-0",
+        "md:w-52 md:shrink-0 md:flex-col md:overflow-visible md:border-r md:border-b-0 md:pb-0",
+        "md:sticky md:top-20 md:self-start",
+      )}
+    >
+      {visibleNav.map((item) => {
+        const href = `${base}/${item.segment}`;
+        const isActive = pathname === href || pathname.startsWith(`${href}/`);
 
-          return (
-            <Tooltip key={item.segment}>
-              <TooltipTrigger asChild>
-                <BentoTile interactive className="w-auto p-0">
-                  <Link
-                    href={href}
-                    aria-current={isActive ? "page" : undefined}
-                    aria-label={item.label}
-                    className={cn(
-                      "flex h-12 w-12 items-center justify-center rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                      isActive && "bg-accent",
-                    )}
-                  >
-                    <span
-                      className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md",
-                        isActive
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-secondary text-secondary-foreground",
-                      )}
-                    >
-                      {Icon && <Icon className="h-3.5 w-3.5" />}
-                    </span>
-                  </Link>
-                </BentoTile>
-              </TooltipTrigger>
-              <TooltipContent side="bottom">{item.label}</TooltipContent>
-            </Tooltip>
-          );
-        })}
-      </div>
+        return (
+          <Link
+            key={item.segment}
+            href={href}
+            aria-current={isActive ? "page" : undefined}
+            className={cn(
+              "shrink-0 whitespace-nowrap rounded-t-md border-b-2 border-transparent px-3 py-2 text-sm font-medium transition-colors",
+              "md:-mr-px md:rounded-l-md md:rounded-r-none md:border-r-2 md:border-b-0",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              isActive
+                ? "border-primary bg-accent text-accent-foreground"
+                : "text-muted-foreground hover:bg-accent/60 hover:text-foreground",
+            )}
+          >
+            {item.label}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
+

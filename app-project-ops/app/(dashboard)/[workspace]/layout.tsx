@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { AuthGuard } from "@/components/auth/auth-guard";
 import { TenantProvider } from "@/lib/tenant/tenant-context";
 import { WorkspaceShell } from "@/components/layout/workspace-shell";
+import { MembershipThemeSync } from "@/components/providers/membership-theme-sync";
 import { WorkspacePrefetcher } from "@/components/providers/workspace-prefetcher";
 
 /**
@@ -27,6 +28,7 @@ export default function WorkspaceLayout({
     <AuthGuard>
       <TenantProvider slug={workspace}>
         <WorkspacePrefetcher slug={workspace} />
+        <MembershipThemeSync slug={workspace} />
         <WorkspaceShell>{children}</WorkspaceShell>
       </TenantProvider>
     </AuthGuard>

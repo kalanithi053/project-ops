@@ -391,10 +391,20 @@ export class WorkItemsService {
     return { id, deleted: true };
   }
 
-  /** Activity log entries for one work item, oldest first. */
-  async getActivity(workspaceId: string, projectId: string, id: string) {
+  /** One page of activity log entries for a work item, newest first. */
+  async getActivity(
+    workspaceId: string,
+    projectId: string,
+    id: string,
+    pagination: { page?: number; limit?: number } = {},
+  ) {
     await this.getWorkItem(workspaceId, projectId, id);
-    return this.activityLog.getTimeline(workspaceId, id);
+    const limit = pagination.limit ?? 10;
+    const page = pagination.page ?? 1;
+    return this.activityLog.getTimelinePage(workspaceId, id, undefined, {
+      skip: (page - 1) * limit,
+      take: limit,
+    });
   }
 
   /** Work items due within this many days count as "due soon" rather than merely on the radar. */
@@ -428,8 +438,13 @@ export class WorkItemsService {
    * due soon, or blocked — excluding anything already done/removed.
    * Sorted so the most overdue items lead, blocked-but-not-yet-due last
    * (Postgres' default ASC ordering already puts null due dates last).
+   * Optionally narrowed to one project (the project dashboard's own view).
    */
-  async getAttentionItems(workspaceId: string, userId: string) {
+  async getAttentionItems(
+    workspaceId: string,
+    userId: string,
+    projectId?: string,
+  ) {
     const now = new Date();
     const dueSoonCutoff = new Date(
       now.getTime() +
@@ -439,7 +454,7 @@ export class WorkItemsService {
     const items = await this.prisma.workItem.findMany({
       where: {
         assigneeId: userId,
-        project: { workspaceId, deletedAt: null },
+        project: { workspaceId, deletedAt: null, ...(projectId && { id: projectId }) },
         status: { is: { category: { notIn: ['done', 'removed'] } } },
         OR: [
           { dueDate: { lte: dueSoonCutoff } },
@@ -528,16 +543,22 @@ export class WorkItemsService {
    * first, then due date. Powers the dashboard's priority list. Fetched
    * unsorted-by-DB and ranked in JS since a per-user backlog is small and
    * "no due date" needs to sort last, which Postgres' default null
-   * placement won't do consistently across ASC and DESC.
+   * placement won't do consistently across ASC and DESC. Optionally
+   * narrowed to one project (the project dashboard's own view).
    */
-  async getPriorityItems(workspaceId: string, userId: string, limit = 10) {
+  async getPriorityItems(
+    workspaceId: string,
+    userId: string,
+    limit = 10,
+    projectId?: string,
+  ) {
     const topPriorityIds = await this.getTopPriorityIds(workspaceId);
     if (!topPriorityIds.length) return { total: 0, items: [] };
 
     const items = await this.prisma.workItem.findMany({
       where: {
         assigneeId: userId,
-        project: { workspaceId, deletedAt: null },
+        project: { workspaceId, deletedAt: null, ...(projectId && { id: projectId }) },
         status: { is: { category: { notIn: ['done', 'removed'] } } },
         priorityId: { in: topPriorityIds },
       },

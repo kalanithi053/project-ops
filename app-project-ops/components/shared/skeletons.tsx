@@ -73,6 +73,32 @@ export function ListSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
+/** Timeline placeholder matching <TaskActivity>'s avatar + connector-line rows. */
+export function ActivitySkeleton({ rows = 3 }: { rows?: number }) {
+  return (
+    <ol className="flex flex-col">
+      {Array.from({ length: rows }).map((_, index) => (
+        <li key={index} className="relative flex gap-3 pb-4 last:pb-0">
+          {index < rows - 1 && (
+            <span
+              className="absolute bottom-0 left-3.5 top-7 w-px bg-border"
+              aria-hidden
+            />
+          )}
+          <Skeleton className="relative z-10 h-7 w-7 shrink-0 rounded-full" />
+          <div className="min-w-0 flex-1 pt-0.5">
+            <Skeleton
+              className="h-4"
+              style={{ width: `${70 - index * 10}%` }}
+            />
+            <Skeleton className="mt-1.5 h-3 w-20" />
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Grid of card placeholders (teams, dashboards). */
 export function CardsSkeleton({ count = 2 }: { count?: number }) {
   return (
@@ -190,24 +216,76 @@ function OverviewCardSkeleton({ rows = 3 }: { rows?: number }) {
   );
 }
 
+/** Placeholder for <ProjectSeverityCard> — a semi-circle silhouette instead of body rows. */
+function GaugeCardSkeleton() {
+  return (
+    <Card>
+      <CardHeader className="gap-2">
+        <Skeleton className="h-5 w-28" />
+        <Skeleton className="h-3.5 w-44" />
+      </CardHeader>
+      <CardContent className="flex flex-col items-center gap-3">
+        <Skeleton className="h-[100px] w-full max-w-[220px] rounded-t-full" />
+        <Skeleton className="h-5 w-20 rounded-full" />
+        <Skeleton className="h-3 w-16" />
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Placeholder for <ModuleCapacityCard>'s tile — used inside the module-capacity grid skeleton below. */
+function ModuleTileSkeleton() {
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-3 w-10" />
+      </div>
+      <Skeleton className="h-2 w-full rounded-full" />
+    </div>
+  );
+}
+
+/** Placeholder for the "Module capacity" section — a card of module tiles, not body rows. */
+function ModuleCapacitySkeleton() {
+  return (
+    <Card>
+      <CardHeader className="gap-2">
+        <Skeleton className="h-5 w-36" />
+        <Skeleton className="h-3.5 w-64" />
+      </CardHeader>
+      <CardContent>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <ModuleTileSkeleton />
+          <ModuleTileSkeleton />
+          <ModuleTileSkeleton />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 /**
- * Matches the project overview page's real layout exactly: a stats row,
- * then the module-capacity / work-by-type / work-by-status grid, then the
- * priority / team-workload grid, then recent activity — six card sections
- * in total, not the generic two-card `CardsSkeleton` this page used to show.
+ * Matches the project overview page's real layout: a stats row, then the
+ * health/attention/priority row, the module-capacity card, the description
+ * card, the work-by-type / work-by-status / hours-logged row, the priority /
+ * team-workload grid, and finally recent activity.
  */
 export function ProjectOverviewSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <StatsSkeleton count={4} />
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <GaugeCardSkeleton />
+        <OverviewCardSkeleton rows={3} />
+        <OverviewCardSkeleton rows={3} />
+      </div>
+      <ModuleCapacitySkeleton />
+      <OverviewCardSkeleton rows={3} />
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <OverviewCardSkeleton rows={4} />
-        </div>
-        <div className="flex flex-col gap-4">
-          <OverviewCardSkeleton rows={3} />
-          <OverviewCardSkeleton rows={3} />
-        </div>
+        <OverviewCardSkeleton rows={3} />
+        <OverviewCardSkeleton rows={3} />
+        <OverviewCardSkeleton rows={3} />
       </div>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         <OverviewCardSkeleton rows={4} />

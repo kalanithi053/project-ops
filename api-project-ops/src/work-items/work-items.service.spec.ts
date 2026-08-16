@@ -57,6 +57,7 @@ describe('WorkItemsService', () => {
   const mockActivityLog = {
     log: jest.fn(),
     getTimeline: jest.fn(),
+    getTimelinePage: jest.fn(),
   };
 
   const mockMail = {
@@ -859,11 +860,11 @@ describe('WorkItemsService', () => {
   });
 
   describe('getActivity', () => {
-    it('delegates to activityLog.getTimeline by workspace and id', async () => {
+    it('delegates to activityLog.getTimelinePage with default paging', async () => {
       mockPrismaService.project.findFirst.mockResolvedValue(project);
       mockPrismaService.workItem.findFirst.mockResolvedValue(makeWorkItem());
-      const timeline = [{ id: 'log-1', action: 'created' }];
-      mockActivityLog.getTimeline.mockResolvedValue(timeline);
+      const page = { items: [{ id: 'log-1', action: 'created' }], total: 1 };
+      mockActivityLog.getTimelinePage.mockResolvedValue(page);
 
       const result = await service.getActivity(
         workspaceId,
@@ -871,11 +872,34 @@ describe('WorkItemsService', () => {
         workItemId,
       );
 
-      expect(mockActivityLog.getTimeline).toHaveBeenCalledWith(
+      expect(mockActivityLog.getTimelinePage).toHaveBeenCalledWith(
         workspaceId,
         workItemId,
+        undefined,
+        { skip: 0, take: 10 },
       );
-      expect(result).toEqual(timeline);
+      expect(result).toEqual(page);
+    });
+
+    it('translates page/limit into skip/take', async () => {
+      mockPrismaService.project.findFirst.mockResolvedValue(project);
+      mockPrismaService.workItem.findFirst.mockResolvedValue(makeWorkItem());
+      mockActivityLog.getTimelinePage.mockResolvedValue({
+        items: [],
+        total: 0,
+      });
+
+      await service.getActivity(workspaceId, projectId, workItemId, {
+        page: 3,
+        limit: 5,
+      });
+
+      expect(mockActivityLog.getTimelinePage).toHaveBeenCalledWith(
+        workspaceId,
+        workItemId,
+        undefined,
+        { skip: 10, take: 5 },
+      );
     });
 
     it('throws NotFoundException when the work item does not exist', async () => {
@@ -885,7 +909,7 @@ describe('WorkItemsService', () => {
       await expect(
         service.getActivity(workspaceId, projectId, 'missing'),
       ).rejects.toThrow(NotFoundException);
-      expect(mockActivityLog.getTimeline).not.toHaveBeenCalled();
+      expect(mockActivityLog.getTimelinePage).not.toHaveBeenCalled();
     });
   });
 

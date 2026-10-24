@@ -17,7 +17,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { usePermissions } from "@/lib/api/hooks/use-permissions";
-import { useMyMembership, useUpdateMyTheme } from "@/lib/api/hooks/use-my-membership";
+import { useUpdateMyTheme } from "@/lib/api/hooks/use-my-membership";
 import {
   useUpdateWorkspacePreferences,
   useWorkspaceSettings,
@@ -55,7 +55,7 @@ export default function PreferencesSettingsPage() {
     <div className="flex flex-col gap-8">
       <SettingsSection
         title="Appearance"
-        description="Personalize how ProjectOps looks for you. Theme is remembered for you on this workspace; date format and accent are saved to this browser only."
+        description="Personalize how ProjectOps looks for you. Theme and accent are remembered for you on this workspace; date format is saved to this browser only."
       >
         <AppearanceCard workspaceSlug={workspace} />
       </SettingsSection>
@@ -101,14 +101,14 @@ const DATE_FORMAT_OPTIONS: { value: DateFormat; label: string }[] = [
 ];
 
 /**
- * Theme mode is synced to the member's own `workspace_member` row (any
- * active member may read/set their own, regardless of role) so it follows
- * them back to this workspace on another device. Date format and accent
- * stay purely local — they were never part of this request and have no
- * server model of their own.
+ * Theme mode and accent are synced to the member's own `workspace_member`
+ * row (any active member may read/set their own, regardless of role) so
+ * they follow the member back to this workspace on another device — the
+ * initial pull-down happens once per workspace in MembershipThemeSync,
+ * mounted at the workspace layout level. Date format stays purely local —
+ * it was never part of this request and has no server model of its own.
  */
 function AppearanceCard({ workspaceSlug }: { workspaceSlug: string }) {
-  const { data: membership } = useMyMembership(workspaceSlug);
   const updateTheme = useUpdateMyTheme(workspaceSlug);
 
   const mode = useThemeStore((state) => state.mode);
@@ -118,24 +118,15 @@ function AppearanceCard({ workspaceSlug }: { workspaceSlug: string }) {
   const setAccent = useThemeStore((state) => state.setAccent);
   const setDateFormat = useThemeStore((state) => state.setDateFormat);
 
-  // Pull the server-remembered theme down into this device's local store
-  // once it loads (e.g. first visit on a new browser).
-  const syncedFor = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    if (!membership || syncedFor.current === workspaceSlug) return;
-    syncedFor.current = workspaceSlug;
-    if (membership.theme !== mode) setMode(membership.theme);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [membership, workspaceSlug]);
-
   function handleMode(next: ThemeMode) {
     setMode(next);
-    updateTheme.mutate({ theme: next });
+    updateTheme.mutate({ theme: next, themeColor: accent });
     toast.success("Appearance updated", `Theme set to ${next}`);
   }
 
   function handleAccent(next: AccentKey) {
     setAccent(next);
+    updateTheme.mutate({ theme: mode, themeColor: next });
     toast.success("Appearance updated", `Accent set to ${ACCENT_PRESETS[next].label}`);
   }
 

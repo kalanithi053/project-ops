@@ -25,12 +25,12 @@ export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
       mode: "system",
-      accent: "neutral",
+      accent: "blue",
       dateFormat: "utc",
       setMode: (mode) => set({ mode }),
       setAccent: (accent) => set({ accent }),
       setDateFormat: (dateFormat) => set({ dateFormat }),
-      reset: () => set({ mode: "system", accent: "neutral", dateFormat: "utc" }),
+      reset: () => set({ mode: "system", accent: "blue", dateFormat: "utc" }),
     }),
     { name: "projectops.theme" },
   ),

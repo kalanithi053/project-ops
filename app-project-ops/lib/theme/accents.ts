@@ -1,19 +1,21 @@
 /**
  * Accent color presets for the Preferences screen. Each preset overrides
  * `--primary` / `--primary-foreground` / `--ring` (and the sidebar
- * equivalents) for light and dark mode. "Neutral" is the app's original
- * palette (defined in globals.css) and needs no overrides — selecting it
- * clears any previously-applied accent.
+ * equivalents) for light and dark mode.
+ *
+ * Keys and order mirror the backend's `ThemeColor` enum exactly, so a
+ * value round-trips through PATCH /workspace-members/me/theme unchanged.
  */
 
 export type AccentKey =
-  | "neutral"
   | "blue"
-  | "violet"
   | "green"
-  | "orange"
+  | "purple"
   | "red"
-  | "rose";
+  | "orange"
+  | "pink"
+  | "gray"
+  | "yellow";
 
 interface AccentTokens {
   primary: string;
@@ -25,16 +27,11 @@ interface AccentPreset {
   label: string;
   /** Swatch color shown in the picker (light-mode primary). */
   swatch: string;
-  light?: AccentTokens;
-  dark?: AccentTokens;
+  light: AccentTokens;
+  dark: AccentTokens;
 }
 
 export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
-  neutral: {
-    label: "Neutral",
-    swatch: "oklch(0.205 0 0)",
-    // No overrides — falls back to the base tokens in globals.css.
-  },
   blue: {
     label: "Blue",
     swatch: "oklch(0.55 0.18 250)",
@@ -47,20 +44,6 @@ export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
       primary: "oklch(0.72 0.15 250)",
       primaryForeground: "oklch(0.145 0 0)",
       ring: "oklch(0.6 0.15 250)",
-    },
-  },
-  violet: {
-    label: "Violet",
-    swatch: "oklch(0.5 0.22 300)",
-    light: {
-      primary: "oklch(0.5 0.22 300)",
-      primaryForeground: "oklch(0.985 0 0)",
-      ring: "oklch(0.6 0.18 300)",
-    },
-    dark: {
-      primary: "oklch(0.74 0.16 300)",
-      primaryForeground: "oklch(0.145 0 0)",
-      ring: "oklch(0.6 0.18 300)",
     },
   },
   green: {
@@ -77,18 +60,18 @@ export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
       ring: "oklch(0.62 0.15 149)",
     },
   },
-  orange: {
-    label: "Orange",
-    swatch: "oklch(0.62 0.19 50)",
+  purple: {
+    label: "Purple",
+    swatch: "oklch(0.5 0.22 300)",
     light: {
-      primary: "oklch(0.62 0.19 50)",
-      primaryForeground: "oklch(0.145 0 0)",
-      ring: "oklch(0.68 0.16 50)",
+      primary: "oklch(0.5 0.22 300)",
+      primaryForeground: "oklch(0.985 0 0)",
+      ring: "oklch(0.6 0.18 300)",
     },
     dark: {
-      primary: "oklch(0.75 0.17 55)",
+      primary: "oklch(0.74 0.16 300)",
       primaryForeground: "oklch(0.145 0 0)",
-      ring: "oklch(0.68 0.16 50)",
+      ring: "oklch(0.6 0.18 300)",
     },
   },
   red: {
@@ -105,8 +88,22 @@ export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
       ring: "oklch(0.62 0.18 27)",
     },
   },
-  rose: {
-    label: "Rose",
+  orange: {
+    label: "Orange",
+    swatch: "oklch(0.62 0.19 50)",
+    light: {
+      primary: "oklch(0.62 0.19 50)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.68 0.16 50)",
+    },
+    dark: {
+      primary: "oklch(0.75 0.17 55)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.68 0.16 50)",
+    },
+  },
+  pink: {
+    label: "Pink",
     swatch: "oklch(0.58 0.2 20)",
     light: {
       primary: "oklch(0.58 0.2 20)",
@@ -119,27 +116,47 @@ export const ACCENT_PRESETS: Record<AccentKey, AccentPreset> = {
       ring: "oklch(0.64 0.17 20)",
     },
   },
+  gray: {
+    label: "Gray",
+    swatch: "oklch(0.4 0 0)",
+    light: {
+      primary: "oklch(0.4 0 0)",
+      primaryForeground: "oklch(0.985 0 0)",
+      ring: "oklch(0.55 0 0)",
+    },
+    dark: {
+      primary: "oklch(0.75 0 0)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.55 0 0)",
+    },
+  },
+  yellow: {
+    label: "Yellow",
+    swatch: "oklch(0.75 0.15 90)",
+    light: {
+      primary: "oklch(0.75 0.15 90)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.8 0.13 90)",
+    },
+    dark: {
+      primary: "oklch(0.8 0.14 90)",
+      primaryForeground: "oklch(0.145 0 0)",
+      ring: "oklch(0.8 0.13 90)",
+    },
+  },
 };
 
 export const ACCENT_KEYS = Object.keys(ACCENT_PRESETS) as AccentKey[];
 
-/** Applies (or clears) an accent's CSS variable overrides on <html>. */
+/** Applies an accent's CSS variable overrides on <html>. */
 export function applyAccent(accent: AccentKey, isDark: boolean) {
   const root = document.documentElement;
-  const preset = ACCENT_PRESETS[accent];
-  const tokens = isDark ? preset.dark : preset.light;
+  const tokens = ACCENT_PRESETS?.[accent]?.[isDark ? "dark" : "light"] ?? ACCENT_PRESETS.blue.light;
 
-  const vars: [string, string | undefined][] = [
-    ["--primary", tokens?.primary],
-    ["--primary-foreground", tokens?.primaryForeground],
-    ["--ring", tokens?.ring],
-    ["--sidebar-primary", tokens?.primary],
-    ["--sidebar-primary-foreground", tokens?.primaryForeground],
-    ["--sidebar-ring", tokens?.ring],
-  ];
-
-  for (const [name, value] of vars) {
-    if (value) root.style.setProperty(name, value);
-    else root.style.removeProperty(name);
-  }
+  root.style.setProperty("--primary", tokens.primary);
+  root.style.setProperty("--primary-foreground", tokens.primaryForeground);
+  root.style.setProperty("--ring", tokens.ring);
+  root.style.setProperty("--sidebar-primary", tokens.primary);
+  root.style.setProperty("--sidebar-primary-foreground", tokens.primaryForeground);
+  root.style.setProperty("--sidebar-ring", tokens.ring);
 }

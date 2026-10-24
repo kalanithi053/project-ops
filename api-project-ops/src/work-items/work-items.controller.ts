@@ -23,6 +23,7 @@ import { WorkItemsService } from './work-items.service';
 import { CreateWorkItemDto } from './dto/create-work-item.dto';
 import { UpdateWorkItemDto } from './dto/update-work-item.dto';
 import { ListWorkItemsQueryDto } from './dto/list-work-items.dto';
+import { ListActivityQueryDto } from './dto/list-activity-query.dto';
 
 @ApiTags('work-items')
 @ApiBearerAuth()
@@ -154,6 +155,41 @@ export class WorkItemsController {
     return this.workItems.getTeamPriorityItems(ws.workspaceId, projectId);
   }
 
+  @Get('attention/mine')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      "The caller's own work items in this project needing attention: overdue, due soon, or blocked",
+  })
+  getMyProjectAttentionItems(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+  ) {
+    return this.workItems.getAttentionItems(
+      ws.workspaceId,
+      ws.userId,
+      projectId,
+    );
+  }
+
+  @Get('priority/mine')
+  @RequirePermission(PERMISSIONS.WORKITEM_READ)
+  @ApiOperation({
+    summary:
+      "The caller's own open work items in this project ranked by priority",
+  })
+  getMyProjectPriorityItems(
+    @CurrentWorkspace() ws: WorkspaceContext,
+    @Param('projectId') projectId: string,
+  ) {
+    return this.workItems.getPriorityItems(
+      ws.workspaceId,
+      ws.userId,
+      10,
+      projectId,
+    );
+  }
+
   @Get(':workItemId')
   @RequirePermission(PERMISSIONS.WORKITEM_READ)
   @ApiOperation({ summary: 'Get a work item' })
@@ -196,13 +232,19 @@ export class WorkItemsController {
 
   @Get(':workItemId/activity')
   @RequirePermission(PERMISSIONS.WORKITEM_READ)
-  @ApiOperation({ summary: "Get a work item's activity log" })
+  @ApiOperation({ summary: "Get a page of a work item's activity log" })
   getActivity(
     @CurrentWorkspace('workspaceId') workspaceId: string,
     @Param('projectId') projectId: string,
     @Param('workItemId') workItemId: string,
+    @Query() query: ListActivityQueryDto,
   ) {
-    return this.workItems.getActivity(workspaceId, projectId, workItemId);
+    return this.workItems.getActivity(
+      workspaceId,
+      projectId,
+      workItemId,
+      query,
+    );
   }
 
   @Post(':workItemId/notify')

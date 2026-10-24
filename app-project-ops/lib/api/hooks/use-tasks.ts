@@ -2,13 +2,18 @@
 
 import * as React from "react";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
 import type {
   CreateTaskDto,
   Task,
-  TaskActivityEntry,
+  TaskActivityPage,
   TaskStatusRef,
   UpdateTaskDto,
   WorkTypeCategory,
@@ -97,20 +102,32 @@ export function taskActivityKey(
   return ["task-activity", workspaceSlug, projectId, taskId] as const;
 }
 
-/** GET /projects/:projectId/tasks/:taskId/activity — oldest first. */
+/** Entries per page for useTaskActivity's infinite scroll. */
+export const TASK_ACTIVITY_PAGE_SIZE = 10;
+
+/**
+ * GET /projects/:projectId/tasks/:taskId/activity — newest first, paginated
+ * 10 at a time. Call `fetchNextPage()` (e.g. from a scroll sentinel) to load
+ * the next (older) page; `data.pages` is the ordered list of fetched pages.
+ */
 export function useTaskActivity(
   workspaceSlug: string,
   projectId: string,
   taskId?: string,
 ) {
   const token = useAuthStore((state) => state.accessToken);
-  return useQuery({
+  return useInfiniteQuery({
     queryKey: taskActivityKey(workspaceSlug, projectId, taskId ?? ""),
-    queryFn: () =>
-      apiFetch<TaskActivityEntry[]>(
-        `/projects/${projectId}/work-items/${taskId}/activity`,
+    queryFn: ({ pageParam }) =>
+      apiFetch<TaskActivityPage>(
+        `/projects/${projectId}/work-items/${taskId}/activity?page=${pageParam}&limit=${TASK_ACTIVITY_PAGE_SIZE}`,
         { workspaceSlug },
       ),
+    initialPageParam: 1,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((sum, page) => sum + page.items.length, 0);
+      return loaded < lastPage.total ? allPages.length + 1 : undefined;
+    },
     enabled: Boolean(token && workspaceSlug && projectId && taskId),
   });
 }

@@ -11,7 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 describe('ActivityLogService', () => {
   let service: ActivityLogService;
   let prisma: {
-    activityLog: { create: jest.Mock; findMany: jest.Mock };
+    activityLog: { create: jest.Mock; findMany: jest.Mock; count: jest.Mock };
     ticketStatus: { findMany: jest.Mock };
     priority: { findMany: jest.Mock };
     user: { findMany: jest.Mock };
@@ -19,7 +19,7 @@ describe('ActivityLogService', () => {
 
   beforeEach(async () => {
     prisma = {
-      activityLog: { create: jest.fn(), findMany: jest.fn() },
+      activityLog: { create: jest.fn(), findMany: jest.fn(), count: jest.fn() },
       ticketStatus: { findMany: jest.fn() },
       priority: { findMany: jest.fn() },
       user: { findMany: jest.fn() },
@@ -293,6 +293,87 @@ describe('ActivityLogService', () => {
       const [entry] = await service.getTimeline('ws-1', 'task-1', 'task');
 
       expect(entry.description).toBe('Jane Doe assigned it to noname');
+    });
+  });
+
+  describe('getTimelinePage()', () => {
+    const actor = {
+      id: 'user-1',
+      email: 'jane.doe@acme.com',
+      firstName: 'Jane',
+      lastName: 'Doe',
+    };
+
+    it('returns an empty page and the total when there are no log entries', async () => {
+      prisma.activityLog.findMany.mockResolvedValue([]);
+      prisma.activityLog.count.mockResolvedValue(0);
+
+      const result = await service.getTimelinePage(
+        'ws-1',
+        'entity-1',
+        undefined,
+        { skip: 0, take: 10 },
+      );
+
+      expect(result).toEqual({ items: [], total: 0 });
+      expect(prisma.ticketStatus.findMany).not.toHaveBeenCalled();
+      expect(prisma.priority.findMany).not.toHaveBeenCalled();
+      expect(prisma.user.findMany).not.toHaveBeenCalled();
+    });
+
+    it('passes skip/take through to findMany alongside workspaceId/entityId/entityType', async () => {
+      prisma.activityLog.findMany.mockResolvedValue([]);
+      prisma.activityLog.count.mockResolvedValue(0);
+
+      await service.getTimelinePage('ws-1', 'entity-1', 'task', {
+        skip: 20,
+        take: 10,
+      });
+
+      expect(prisma.activityLog.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { workspaceId: 'ws-1', entityId: 'entity-1', entityType: 'task' },
+          skip: 20,
+          take: 10,
+        }),
+      );
+    });
+
+    it('describes entries the same way getTimeline does, plus the total count', async () => {
+      prisma.activityLog.findMany.mockResolvedValue([
+        {
+          id: 'log-1',
+          entityType: 'task',
+          entityId: 'task-1',
+          action: 'created',
+          actor,
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          metadata: null,
+        },
+      ]);
+      prisma.activityLog.count.mockResolvedValue(37);
+      prisma.ticketStatus.findMany.mockResolvedValue([]);
+      prisma.priority.findMany.mockResolvedValue([]);
+      prisma.user.findMany.mockResolvedValue([]);
+
+      const result = await service.getTimelinePage('ws-1', 'task-1', 'task', {
+        skip: 0,
+        take: 10,
+      });
+
+      expect(result.total).toBe(37);
+      expect(result.items).toEqual([
+        {
+          id: 'log-1',
+          entityType: 'task',
+          entityId: 'task-1',
+          action: 'created',
+          actor: 'Jane Doe',
+          createdAt: new Date('2026-01-01T00:00:00Z'),
+          description: 'Jane Doe created this task',
+          metadata: null,
+        },
+      ]);
     });
   });
 

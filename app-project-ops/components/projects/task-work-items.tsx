@@ -16,7 +16,7 @@ import {
   Search,
   X,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
 
 import { EmptyState } from "@/components/shared/empty-state";
@@ -224,6 +224,11 @@ export function TaskWorkItems({
   roleName?: string;
 }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // A dashboard "Work by status" link arrives as ?statusId=... — pre-apply it
+  // as a project-wide filter (no assignee restriction, unlike the page's own
+  // assigned-to-me default) so the count the user clicked is what they see.
+  const [initialStatusId] = React.useState(() => searchParams.get("statusId"));
   const { data: me, isLoading: meLoading } = useMe();
   const viewStorageKey = `project-ops:work-items-view:${workspaceSlug}:${projectId}`;
   const [view, setView] = React.useState<WorkItemsView>(() => {
@@ -249,26 +254,31 @@ export function TaskWorkItems({
     );
   }
   // Draft value for the (closed) Filters sheet's Assignee field — seeded to
-  // "@Me" when `me` is already cached. The default that actually drives the
-  // tasks fetch is derived separately below, straight from `me`.
+  // "@Me" when `me` is already cached, or cleared when arriving with a
+  // dashboard status filter (that count was never scoped to one assignee).
+  // The default that actually drives the tasks fetch is derived separately
+  // below, straight from `me`.
   const [assigneeIds, setAssigneeIds] = React.useState<string[]>(() =>
-    me?.id ? [me.id] : [],
+    initialStatusId ? [] : me?.id ? [me.id] : [],
   );
   const [keyword, setKeyword] = React.useState("");
   const [workTypes, setWorkTypes] = React.useState<string[]>([]);
   const [moduleIds, setModuleIds] = React.useState<string[]>([]);
   const [hubIds, setHubIds] = React.useState<string[]>([]);
   const [planIds, setPlanIds] = React.useState<string[]>([]);
-  const [statusIds, setStatusIds] = React.useState<string[]>([]);
+  const [statusIds, setStatusIds] = React.useState<string[]>(() =>
+    initialStatusId ? [initialStatusId] : [],
+  );
   const [startDate, setStartDate] = React.useState("");
   const [endDate, setEndDate] = React.useState("");
   // `null` means "no explicit filters applied yet" — the default (assigned to
   // me) is derived straight from `me` on every render instead of being
   // copied into state via an effect, so the very first tasks fetch already
   // carries the right assigneeIds instead of firing once without it and once
-  // more a render later once an effect catches up.
+  // more a render later once an effect catches up. A dashboard status link
+  // seeds this directly (project-wide, that status only) for the same reason.
   const [manualFilters, setManualFilters] = React.useState<TaskListFilters | null>(
-    null,
+    () => (initialStatusId ? { statusIds: [initialStatusId] } : null),
   );
   const appliedFilters = React.useMemo<TaskListFilters>(
     () => manualFilters ?? (me?.id ? { assigneeIds: [me.id] } : {}),
